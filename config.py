@@ -1,0 +1,66 @@
+import os
+from enum import IntEnum as _IntEnum
+
+EXPERIMENT_NAME = "v4"      # chane to v5 when analyzing newer subjects
+
+## PATHS ##
+_BASE_PATH = r"S:\Lab-Shared\Experiments\LWS Free Viewing Demo"
+RAW_DATA_PATH = os.path.join(_BASE_PATH, "RawData")
+
+## Screen Monitor ##
+# MONITOR_WIDTH, MONITOR_HEIGHT = 53, 30      # cm
+# MONITOR_RESOLUTION = (1920, 1080)           # px
+
+## CONSTANTS ##
+DATE_TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
+
+TIME_STR = "time"
+TRIGGER_STR = "trigger"
+
+X, Y = "x", "y"
+PUPIL_STR = "pupil"
+LEFT_STR, RIGHT_STR = "left", "right"
+LEFT_X_STR, LEFT_Y_STR, LEFT_PUPIL_STR = f"{LEFT_STR}_{X}", f"{LEFT_STR}_{Y}", f"{LEFT_STR}_{PUPIL_STR}"
+RIGHT_X_STR, RIGHT_Y_STR, RIGHT_PUPIL_STR = f"{RIGHT_STR}_{X}", f"{RIGHT_STR}_{Y}", f"{RIGHT_STR}_{PUPIL_STR}"
+
+SUBJECT_STR, SESSION_STR, BLOCK_STR, TRIAL_STR = "subject", "session", "block", "trial"
+
+## TRIGGERS ##
+class ExperimentTriggerEnum(_IntEnum):
+    """
+    Experimental triggers for the experiment.
+    Manually adapted from E-Prime's `.prm` files to define the triggers.
+    """
+
+    NULL = 0
+    START_RECORD = 254
+    STOP_RECORD = 255
+
+    # Block Triggers
+    BLOCK_START_1 = 101
+    BLOCK_START_2 = 102
+    BLOCK_START_3 = 103
+    BLOCK_START_4 = 104
+    BLOCK_START_5 = 105
+    BLOCK_START_6 = 106
+    BLOCK_START_7 = 107
+    BLOCK_START_8 = 108
+    BLOCK_START_9 = 109
+
+    # Trial Triggers
+    TRIAL_START = 11
+    TRIAL_END = 12
+    TARGETS_ON = 13             # targets screen
+    TARGETS_OFF = 14
+    STIMULUS_ON = 15            # search-array screen
+    STIMULUS_OFF = 16
+
+    # Key Presses
+    SPACE_ACT = 211             # marks current gaze location as the target
+    SPACE_NO_ACT = 212          # unable to mark current gaze location as the target
+    CONFIRM_ACT = 221           # confirms choice of the target
+    CONFIRM_NO_ACT = 222        # unable to confirm choice of the target
+    NOT_CONFIRM_ACT = 231       # undo the choice of the target
+    NOT_CONFIRM_NO_ACT = 232    # unable to undo the choice of the target
+    OTHER_KEY = 241             # any other key pressed
+    ABORT_TRIAL = 242           # user request to abort the trial
