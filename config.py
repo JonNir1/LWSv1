@@ -37,15 +37,15 @@ class ExperimentTriggerEnum(_IntEnum):
     STOP_RECORD = 255
 
     # Block Triggers
-    BLOCK_START_1 = 101
-    BLOCK_START_2 = 102
-    BLOCK_START_3 = 103
-    BLOCK_START_4 = 104
-    BLOCK_START_5 = 105
-    BLOCK_START_6 = 106
-    BLOCK_START_7 = 107
-    BLOCK_START_8 = 108
-    BLOCK_START_9 = 109
+    BLOCK_1 = 101
+    BLOCK_2 = 102
+    BLOCK_3 = 103
+    BLOCK_4 = 104
+    BLOCK_5 = 105
+    BLOCK_6 = 106
+    BLOCK_7 = 107
+    BLOCK_8 = 108
+    BLOCK_9 = 109
 
     # Trial Triggers
     TRIAL_START = 11
