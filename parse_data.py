@@ -60,20 +60,6 @@ def parse_behavioral_data(triggers_path, gaze_path) -> pd.DataFrame:
     gaze = _read_gaze(gaze_path)
     merged = pd.merge(gaze, triggers, how='outer', on=[TIME_STR])    # merge on time
 
-    # add `is_recording` column
-    merged['is_recording'] = _is_between_triggers(
-        merged[TRIGGER_STR], ExperimentTriggerEnum.START_RECORD, ExperimentTriggerEnum.STOP_RECORD
-    )
-
-    # add trial column
-    is_trial = _is_between_triggers(
-        merged[TRIGGER_STR], ExperimentTriggerEnum.TRIAL_START, ExperimentTriggerEnum.TRIAL_END
-    )
-    is_trial_start = is_trial.ne(is_trial.shift()) & is_trial  # find the start of each trial
-    trial_num = is_trial_start.cumsum()     # assign trial numbers
-    trial_num.loc[~is_trial] = np.nan       # set non-trial rows to NaN
-    merged[TRIAL_STR] = trial_num
-
     # add block column
     merged[BLOCK_STR] = np.nan
     for trg in ExperimentTriggerEnum:
@@ -88,8 +74,28 @@ def parse_behavioral_data(triggers_path, gaze_path) -> pd.DataFrame:
         start_idx = is_block_start.idxmax()  # find the first occurrence of the block trigger
         merged.loc[merged.index[start_idx:], BLOCK_STR] = block_num
 
+    # add trial column
+    is_trial = _is_between_triggers(
+        merged[TRIGGER_STR], ExperimentTriggerEnum.TRIAL_START, ExperimentTriggerEnum.TRIAL_END
+    )
+    is_trial_start = is_trial.ne(is_trial.shift()) & is_trial  # find the start of each trial
+    trial_num = is_trial_start.cumsum()     # assign trial numbers
+    trial_num.loc[~is_trial] = np.nan       # set non-trial rows to NaN
+    merged[TRIAL_STR] = trial_num
+
+    # add `is_search_array` column
+    is_search_array = _is_between_triggers(
+        merged[TRIGGER_STR], ExperimentTriggerEnum.STIMULUS_ON, ExperimentTriggerEnum.STIMULUS_OFF
+    )
+    merged['is_search_array'] = is_search_array
+
+    # add `is_recording` column
+    merged['is_recording'] = _is_between_triggers(
+        merged[TRIGGER_STR], ExperimentTriggerEnum.START_RECORD, ExperimentTriggerEnum.STOP_RECORD
+    )
+
     # reorder columns
-    cols_ord = [TIME_STR, 'is_recording', TRIAL_STR, TRIGGER_STR]
+    cols_ord = [TIME_STR, TRIGGER_STR]
     cols_ord += [col for col in merged.columns if col not in cols_ord]
     merged = merged[cols_ord]
     return merged
