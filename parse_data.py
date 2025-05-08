@@ -12,10 +12,14 @@ __SUBJECT_INFO_FIELD_MAP = {
 }
 __TRIGGER_FIELD_MAP = {"ClockTime": TIME_STR, "BioSemiCode": TRIGGER_STR}
 __TOBII_FIELD_MAP = {
-    "RTTime": TIME_STR, "RunningSample": TRIAL_STR, "BlockNum": BLOCK_STR, "TrialNum": f"{TRIAL_STR}_in_{BLOCK_STR}",
+    "RTTime": TIME_STR,
     "GazePointPositionDisplayXLeftEye": LEFT_X_STR, "GazePointPositionDisplayYLeftEye": LEFT_Y_STR, "PupilDiameterLeftEye": LEFT_PUPIL_STR,
     "GazePointPositionDisplayXRightEye": RIGHT_X_STR, "GazePointPositionDisplayYRightEye": RIGHT_Y_STR, "PupilDiameterRightEye": RIGHT_PUPIL_STR,
     "ImageNum": "image_num", "ConditionName": "condition",
+    # "BlockNum": BLOCK_STR,                      # block number as recorded by Tobii - NOT USING THIS
+    # "RunningSample": TRIAL_STR,                 # trial number as recorded by Tobii - NOT USING THIS
+    # "TrialNum": f"{TRIAL_STR}_in_{BLOCK_STR}",  # trial-in-block number as recorded by Tobii - NOT USING THIS
+
 }
 __TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan]
 
@@ -56,25 +60,36 @@ def parse_behavioral_data(triggers_path, gaze_path) -> pd.DataFrame:
     gaze = _read_gaze(gaze_path)
     merged = pd.merge(gaze, triggers, how='outer', on=[TIME_STR])    # merge on time
 
-    # get trial number from both sources
-    trials_left = merged['trial_x'].fillna(merged['trial_y'])
-    trials_right = merged['trial_y'].fillna(merged['trial_x'])
-    assert trials_left.equals(trials_right), "Trials do not match between gaze and triggers data."
-    assert trials_left.dropna().is_monotonic_increasing, "Trials are not in increasing order."
-    merged[TRIAL_STR] = trials_left
-    merged.drop(columns=['trial_x', 'trial_y'], inplace=True)   # remove duplicate trial columns
+    # add `is_recording` column
+    merged['is_recording'] = _is_between_triggers(
+        merged[TRIGGER_STR], ExperimentTriggerEnum.START_RECORD, ExperimentTriggerEnum.STOP_RECORD
+    )
 
-    # check if recording
-    merged['is_recording'] = False
-    rec_start_end_idxs = np.vstack([
-        np.nonzero(merged[TRIGGER_STR] == ExperimentTriggerEnum.START_RECORD)[0],
-        np.nonzero(merged[TRIGGER_STR] == ExperimentTriggerEnum.STOP_RECORD)[0]
-    ]).T
-    for (start, end) in rec_start_end_idxs:
-        merged.loc[start:end + 1, 'is_recording'] = True
+    # add trial column
+    is_trial = _is_between_triggers(
+        merged[TRIGGER_STR], ExperimentTriggerEnum.TRIAL_START, ExperimentTriggerEnum.TRIAL_END
+    )
+    is_trial_start = is_trial.ne(is_trial.shift()) & is_trial  # find the start of each trial
+    trial_num = is_trial_start.cumsum()     # assign trial numbers
+    trial_num.loc[~is_trial] = np.nan       # set non-trial rows to NaN
+    merged[TRIAL_STR] = trial_num
+
+    # add block column
+    merged[BLOCK_STR] = np.nan
+    for trg in ExperimentTriggerEnum:
+        name = trg.name
+        if not name.startswith("BLOCK_"):
+            continue
+        block_num = int(name.split("_")[-1])
+        is_block_start = merged[TRIGGER_STR].eq(trg)
+        if not is_block_start.any():
+            # no such block trigger - skip
+            continue
+        start_idx = is_block_start.idxmax()  # find the first occurrence of the block trigger
+        merged.loc[merged.index[start_idx:], BLOCK_STR] = block_num
 
     # reorder columns
-    cols_ord = [TIME_STR, TRIAL_STR, 'is_recording', TRIGGER_STR]
+    cols_ord = [TIME_STR, 'is_recording', TRIAL_STR, TRIGGER_STR]
     cols_ord += [col for col in merged.columns if col not in cols_ord]
     merged = merged[cols_ord]
     return merged
@@ -87,13 +102,13 @@ def _read_triggers(file_path) -> pd.DataFrame:
     triggers[TRIGGER_STR] = triggers[TRIGGER_STR].map(lambda trg: ExperimentTriggerEnum(trg))
 
     # add trial column
-    triggers[TRIAL_STR] = np.nan
-    start_end_idxs = np.vstack([
-        np.nonzero(triggers[TRIGGER_STR] == ExperimentTriggerEnum.TRIAL_START)[0],
-        np.nonzero(triggers[TRIGGER_STR] == ExperimentTriggerEnum.TRIAL_END)[0]
-    ]).T
-    for i, (start, end) in enumerate(start_end_idxs):
-        triggers.loc[start:end + 1, TRIAL_STR] = i + 1
+    is_trial = _is_between_triggers(
+        triggers[TRIGGER_STR], ExperimentTriggerEnum.TRIAL_START, ExperimentTriggerEnum.TRIAL_END
+    )
+    is_trial_start = is_trial.ne(is_trial.shift()) & is_trial   # find the start of each trial
+    trial_num = is_trial_start.cumsum()                         # assign trial numbers
+    trial_num.loc[~is_trial] = np.nan                           # set non-trial rows to NaN
+    triggers[TRIAL_STR] = trial_num
     return triggers
 
 def _read_gaze(file_path) -> pd.DataFrame:
@@ -112,3 +127,15 @@ def _read_gaze(file_path) -> pd.DataFrame:
     # return only the relevant columns
     return gaze[[col for col in gaze.columns if col in __TOBII_FIELD_MAP.values()]]
 
+
+def _is_between_triggers(triggers: pd.Series, start: int, end: int) -> pd.Series:
+    """
+    Returns a boolean series indicating whether the values in the 'triggers' series occur after 'start' and before 'end'.
+    """
+    start_idxs = np.nonzero(triggers == start)[0]
+    end_idxs = np.nonzero(triggers == end)[0]
+    start_end_idxs = np.vstack([start_idxs, end_idxs]).T
+    res = pd.Series(np.full_like(triggers, False, dtype=bool))
+    for (start, end) in start_end_idxs:
+        res.iloc[start:end + 1] = True
+    return res
