@@ -8,6 +8,9 @@ EXPERIMENT_NAME = "v4"      # chane to v5 when analyzing newer subjects
 _BASE_PATH = r"S:\Lab-Shared\Experiments\LWS Free Viewing Demo"
 RAW_DATA_PATH = os.path.join(_BASE_PATH, "RawData")
 
+IMAGE_DIR_PATH = r"S:\Lab-Shared\Experiments\N170 free scan\ClutteredObjects_scan\Origional_Objects_Pics\organized"
+SEARCH_ARRAY_PATH = r"S:\Lab-Shared\Experiments\LWS Free Viewing Demo\Stimuli"
+
 ## Screen Monitor ##
 TOBII_MONITOR = _Monitor(
     width=1920, height=1080,
@@ -27,7 +30,10 @@ LEFT_STR, RIGHT_STR = "left", "right"
 LEFT_X_STR, LEFT_Y_STR, LEFT_PUPIL_STR = f"{LEFT_STR}_{X}", f"{LEFT_STR}_{Y}", f"{LEFT_STR}_{PUPIL_STR}"
 RIGHT_X_STR, RIGHT_Y_STR, RIGHT_PUPIL_STR = f"{RIGHT_STR}_{X}", f"{RIGHT_STR}_{Y}", f"{RIGHT_STR}_{PUPIL_STR}"
 
-SUBJECT_STR, SESSION_STR, BLOCK_STR, TRIAL_STR = "subject", "session", "block", "trial"
+SUBJECT_STR, SESSION_STR = "subject", "session"
+BLOCK_STR, TRIAL_STR = "block", "trial"
+CONDITION_STR = "condition"
+IMAGE_STR = "image"
 
 ## TRIGGERS ##
 class ExperimentTriggerEnum(_IntEnum):
