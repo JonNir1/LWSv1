@@ -6,7 +6,7 @@ import pandas as pd
 
 import config as cnfg
 import parse_data as prs
-from data_models.enums import SexEnum, DominantHandEnum, DominantEyeEnum
+from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum
 
 
 class Subject:
