@@ -11,14 +11,8 @@ RAW_DATA_PATH = os.path.join(_BASE_PATH, "RawData")
 IMAGE_DIR_PATH = r"S:\Lab-Shared\Experiments\N170 free scan\ClutteredObjects_scan\Origional_Objects_Pics\organized"
 SEARCH_ARRAY_PATH = r"S:\Lab-Shared\Experiments\LWS Free Viewing Demo\Stimuli"
 
-## Screen Monitor ##
-TOBII_MONITOR = _Monitor(
-    width=1920, height=1080,
-    width_mm=530, height_mm=300,
-    x=0, y=0, name="tobii", is_primary=True,
-)
 
-## CONSTANTS ##
+## STRING CONSTANTS ##
 DATE_TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
 
 TIME_STR = "time"
@@ -34,6 +28,15 @@ SUBJECT_STR, SESSION_STR = "subject", "session"
 BLOCK_STR, TRIAL_STR = "block", "trial"
 CONDITION_STR = "condition"
 IMAGE_STR = "image"
+
+
+## Screen Monitor ##
+TOBII_MONITOR = _Monitor(
+    width=1920, height=1080,
+    width_mm=530, height_mm=300,
+    x=0, y=0, name="tobii", is_primary=True,
+)
+
 
 ## TRIGGERS ##
 class ExperimentTriggerEnum(_IntEnum):
