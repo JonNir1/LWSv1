@@ -1,5 +1,6 @@
 import os
 from enum import IntEnum as _IntEnum
+from screeninfo import Monitor as _Monitor
 
 EXPERIMENT_NAME = "v4"      # chane to v5 when analyzing newer subjects
 
@@ -8,8 +9,11 @@ _BASE_PATH = r"S:\Lab-Shared\Experiments\LWS Free Viewing Demo"
 RAW_DATA_PATH = os.path.join(_BASE_PATH, "RawData")
 
 ## Screen Monitor ##
-# MONITOR_WIDTH, MONITOR_HEIGHT = 53, 30      # cm
-# MONITOR_RESOLUTION = (1920, 1080)           # px
+TOBII_MONITOR = _Monitor(
+    width=1920, height=1080,
+    width_mm=530, height_mm=300,
+    x=0, y=0, name="tobii", is_primary=True,
+)
 
 ## CONSTANTS ##
 DATE_TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
