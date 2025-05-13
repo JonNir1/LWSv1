@@ -30,6 +30,7 @@ RIGHT_X_STR, RIGHT_Y_STR, RIGHT_PUPIL_STR = f"{RIGHT_STR}_{X}", f"{RIGHT_STR}_{Y
 SUBJECT_STR, SESSION_STR = "subject", "session"
 BLOCK_STR, TRIAL_STR = "block", "trial"
 CONDITION_STR = "condition"
+CATEGORY_STR = "category"
 IMAGE_STR = "image"
 
 

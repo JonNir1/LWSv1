@@ -74,25 +74,20 @@ class Subject:
         subject_info["exp_name"] = exp_name
 
         # read triggers and gaze data
-        triggers_path = os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-TriggerLog.txt")
-        gaze_path = os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-GazeData.txt")
-        behavioral_data = prs.parse_behavioral_data(triggers_path, gaze_path)
-
-        # correct to tobii's resolution
-        behavioral_data[cnfg.LEFT_X_STR] *= cnfg.TOBII_MONITOR.width
-        behavioral_data[cnfg.LEFT_Y_STR] *= cnfg.TOBII_MONITOR.height
-        behavioral_data[cnfg.RIGHT_X_STR] *= cnfg.TOBII_MONITOR.width
-        behavioral_data[cnfg.RIGHT_Y_STR] *= cnfg.TOBII_MONITOR.height
+        triggers, gaze = prs.parse_behavioral_data(
+            os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-TriggerLog.txt"),
+            os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-GazeData.txt"),
+        )
 
         # split the data into trials
         trials = []
         for trial_num in tqdm(
-            behavioral_data[cnfg.TRIAL_STR].dropna().unique().astype(int),
+            triggers[cnfg.TRIAL_STR].dropna().unique().astype(int),
             desc="Trials", disable=not verbose,
         ):
-            trial_data = behavioral_data[behavioral_data[cnfg.TRIAL_STR] == trial_num]
-            trial_data = trial_data.iloc[2:]  # first 2 rows are too early    # TODO: find a way to remove these by time-diff
-            trial = Trial.from_behavior(trial_data)
+            trial_triggers = triggers[triggers[cnfg.TRIAL_STR] == trial_num]
+            trial_gaze = gaze[gaze[cnfg.TRIAL_STR] == trial_num]
+            trial = Trial.from_frames(trial_triggers, trial_gaze)
             trials.append(trial)
         trials = sorted(trials, key=lambda t: t.trial_num)
 

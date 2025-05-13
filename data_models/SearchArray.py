@@ -142,7 +142,7 @@ class SearchArray:
         return self._array_type
 
     @property
-    def targets(self) -> List[ImageCategoryEnum]:
+    def targets(self) -> List[_SearchArrayImage]:
         return self._images[self._is_targets].tolist()
 
     @property

@@ -60,7 +60,14 @@ def parse_subject_info(file_path) -> dict:
     return subject_info
 
 
-def parse_behavioral_data(triggers_path, gaze_path) -> pd.DataFrame:
+def parse_behavioral_data(triggers_path, gaze_path) -> (pd.DataFrame, pd.DataFrame):
+    """
+    Parses gaze and triggers data:
+    1. Reads the Tobii gaze and trigger log files
+    2. Merges the two dataframes based on timestamp, to align the data
+    3. Add columns to indicate block number, trial number, and whether data was recorded
+    4. Splits the merged dataframe back into gaze and trigger dataframes and returns them
+    """
     triggers = _read_triggers(triggers_path)
     gaze = _read_gaze(gaze_path)
     merged = pd.merge(gaze, triggers, how='outer', on=[TIME_STR])    # merge on time
@@ -88,10 +95,7 @@ def parse_behavioral_data(triggers_path, gaze_path) -> pd.DataFrame:
     trial_num.loc[~is_trial] = np.nan       # set non-trial rows to NaN
     merged[TRIAL_STR] = trial_num
 
-    # add `is_search_array` and `is_recording` columns
-    merged['is_search_array'] = _is_between_triggers(
-        merged[TRIGGER_STR], ExperimentTriggerEnum.STIMULUS_ON, ExperimentTriggerEnum.STIMULUS_OFF
-    )
+    # add `is_recording` columns
     merged['is_recording'] = _is_between_triggers(
         merged[TRIGGER_STR], ExperimentTriggerEnum.START_RECORD, ExperimentTriggerEnum.STOP_RECORD
     )
@@ -100,7 +104,13 @@ def parse_behavioral_data(triggers_path, gaze_path) -> pd.DataFrame:
     cols_ord = [TIME_STR, TRIGGER_STR]
     cols_ord += [col for col in merged.columns if col not in cols_ord]
     merged = merged[cols_ord]
-    return merged
+
+    # split back to gaze and triggers
+    triggers = merged.loc[merged[TRIGGER_STR].notna(), [TIME_STR, TRIGGER_STR, TRIAL_STR, BLOCK_STR, 'is_recording']]
+    gaze_cols = [col for col in __TOBII_FIELD_MAP.values() if col != TIME_STR]
+    is_gaze = merged[gaze_cols].notna().any(axis=1)
+    gaze = merged.loc[is_gaze, [TIME_STR] + gaze_cols + [TRIAL_STR, BLOCK_STR, 'is_recording']]
+    return triggers, gaze
 
 
 def _read_triggers(file_path) -> pd.DataFrame:
@@ -122,6 +132,12 @@ def _read_gaze(file_path) -> pd.DataFrame:
     gaze.loc[gaze["PupilValidityLeftEye"] == 0, LEFT_PUPIL_STR] = MISSING_VALUE
     gaze.loc[gaze["PupilValidityRightEye"] == 0, RIGHT_PUPIL_STR] = MISSING_VALUE
     gaze = gaze.astype({col: float for col in et_cols})
+
+    # correct to tobii's resolution
+    gaze[LEFT_X_STR] *= TOBII_MONITOR.width
+    gaze[LEFT_Y_STR] *= TOBII_MONITOR.height
+    gaze[RIGHT_X_STR] *= TOBII_MONITOR.width
+    gaze[RIGHT_Y_STR] *= TOBII_MONITOR.height
 
     # return only the relevant columns
     return gaze[[col for col in gaze.columns if col in __TOBII_FIELD_MAP.values()]]
