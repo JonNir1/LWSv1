@@ -8,7 +8,7 @@ from config import *
 
 __SUBJECT_INFO_FIELD_MAP = {
     "Name": "name", "Subject": "subject_id", "Age": "age", "Sex": "sex", "Handedness": "hand", "DominantEye": "eye",
-    "Session": "session", "SessionDate": "session_date", "SessionTime": "session_time", "Distance": "screen_distance",
+    "Session": "session", "SessionDate": "session_date", "SessionTime": "session_time", "Distance": "screen_distance_cm",
 }
 __TRIGGER_FIELD_MAP = {"ClockTime": TIME_STR, "BioSemiCode": TRIGGER_STR}
 __TOBII_FIELD_MAP = {
@@ -47,7 +47,7 @@ def parse_subject_info(file_path) -> dict:
     # Convert to numeric types
     subject_info["subject_id"] = int(subject_info["subject_id"])
     subject_info["age"] = float(subject_info["age"])
-    subject_info["screen_distance"] = float(subject_info["screen_distance"])
+    subject_info["screen_distance_cm"] = float(subject_info["screen_distance_cm"])
     subject_info["session"] = int(subject_info["session"])
 
     # Convert the session date and time to a datetime object

@@ -17,7 +17,7 @@ class Subject:
 
     __E_PRIME_FIELDS = {
         "Name": "name", "Subject": "subject_id", "Age": "age", "Sex": "sex", "Handedness": "hand", "DominantEye": "eye",
-        "Session": "session", "SessionDate": "session_date", "SessionTime": "session_time", "Distance": "screen_distance",
+        "Session": "session", "SessionDate": "session_date", "SessionTime": "session_time", "Distance": "screen_distance_cm",
     }
 
     def __init__(
@@ -29,7 +29,7 @@ class Subject:
             sex: Union[str, SexEnum],
             hand: Union[str, DominantHandEnum],
             eye: Union[str, DominantEyeEnum],
-            screen_distance: float,
+            screen_distance_cm: float,
             session: int,
             date_time: Optional[Union[str, datetime]] = None,
             behavioral_data: Optional[pd.DataFrame] = None,
@@ -41,7 +41,7 @@ class Subject:
         self._sex = sex if isinstance(sex, SexEnum) else SexEnum(sex)
         self._hand = hand if isinstance(hand, DominantHandEnum) else DominantHandEnum(hand)
         self._eye = eye if isinstance(eye, DominantEyeEnum) else DominantEyeEnum(eye)
-        self._screen_distance = screen_distance
+        self._screen_distance_cm = screen_distance_cm
         self._session = session
         try:
             self._date_time = date_time if isinstance(date_time, datetime) else datetime.strptime(date_time, cnfg.DATE_TIME_FORMAT)
@@ -69,7 +69,7 @@ class Subject:
         behavioral_data = prs.parse_behavioral_data(triggers_path, gaze_path)
 
         # create the subject object
-        return Subject(**subject_info, behavioral_data=behavioral_data)
+        return Subject(behavioral_data=behavioral_data, **subject_info)
 
     @property
     def experiment_name(self) -> str:
@@ -100,8 +100,8 @@ class Subject:
         return self._eye
 
     @property
-    def screen_distance(self) -> float:
-        return self._screen_distance
+    def screen_distance_cm(self) -> float:
+        return self._screen_distance_cm
 
     @property
     def session(self) -> int:
