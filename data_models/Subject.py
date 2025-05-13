@@ -145,3 +145,6 @@ class Subject:
 
     def get_trials(self) -> List[Trial]:
         return self._trials
+
+    def __repr__(self) -> str:
+        return f"{self.experiment_name.upper()}-Subject {self.id}"

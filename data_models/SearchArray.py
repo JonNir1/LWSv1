@@ -193,3 +193,6 @@ class SearchArray:
         if not np.array_equal(self._grayscale, other._grayscale):
             return False
         return True
+
+    def __repr__(self) -> str:
+        return f"SearchArray {self.image_num} ({self.array_type.name})"

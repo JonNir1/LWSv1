@@ -20,6 +20,7 @@ subj = Subject.from_raw(
 
 # extract specific trial
 trial = subj.get_trials()[9]
+arr = trial.get_search_array()
 trial_data = trial.get_behavior()
 
 # detect eye movements

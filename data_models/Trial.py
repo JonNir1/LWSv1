@@ -77,6 +77,9 @@ class Trial:
             return False
         return True
 
+    def __repr__(self) -> str:
+        return f"Trial {self.trial_num} ({self.get_search_array().array_type.name})"
+
     @staticmethod
     def __extract_singleton_column(behavior: pd.DataFrame, col_name: str):
         values = behavior[col_name].dropna()
