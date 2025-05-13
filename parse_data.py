@@ -88,13 +88,10 @@ def parse_behavioral_data(triggers_path, gaze_path) -> pd.DataFrame:
     trial_num.loc[~is_trial] = np.nan       # set non-trial rows to NaN
     merged[TRIAL_STR] = trial_num
 
-    # add `is_search_array` column
-    is_search_array = _is_between_triggers(
+    # add `is_search_array` and `is_recording` columns
+    merged['is_search_array'] = _is_between_triggers(
         merged[TRIGGER_STR], ExperimentTriggerEnum.STIMULUS_ON, ExperimentTriggerEnum.STIMULUS_OFF
     )
-    merged['is_search_array'] = is_search_array
-
-    # add `is_recording` column
     merged['is_recording'] = _is_between_triggers(
         merged[TRIGGER_STR], ExperimentTriggerEnum.START_RECORD, ExperimentTriggerEnum.STOP_RECORD
     )
@@ -111,15 +108,6 @@ def _read_triggers(file_path) -> pd.DataFrame:
     triggers = pd.read_csv(file_path, sep="\t")
     triggers.rename(columns=__TRIGGER_FIELD_MAP, inplace=True)
     triggers[TRIGGER_STR] = triggers[TRIGGER_STR].map(lambda trg: ExperimentTriggerEnum(trg))
-
-    # add trial column
-    is_trial = _is_between_triggers(
-        triggers[TRIGGER_STR], ExperimentTriggerEnum.TRIAL_START, ExperimentTriggerEnum.TRIAL_END
-    )
-    is_trial_start = is_trial.ne(is_trial.shift()) & is_trial   # find the start of each trial
-    trial_num = is_trial_start.cumsum()                         # assign trial numbers
-    trial_num.loc[~is_trial] = np.nan                           # set non-trial rows to NaN
-    triggers[TRIAL_STR] = trial_num
     return triggers
 
 def _read_gaze(file_path) -> pd.DataFrame:
