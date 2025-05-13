@@ -4,6 +4,7 @@ from enum import IntEnum as _IntEnum
 from screeninfo import Monitor as _Monitor
 
 EXPERIMENT_NAME = "v4"      # chane to v5 when analyzing newer subjects
+STIMULI_VERSION = 1
 
 ## PATHS ##
 _BASE_PATH = r"S:\Lab-Shared\Experiments\LWS Free Viewing Demo"

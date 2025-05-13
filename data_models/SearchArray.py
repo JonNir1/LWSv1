@@ -1,5 +1,5 @@
 import os
-from typing import NamedTuple
+from typing import NamedTuple, List
 
 import numpy as np
 import pandas as pd
@@ -11,7 +11,11 @@ from data_models.LWSEnums import SearchArrayTypeEnum, ImageCategoryEnum
 
 
 class _SearchArrayImage(NamedTuple):
-    """A class to represent a single image within a search array."""
+    """
+    A class to represent a single image within a search array.
+    Each image is defined by its location (X-Y coordinates of its center), its jitter angle, and the path to the
+    specific image file.
+    """
 
     x: int              # X coordinate of the image center
     y: int              # Y coordinate of the image center
@@ -52,6 +56,11 @@ _NDArrayGrayScaleType = npt.NDArray[np.float_]
 
 
 class SearchArray:
+    """
+    A class to represent a search array of images.
+    Each search array is defined by its number, version, type, and the array of images it contains.
+    """
+
     _NUM_ROWS, _NUM_COLS = 10, 18
     _RESOLUTION = (1920, 1080)
 
@@ -121,6 +130,10 @@ class SearchArray:
         return search_array
 
     @property
+    def image_num(self) -> int:
+        return self._num
+
+    @property
     def version(self) -> int:
         return self._version
 
@@ -129,8 +142,12 @@ class SearchArray:
         return self._array_type
 
     @property
+    def targets(self) -> List[ImageCategoryEnum]:
+        return self._images[self._is_targets].tolist()
+
+    @property
     def num_targets(self) -> int:
-        return int(np.sum(self._is_targets))
+        return len(self.targets)
 
     @property
     def mat_path(self) -> str:
@@ -157,3 +174,22 @@ class SearchArray:
             f"array_{arr_type.name.lower()}",
             f"image_{arr_num}.{file_type}",
         )
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, SearchArray):
+            return False
+        if self.image_num != other.image_num:
+            return False
+        if self.version != other.version:
+            return False
+        if self.array_type != other.array_type:
+            return False
+        if self.mat_path != other.mat_path:
+            return False
+        if not np.array_equal(self._images, other._images):
+            return False
+        if not np.array_equal(self._is_targets, other._is_targets):
+            return False
+        if not np.array_equal(self._grayscale, other._grayscale):
+            return False
+        return True
