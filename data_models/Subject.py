@@ -10,6 +10,11 @@ from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum
 
 
 class Subject:
+    """
+    This class represents a single subject-session pair.
+    If a subject performed more than one session, they will be represented as two separate objects.
+    """
+
     __E_PRIME_FIELDS = {
         "Name": "name", "Subject": "subject_id", "Age": "age", "Sex": "sex", "Handedness": "hand", "DominantEye": "eye",
         "Session": "session", "SessionDate": "session_date", "SessionTime": "session_time", "Distance": "screen_distance",
