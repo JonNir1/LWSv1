@@ -128,11 +128,11 @@ def _read_gaze(file_path) -> pd.DataFrame:
 
     # replace missing/invalid values to NaN
     et_cols = [LEFT_X_STR, LEFT_Y_STR, RIGHT_X_STR, RIGHT_Y_STR, LEFT_PUPIL_STR, RIGHT_PUPIL_STR]
-    gaze[et_cols] = gaze[et_cols].replace(__TOBII_MISSING_VALUES, np.nan, inplace=False)
-    gaze.loc[gaze["GazePointValidityLeftEye"] == 0, [LEFT_X_STR, LEFT_Y_STR]] = np.nan
-    gaze.loc[gaze["GazePointValidityRightEye"] == 0, [RIGHT_X_STR, RIGHT_Y_STR]] = np.nan
-    gaze.loc[gaze["PupilValidityLeftEye"] == 0, LEFT_PUPIL_STR] = np.nan
-    gaze.loc[gaze["PupilValidityRightEye"] == 0, RIGHT_PUPIL_STR] = np.nan
+    gaze[et_cols] = gaze[et_cols].replace(__TOBII_MISSING_VALUES, MISSING_VALUE, inplace=False)
+    gaze.loc[gaze["GazePointValidityLeftEye"] == 0, [LEFT_X_STR, LEFT_Y_STR]] = MISSING_VALUE
+    gaze.loc[gaze["GazePointValidityRightEye"] == 0, [RIGHT_X_STR, RIGHT_Y_STR]] = MISSING_VALUE
+    gaze.loc[gaze["PupilValidityLeftEye"] == 0, LEFT_PUPIL_STR] = MISSING_VALUE
+    gaze.loc[gaze["PupilValidityRightEye"] == 0, RIGHT_PUPIL_STR] = MISSING_VALUE
     gaze = gaze.astype({col: float for col in et_cols})
 
     # return only the relevant columns

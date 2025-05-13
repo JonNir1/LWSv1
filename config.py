@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from enum import IntEnum as _IntEnum
 from screeninfo import Monitor as _Monitor
 
@@ -12,7 +13,8 @@ IMAGE_DIR_PATH = r"S:\Lab-Shared\Experiments\N170 free scan\ClutteredObjects_sca
 SEARCH_ARRAY_PATH = r"S:\Lab-Shared\Experiments\LWS Free Viewing Demo\Stimuli"
 
 
-## STRING CONSTANTS ##
+## CONSTANTS ##
+MISSING_VALUE = np.nan
 DATE_TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
 
 TIME_STR = "time"
