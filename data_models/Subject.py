@@ -252,7 +252,7 @@ class Subject:
         merged[cnfg.TRIAL_STR] = trial_num
 
         # add `is_recording` columns
-        merged['is_recording'] = _is_between_triggers(
+        merged[cnfg.IS_RECORDING_STR] = _is_between_triggers(
             merged[cnfg.TRIGGER_STR], cnfg.ExperimentTriggerEnum.START_RECORD, cnfg.ExperimentTriggerEnum.STOP_RECORD
         )
 

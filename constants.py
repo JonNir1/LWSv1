@@ -18,4 +18,5 @@ BLOCK_STR, TRIAL_STR = "block", "trial"
 CONDITION_STR = "condition"
 CATEGORY_STR = "category"
 IMAGE_STR = "image"
+IS_RECORDING_STR = "is_recording"
 
