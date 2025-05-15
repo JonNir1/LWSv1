@@ -44,6 +44,30 @@ TOBII_PIXEL_SIZE_MM = np.mean([
     TOBII_MONITOR.width_mm / TOBII_MONITOR.width,
     TOBII_MONITOR.height_mm / TOBII_MONITOR.height,
 ])
+TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan]
+
+
+## Parsing Fields ##
+SUBJECT_INFO_FIELD_MAP = {
+    "Name": "name", "Subject": "subject_id", "Age": "age", "Sex": "sex", "Handedness": "hand", "DominantEye": "eye",
+    "Session": "session", "SessionDate": "session_date", "SessionTime": "session_time", "Distance": "screen_distance_cm",
+}
+TRIGGER_FIELD_MAP = {"ClockTime": TIME_STR, "BioSemiCode": TRIGGER_STR}
+TOBII_FIELD_MAP = {
+    "RTTime": TIME_STR,
+    "GazePointPositionDisplayXLeftEye": LEFT_X_STR,
+    "GazePointPositionDisplayYLeftEye": LEFT_Y_STR,
+    "PupilDiameterLeftEye": LEFT_PUPIL_STR,
+    "GazePointPositionDisplayXRightEye": RIGHT_X_STR,
+    "GazePointPositionDisplayYRightEye": RIGHT_Y_STR,
+    "PupilDiameterRightEye": RIGHT_PUPIL_STR,
+    "ImageNum": f"{IMAGE_STR}_num",
+    "ConditionName": CONDITION_STR,
+    # "BlockNum": BLOCK_STR,                      # block number as recorded by Tobii - NOT USING THIS
+    # "RunningSample": TRIAL_STR,                 # trial number as recorded by Tobii - NOT USING THIS
+    # "TrialNum": f"{TRIAL_STR}_in_{BLOCK_STR}",  # trial-in-block number as recorded by Tobii - NOT USING THIS
+
+}
 
 
 ## TRIGGERS ##
