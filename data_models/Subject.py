@@ -7,7 +7,8 @@ from tqdm import tqdm
 
 import config as cnfg
 from parse.subject_info import parse_subject_info
-from parse.triggers_and_gaze import parse_triggers_and_gaze, MUTUAL_COLUMNS, TRIGGER_COLUMNS, GAZE_COLUMNS
+from parse.triggers_and_gaze import parse_triggers_and_gaze
+from parse.eye_movements import detect_eye_movements
 from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum
 from data_models.Trial import Trial
 
@@ -37,8 +38,6 @@ class Subject:
             screen_distance_cm: float,
             session: int,
             date_time: Optional[Union[str, datetime]] = None,
-            triggers: Optional[pd.DataFrame] = None,
-            gaze: Optional[pd.DataFrame] = None,
             trials: Optional[List[Trial]] = None,
     ):
         # personal information
@@ -56,10 +55,6 @@ class Subject:
         except (ValueError, TypeError):
             self._date_time = None
         # experimental data
-        triggers = triggers if triggers is not None else pd.DataFrame(columns=MUTUAL_COLUMNS + TRIGGER_COLUMNS)
-        self._triggers = triggers
-        gaze = gaze if gaze is not None else pd.DataFrame(columns=MUTUAL_COLUMNS + GAZE_COLUMNS)
-        self._gaze = gaze
         trials = trials if trials is not None else []
         self._trials = sorted(trials, key=lambda trial: trial.trial_num)
 
@@ -84,25 +79,40 @@ class Subject:
         subject_info["exp_name"] = exp_name
 
         # parse triggers and gaze data
+        if verbose:
+            print("Parsing triggers and gaze data...")
         triggers, gaze = parse_triggers_and_gaze(
             os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-TriggerLog.txt"),
             os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-GazeData.txt"),
         )
 
         # split the data into trials
+        if verbose:
+            print("Parsing Trials...")
         trials = []
         for trial_num in tqdm(
             triggers[cnfg.TRIAL_STR].dropna().unique().astype(int),
             desc="Trials", disable=not verbose,
         ):
+            # extract the trial data
             trial_triggers = triggers[triggers[cnfg.TRIAL_STR] == trial_num]
             trial_gaze = gaze[gaze[cnfg.TRIAL_STR] == trial_num]
+
+            # detect eye movements
+            left_labels = detect_eye_movements(
+                trial_gaze, DominantEyeEnum.Left, subject_info["screen_distance_cm"], cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
+            )
+            right_labels = detect_eye_movements(
+                trial_gaze, DominantEyeEnum.Right, subject_info["screen_distance_cm"], cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
+            )
+            trial_gaze = pd.concat([trial_gaze, left_labels, right_labels], axis=1)
+
             trial = Trial.from_frames(trial_triggers, trial_gaze)
             trials.append(trial)
         trials = sorted(trials, key=lambda t: t.trial_num)
 
         # create the subject object
-        return Subject(triggers=triggers, gaze=gaze, trials=trials, **subject_info)
+        return Subject(trials=trials, **subject_info)
 
     @property
     def experiment_name(self) -> str:
@@ -147,12 +157,6 @@ class Subject:
     @property
     def num_trials(self) -> int:
         return len(self._trials)
-
-    def get_triggers(self) -> pd.DataFrame:
-        return self._triggers
-
-    def get_gaze(self) -> pd.DataFrame:
-        return self._gaze
 
     def get_trials(self) -> List[Trial]:
         return self._trials

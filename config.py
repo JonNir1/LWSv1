@@ -1,7 +1,10 @@
 import os
-import numpy as np
 from enum import IntEnum as _IntEnum
+
+import numpy as np
 from screeninfo import Monitor as _Monitor
+import peyes
+
 from constants import *
 
 EXPERIMENT_NAME = "v4"      # chane to v5 when analyzing newer subjects
@@ -28,6 +31,13 @@ TOBII_PIXEL_SIZE_MM = np.mean([
 TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan, MISSING_VALUE]
 
 
+## Eye Movement Detection ##
+DETECTION_ALGORITHM = "Engbert"
+MIN_EVENT_DURATION_MS = 5
+PAD_BLINKS_MS = 0
+DETECTOR = peyes.create_detector(DETECTION_ALGORITHM, MISSING_VALUE, MIN_EVENT_DURATION_MS, PAD_BLINKS_MS)
+
+
 ## Parsing Fields ##
 SUBJECT_INFO_FIELD_MAP = {
     "Name": "name", "Subject": "subject_id", "Age": "age", "Sex": "sex", "Handedness": "hand", "DominantEye": "eye",
@@ -49,6 +59,13 @@ TOBII_FIELD_MAP = {
     # "TrialNum": f"{TRIAL_STR}_in_{BLOCK_STR}",  # trial-in-block number as recorded by Tobii - NOT USING THIS
 
 }
+
+
+## Gaze and Trigger Columns ##
+MUTUAL_COLUMNS = [TIME_STR, BLOCK_STR, TRIAL_STR, IS_RECORDING_STR]
+TRIGGER_COLUMNS = [TRIGGER_STR, ACTION_STR]
+GAZE_COLUMNS = [col for col in TOBII_FIELD_MAP.values() if col != TIME_STR]
+DETECTOR_COLUMNS = [LEFT_LABEL_STR, RIGHT_LABEL_STR]
 
 
 ## TRIGGERS ##

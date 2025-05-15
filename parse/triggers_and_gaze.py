@@ -4,10 +4,6 @@ import pandas as pd
 import config as cnfg
 from data_models.LWSEnums import SearchActionTypesEnum
 
-MUTUAL_COLUMNS = [cnfg.TIME_STR, cnfg.BLOCK_STR, cnfg.TRIAL_STR, cnfg.IS_RECORDING_STR]
-TRIGGER_COLUMNS = [cnfg.TRIGGER_STR, cnfg.ACTION_STR]
-GAZE_COLUMNS = [col for col in cnfg.TOBII_FIELD_MAP.values() if col != cnfg.TIME_STR]
-
 
 def parse_triggers_and_gaze(triggers_path, gaze_path) -> (pd.DataFrame, pd.DataFrame):
     """
@@ -15,7 +11,8 @@ def parse_triggers_and_gaze(triggers_path, gaze_path) -> (pd.DataFrame, pd.DataF
     1. Reads the Tobii gaze and trigger log files
     2. Merges the two dataframes based on timestamp, to align the data
     3. Add columns to indicate block number, trial number, and whether data was recorded
-    4. Splits the merged dataframe back into gaze and trigger dataframes and returns them
+    4. Splits the merged dataframe back into gaze and trigger dataframes
+    5. Returns the processed triggers and gaze dataframes
     """
     # read triggers & gaze
     triggers = _read_triggers(triggers_path)
@@ -74,10 +71,9 @@ def _align_triggers_and_gaze(triggers, gaze) -> (pd.DataFrame, pd.DataFrame):
     merged = merged[cols_ord]
 
     # split back to gaze and triggers
-    triggers = merged.loc[
-        merged[cnfg.TRIGGER_STR].notna(), MUTUAL_COLUMNS + TRIGGER_COLUMNS]
-    is_gaze = merged[GAZE_COLUMNS].notna().any(axis=1)
-    gaze = merged.loc[is_gaze, MUTUAL_COLUMNS + GAZE_COLUMNS]
+    triggers = merged.loc[merged[cnfg.TRIGGER_STR].notna(), cnfg.MUTUAL_COLUMNS + cnfg.TRIGGER_COLUMNS]
+    is_gaze = merged[cnfg.GAZE_COLUMNS].notna().any(axis=1)
+    gaze = merged.loc[is_gaze, cnfg.MUTUAL_COLUMNS + cnfg.GAZE_COLUMNS]
     return triggers, gaze
 
 
