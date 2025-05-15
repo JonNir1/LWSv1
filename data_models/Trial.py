@@ -7,13 +7,6 @@ import config as cnfg
 from data_models.SearchArray import SearchArray
 from data_models.LWSEnums import SearchArrayTypeEnum
 
-_KEYBOARD_TRIGGERS = [
-    cnfg.ExperimentTriggerEnum.SPACE_ACT, cnfg.ExperimentTriggerEnum.SPACE_NO_ACT,
-    cnfg.ExperimentTriggerEnum.CONFIRM_ACT, cnfg.ExperimentTriggerEnum.CONFIRM_NO_ACT,
-    cnfg.ExperimentTriggerEnum.NOT_CONFIRM_ACT, cnfg.ExperimentTriggerEnum.NOT_CONFIRM_NO_ACT,
-    # cnfg.ExperimentTriggerEnum.OTHER_KEY, cnfg.ExperimentTriggerEnum.ABORT_TRIAL,
-]
-
 
 def _extract_singleton_column(df: pd.DataFrame, col_name: str):
     values = df[col_name].dropna()
@@ -71,6 +64,15 @@ class Trial:
 
     def get_gaze(self) -> pd.DataFrame:
         return self._gaze
+
+    def get_targets(self) -> pd.DataFrame:
+        target_images = self._search_array.targets
+        target_df = pd.DataFrame(target_images)
+        target_df[cnfg.CATEGORY_STR] = [img.category for img in target_images]
+
+        # extract when targets were identified by the subject
+        # target_df["time_identified"] = np.inf
+        return target_df
 
     def __validate_inputs(self):
         # block number
