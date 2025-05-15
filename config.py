@@ -2,6 +2,7 @@ import os
 import numpy as np
 from enum import IntEnum as _IntEnum
 from screeninfo import Monitor as _Monitor
+from constants import *
 
 EXPERIMENT_NAME = "v4"      # chane to v5 when analyzing newer subjects
 STIMULI_VERSION = 1
@@ -14,26 +15,6 @@ IMAGE_DIR_PATH = r"S:\Lab-Shared\Experiments\N170 free scan\ClutteredObjects_sca
 SEARCH_ARRAY_PATH = r"S:\Lab-Shared\Experiments\LWS Free Viewing Demo\Stimuli"
 
 
-## CONSTANTS ##
-MISSING_VALUE = np.nan
-DATE_TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
-
-TIME_STR = "time"
-TRIGGER_STR = "trigger"
-
-X, Y = "x", "y"
-PUPIL_STR = "pupil"
-LEFT_STR, RIGHT_STR = "left", "right"
-LEFT_X_STR, LEFT_Y_STR, LEFT_PUPIL_STR = f"{LEFT_STR}_{X}", f"{LEFT_STR}_{Y}", f"{LEFT_STR}_{PUPIL_STR}"
-RIGHT_X_STR, RIGHT_Y_STR, RIGHT_PUPIL_STR = f"{RIGHT_STR}_{X}", f"{RIGHT_STR}_{Y}", f"{RIGHT_STR}_{PUPIL_STR}"
-
-SUBJECT_STR, SESSION_STR = "subject", "session"
-BLOCK_STR, TRIAL_STR = "block", "trial"
-CONDITION_STR = "condition"
-CATEGORY_STR = "category"
-IMAGE_STR = "image"
-
-
 ## Screen Monitor ##
 TOBII_MONITOR = _Monitor(
     width=1920, height=1080,
@@ -44,7 +25,7 @@ TOBII_PIXEL_SIZE_MM = np.mean([
     TOBII_MONITOR.width_mm / TOBII_MONITOR.width,
     TOBII_MONITOR.height_mm / TOBII_MONITOR.height,
 ])
-TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan]
+TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan, MISSING_VALUE]
 
 
 ## Parsing Fields ##
