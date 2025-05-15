@@ -2,9 +2,10 @@ import numpy as np
 import pandas as pd
 
 import config as cnfg
+from data_models.LWSEnums import SearchActionTypesEnum
 
 MUTUAL_COLUMNS = [cnfg.TIME_STR, cnfg.BLOCK_STR, cnfg.TRIAL_STR, cnfg.IS_RECORDING_STR]
-TRIGGER_COLUMNS = [cnfg.TRIGGER_STR]
+TRIGGER_COLUMNS = [cnfg.TRIGGER_STR, cnfg.ACTION_STR]
 GAZE_COLUMNS = [col for col in cnfg.TOBII_FIELD_MAP.values() if col != cnfg.TIME_STR]
 
 
@@ -75,7 +76,7 @@ def _align_triggers_and_gaze(triggers, gaze) -> (pd.DataFrame, pd.DataFrame):
     # split back to gaze and triggers
     triggers = merged.loc[
         merged[cnfg.TRIGGER_STR].notna(), MUTUAL_COLUMNS + TRIGGER_COLUMNS]
-    is_gaze = merged[[GAZE_COLUMNS]].notna().any(axis=1)
+    is_gaze = merged[GAZE_COLUMNS].notna().any(axis=1)
     gaze = merged.loc[is_gaze, MUTUAL_COLUMNS + GAZE_COLUMNS]
     return triggers, gaze
 
@@ -106,5 +107,50 @@ def _read_triggers(triggers_path: str) -> pd.DataFrame:
     triggers = pd.read_csv(triggers_path, sep="\t")
     triggers.rename(columns=cnfg.TRIGGER_FIELD_MAP, inplace=True)
     triggers[cnfg.TRIGGER_STR] = triggers[cnfg.TRIGGER_STR].map(lambda trgr: cnfg.ExperimentTriggerEnum(trgr))
+
+    # add `action` column
+    triggers[cnfg.ACTION_STR] = cnfg.MISSING_VALUE
+    start_identify_idx = None
+    for idx, series in triggers.iterrows():
+        trg = series[cnfg.TRIGGER_STR]
+
+        if trg == cnfg.ExperimentTriggerEnum.SPACE_NO_ACT:
+            # subject attempted to mark target but failed
+            triggers.loc[start_identify_idx, cnfg.ACTION_STR] = SearchActionTypesEnum.ATTEMPTED_MARK
+            continue
+
+        if trg == cnfg.ExperimentTriggerEnum.SPACE_ACT:
+            # subject marks target
+            assert not start_identify_idx, f"{trg.name} follows previous {trg.name} (idx: {idx})"
+            start_identify_idx = idx
+            continue
+
+        if trg in [
+            cnfg.ExperimentTriggerEnum.CONFIRM_ACT,
+            cnfg.ExperimentTriggerEnum.NOT_CONFIRM_ACT,
+        ]:
+            # subject performed an action after marking target
+            assert start_identify_idx and start_identify_idx < idx,\
+                f"{trg.name} not follows a previous {cnfg.ExperimentTriggerEnum.SPACE_ACT.name} (idx: {idx})"
+            if trg == cnfg.ExperimentTriggerEnum.CONFIRM_ACT:
+                # subject confirms the identified target
+                triggers.loc[start_identify_idx, cnfg.ACTION_STR] = SearchActionTypesEnum.MARK_AND_CONFIRM
+            else:
+                # subject rejects previously identified (non-target) item
+                triggers.loc[start_identify_idx, cnfg.ACTION_STR] = SearchActionTypesEnum.MARK_AND_REJECT
+            start_identify_idx = None
+            continue
+
+        if start_identify_idx and trg in [
+            cnfg.ExperimentTriggerEnum.ABORT_TRIAL,
+            cnfg.ExperimentTriggerEnum.STIMULUS_OFF,
+            cnfg.ExperimentTriggerEnum.TRIAL_END,
+        ]:
+            # subject ran out of time before confirming target
+            assert start_identify_idx < idx, f"{trg.name} not follows a previous {cnfg.ExperimentTriggerEnum.SPACE_ACT.name} (idx: {idx})"
+            triggers.loc[start_identify_idx, 'subj_action'] = SearchActionTypesEnum.MARK_ONLY
+            start_identify_idx = None
+            continue
+
     return triggers
 

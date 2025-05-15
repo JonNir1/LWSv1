@@ -6,6 +6,7 @@ DATE_TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
 
 TIME_STR = "time"
 TRIGGER_STR = "trigger"
+ACTION_STR = "action"
 
 X, Y = "x", "y"
 PUPIL_STR = "pupil"

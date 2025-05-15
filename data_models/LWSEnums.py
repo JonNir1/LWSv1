@@ -31,3 +31,10 @@ class SearchArrayTypeEnum(IntEnum):
     COLOR = 1
     BW = 2
     NOISE = 3
+
+
+class SearchActionTypesEnum(IntEnum):
+    MARK_AND_CONFIRM = 1
+    MARK_ONLY = 2
+    ATTEMPTED_MARK = 3
+    MARK_AND_REJECT = 4
