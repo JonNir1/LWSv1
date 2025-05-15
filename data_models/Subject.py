@@ -240,6 +240,7 @@ class Subject:
                 continue
             start_idx = is_block_start.idxmax()  # find the first occurrence of the block trigger
             merged.loc[merged.index[start_idx:], cnfg.BLOCK_STR] = block_num
+        del trg, name, block_num, is_block_start, start_idx
 
         # add trial column
         is_trial = _is_between_triggers(
