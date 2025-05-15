@@ -15,6 +15,12 @@ _KEYBOARD_TRIGGERS = [
 ]
 
 
+def _extract_singleton_column(df: pd.DataFrame, col_name: str):
+    values = df[col_name].dropna()
+    assert values.nunique() == 1, f"Input data contains multiple values in column {col_name}"
+    return values.iloc[0]
+
+
 class Trial:
     """
     A class to represent a single LWS trial.
@@ -34,12 +40,12 @@ class Trial:
     @staticmethod
     def from_frames(triggers: pd.DataFrame, gaze: pd.DataFrame) -> "Trial":
         # extract block and trial numbers
-        block_num = int(Trial.__extract_singleton_column(gaze, cnfg.BLOCK_STR))
-        trial_num = int(Trial.__extract_singleton_column(gaze, cnfg.TRIAL_STR))
+        block_num = int(_extract_singleton_column(gaze, cnfg.BLOCK_STR))
+        trial_num = int(_extract_singleton_column(gaze, cnfg.TRIAL_STR))
 
         # generate the search array
-        search_array_type = SearchArrayTypeEnum[Trial.__extract_singleton_column(gaze, cnfg.CONDITION_STR).upper()]
-        search_array_num = int(Trial.__extract_singleton_column(gaze, "image_num"))
+        search_array_type = SearchArrayTypeEnum[_extract_singleton_column(gaze, cnfg.CONDITION_STR).upper()]
+        search_array_num = int(_extract_singleton_column(gaze, "image_num"))
         search_array = SearchArray.from_mat(os.path.join(
             cnfg.SEARCH_ARRAY_PATH,
             f"generated_stim{cnfg.STIMULI_VERSION}",
@@ -68,20 +74,20 @@ class Trial:
 
     def __validate_inputs(self):
         # block number
-        triggers_block_num = int(Trial.__extract_singleton_column(self._triggers, cnfg.BLOCK_STR))
-        gaze_block_num = int(Trial.__extract_singleton_column(self._gaze, cnfg.BLOCK_STR))
+        triggers_block_num = int(_extract_singleton_column(self._triggers, cnfg.BLOCK_STR))
+        gaze_block_num = int(_extract_singleton_column(self._gaze, cnfg.BLOCK_STR))
         assert self._block_num == triggers_block_num, f"Block num {self._block_num} does not match triggers block num {triggers_block_num}."
         assert self._block_num == gaze_block_num, f"Block num {self._block_num} does not match gaze block num {gaze_block_num}."
         # trial number
-        triggers_trial_num = int(Trial.__extract_singleton_column(self._triggers, cnfg.TRIAL_STR))
-        gaze_trial_num = int(Trial.__extract_singleton_column(self._gaze, cnfg.TRIAL_STR))
+        triggers_trial_num = int(_extract_singleton_column(self._triggers, cnfg.TRIAL_STR))
+        gaze_trial_num = int(_extract_singleton_column(self._gaze, cnfg.TRIAL_STR))
         assert self.trial_num == triggers_trial_num, f"Trial num {self.trial_num} does not match triggers trial num {triggers_trial_num}."
         assert self.trial_num == gaze_trial_num, f"Trial num {self.trial_num} does not match gaze trial num {gaze_trial_num}."
         # search array type
-        gaze_search_array_type = SearchArrayTypeEnum[Trial.__extract_singleton_column(self._gaze, cnfg.CONDITION_STR).upper()]
+        gaze_search_array_type = SearchArrayTypeEnum[_extract_singleton_column(self._gaze, cnfg.CONDITION_STR).upper()]
         assert self._search_array.array_type == gaze_search_array_type, f"Array type {self._search_array.array_type.name} does not match gaze array type {gaze_search_array_type.name}."
         # search array number
-        gaze_search_array_num = int(Trial.__extract_singleton_column(self._gaze, "image_num"))
+        gaze_search_array_num = int(_extract_singleton_column(self._gaze, "image_num"))
         assert self._search_array.image_num == gaze_search_array_num, f"Array num {self._search_array.image_num} does not match behavior's array num {gaze_search_array_num}."
 
     def __eq__(self, other) -> bool:
@@ -97,9 +103,3 @@ class Trial:
 
     def __repr__(self) -> str:
         return f"Trial {self.trial_num} ({self.get_search_array().array_type.name})"
-
-    @staticmethod
-    def __extract_singleton_column(df: pd.DataFrame, col_name: str):
-        values = df[col_name].dropna()
-        assert values.nunique() == 1, f"Input data contains multiple values in column {col_name}"
-        return values.iloc[0]
