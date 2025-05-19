@@ -1,11 +1,14 @@
+from __future__ import annotations
 import os
 
 import numpy as np
 import pandas as pd
 
 import config as cnfg
+import helpers as hlp
 from data_models.SearchArray import SearchArray
-from data_models.LWSEnums import SearchArrayTypeEnum
+from data_models.LWSEnums import SearchArrayTypeEnum, SearchActionTypesEnum, DominantEyeEnum
+from parse.eye_movements import detect_eye_movements
 
 
 def _extract_singleton_column(df: pd.DataFrame, col_name: str):
@@ -20,41 +23,52 @@ class Trial:
     Each trial consists of its SearchArray and behavioral data (pd.DataFrame).
     """
 
-    def __init__(
-            self, block_num: int, trial_num: int, search_array: SearchArray, triggers: pd.DataFrame, gaze: pd.DataFrame,
-    ):
-        self._block_num = block_num
-        self._trial_num = trial_num
-        self._search_array = search_array
-        self._triggers = triggers
-        self._gaze = gaze
-        self.__validate_inputs()
+    def __init__(self, subject: "Subject", triggers: pd.DataFrame, gaze: pd.DataFrame):
+        # verify block number
+        triggers_block_num = int(_extract_singleton_column(triggers, cnfg.BLOCK_STR))
+        gaze_block_num = int(_extract_singleton_column(gaze, cnfg.BLOCK_STR))
+        assert triggers_block_num == gaze_block_num, f"Triggers block num {triggers_block_num} does not match gaze block num {gaze_block_num}."
 
-    @staticmethod
-    def from_frames(triggers: pd.DataFrame, gaze: pd.DataFrame) -> "Trial":
-        # extract block and trial numbers
-        block_num = int(_extract_singleton_column(gaze, cnfg.BLOCK_STR))
-        trial_num = int(_extract_singleton_column(gaze, cnfg.TRIAL_STR))
+        # verify trial number
+        triggers_trial_num = int(_extract_singleton_column(triggers, cnfg.TRIAL_STR))
+        gaze_trial_num = int(_extract_singleton_column(gaze, cnfg.TRIAL_STR))
+        assert triggers_trial_num == gaze_trial_num, f"Triggers trial num {self.trial_num} does not match gaze trial num {gaze_trial_num}."
 
         # generate the search array
         search_array_type = SearchArrayTypeEnum[_extract_singleton_column(gaze, cnfg.CONDITION_STR).upper()]
         search_array_num = int(_extract_singleton_column(gaze, "image_num"))
-        search_array = SearchArray.from_mat(os.path.join(
+        self._search_array = SearchArray.from_mat(os.path.join(
             cnfg.SEARCH_ARRAY_PATH,
             f"generated_stim{cnfg.STIMULI_VERSION}",
             search_array_type.name.lower(),
             f"image_{search_array_num}.mat"
         ))
-        return Trial(block_num, trial_num, search_array, triggers, gaze)
 
+        # append eye movement labels
+        left_labels = detect_eye_movements(
+            gaze, DominantEyeEnum.Left, subject.screen_distance_cm, cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
+        )
+        right_labels = detect_eye_movements(
+            gaze, DominantEyeEnum.Right, subject.screen_distance_cm, cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
+        )
+        gaze = pd.concat([gaze, left_labels, right_labels], axis=1)
+
+        # store the data
+        self._triggers = triggers
+        self._gaze = gaze
+        self._subject = subject
 
     @property
     def block_num(self) -> int:
-        return self._block_num
+        return int(_extract_singleton_column(self._gaze, cnfg.BLOCK_STR))
 
     @property
     def trial_num(self) -> int:
-        return self._trial_num
+        return int(_extract_singleton_column(self._gaze, cnfg.TRIAL_STR))
+
+    @property
+    def trial_type(self) -> SearchArrayTypeEnum:
+        return self._search_array.array_type
 
     def get_search_array(self) -> SearchArray:
         return self._search_array
@@ -65,32 +79,17 @@ class Trial:
     def get_gaze(self) -> pd.DataFrame:
         return self._gaze
 
+    def get_subject(self) -> "Subject":
+        return self._subject
+
     def get_targets(self) -> pd.DataFrame:
         target_images = self._search_array.targets
-        target_df = pd.DataFrame(target_images)
+        target_df = pd.DataFrame(target_images, index=[f"{cnfg.TARGET_STR}_{i}" for i in range(len(target_images))])
         target_df[cnfg.CATEGORY_STR] = [img.category for img in target_images]
 
         # extract when targets were identified by the subject
         # target_df["time_identified"] = np.inf
         return target_df
-
-    def __validate_inputs(self):
-        # block number
-        triggers_block_num = int(_extract_singleton_column(self._triggers, cnfg.BLOCK_STR))
-        gaze_block_num = int(_extract_singleton_column(self._gaze, cnfg.BLOCK_STR))
-        assert self._block_num == triggers_block_num, f"Block num {self._block_num} does not match triggers block num {triggers_block_num}."
-        assert self._block_num == gaze_block_num, f"Block num {self._block_num} does not match gaze block num {gaze_block_num}."
-        # trial number
-        triggers_trial_num = int(_extract_singleton_column(self._triggers, cnfg.TRIAL_STR))
-        gaze_trial_num = int(_extract_singleton_column(self._gaze, cnfg.TRIAL_STR))
-        assert self.trial_num == triggers_trial_num, f"Trial num {self.trial_num} does not match triggers trial num {triggers_trial_num}."
-        assert self.trial_num == gaze_trial_num, f"Trial num {self.trial_num} does not match gaze trial num {gaze_trial_num}."
-        # search array type
-        gaze_search_array_type = SearchArrayTypeEnum[_extract_singleton_column(self._gaze, cnfg.CONDITION_STR).upper()]
-        assert self._search_array.array_type == gaze_search_array_type, f"Array type {self._search_array.array_type.name} does not match gaze array type {gaze_search_array_type.name}."
-        # search array number
-        gaze_search_array_num = int(_extract_singleton_column(self._gaze, "image_num"))
-        assert self._search_array.image_num == gaze_search_array_num, f"Array num {self._search_array.image_num} does not match behavior's array num {gaze_search_array_num}."
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Trial):
@@ -98,6 +97,8 @@ class Trial:
         if self.trial_num != other.trial_num:
             return False
         if self.block_num != other.block_num:
+            return False
+        if self.trial_type != other.trial_type:
             return False
         if self.get_search_array() != other.get_search_array():
             return False

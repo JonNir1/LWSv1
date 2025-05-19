@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 from typing import Union, Optional, List
 from datetime import datetime
@@ -8,9 +9,7 @@ from tqdm import tqdm
 import config as cnfg
 from parse.subject_info import parse_subject_info
 from parse.triggers_and_gaze import parse_triggers_and_gaze
-from parse.eye_movements import detect_eye_movements
 from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum
-from data_models.Trial import Trial
 
 
 class Subject:
@@ -38,9 +37,7 @@ class Subject:
             screen_distance_cm: float,
             session: int,
             date_time: Optional[Union[str, datetime]] = None,
-            trials: Optional[List[Trial]] = None,
     ):
-        # personal information
         self._experiment_name = exp_name
         self._id = subject_id
         self._name = name
@@ -54,9 +51,7 @@ class Subject:
             self._date_time = date_time if isinstance(date_time, datetime) else datetime.strptime(date_time, cnfg.DATE_TIME_FORMAT)
         except (ValueError, TypeError):
             self._date_time = None
-        # experimental data
-        trials = trials if trials is not None else []
-        self._trials = sorted(trials, key=lambda trial: trial.trial_num)
+        self._trials: List["Trial"] = []
 
     @staticmethod
     def from_raw(
@@ -73,46 +68,16 @@ class Subject:
             print("Reading subject data...")
         file_prefix = f"{exp_name}-{subject_id}-{session}"
         dirname = dirname or file_prefix
-
-        # read subject personal information
         subject_info = parse_subject_info(os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}.txt"))
         subject_info["exp_name"] = exp_name
-
-        # parse triggers and gaze data
+        subject = Subject(**subject_info)
+        trials = subject.read_trials(dirname=dirname, verbose=verbose)
+        for trial in trials:
+            subject.add_trial(trial)
         if verbose:
-            print("Parsing triggers and gaze data...")
-        triggers, gaze = parse_triggers_and_gaze(
-            os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-TriggerLog.txt"),
-            os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-GazeData.txt"),
-        )
-
-        # split the data into trials
-        if verbose:
-            print("Parsing Trials...")
-        trials = []
-        for trial_num in tqdm(
-            triggers[cnfg.TRIAL_STR].dropna().unique().astype(int),
-            desc="Trials", disable=not verbose,
-        ):
-            # extract the trial data
-            trial_triggers = triggers[triggers[cnfg.TRIAL_STR] == trial_num].copy()
-            trial_gaze = gaze[gaze[cnfg.TRIAL_STR] == trial_num].copy()
-
-            # detect eye movements
-            left_labels = detect_eye_movements(
-                trial_gaze, DominantEyeEnum.Left, subject_info["screen_distance_cm"], cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
-            )
-            right_labels = detect_eye_movements(
-                trial_gaze, DominantEyeEnum.Right, subject_info["screen_distance_cm"], cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
-            )
-            trial_gaze = pd.concat([trial_gaze, left_labels, right_labels], axis=1)
-
-            trial = Trial.from_frames(trial_triggers, trial_gaze)
-            trials.append(trial)
-        trials = sorted(trials, key=lambda t: t.trial_num)
-
-        # create the subject object
-        return Subject(trials=trials, **subject_info)
+            print(f"Subject {subject_id} has {len(subject._trials)} trials.")
+            print("#####################################")
+        return subject
 
     @property
     def experiment_name(self) -> str:
@@ -158,8 +123,36 @@ class Subject:
     def num_trials(self) -> int:
         return len(self._trials)
 
-    def get_trials(self) -> List[Trial]:
-        return self._trials
+    def get_trials(self, sort: bool = True) -> List["Trial"]:
+        if not sort:
+            return self._trials
+        return sorted(self._trials, key=lambda t: t.trial_num)
+
+    def add_trial(self, trial: "Trial") -> None:
+        self._trials.append(trial)
+
+    def read_trials(self, dirname: Optional[str] = None, verbose: bool = False) -> List["Trial"]:
+        from data_models.Trial import Trial
+        file_prefix = f"{self._experiment_name}-{self._id}-{self._session}"
+        dirname = dirname or file_prefix
+        if verbose:
+            print(f"Reading trials from {dirname}.")
+        triggers, gaze = parse_triggers_and_gaze(
+            os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-TriggerLog.txt"),
+            os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-GazeData.txt"),
+        )
+        trials = []
+        for trial_num in tqdm(
+                triggers[cnfg.TRIAL_STR].dropna().unique().astype(int),
+                desc="Trials", disable=not verbose,
+        ):
+            # extract the trial data
+            trial_triggers = triggers[triggers[cnfg.TRIAL_STR] == trial_num]
+            trial_gaze = gaze[gaze[cnfg.TRIAL_STR] == trial_num]
+            trial = Trial(self, trial_triggers.copy(), trial_gaze.copy())
+            trials.append(trial)
+        trials = sorted(trials, key=lambda t: t.trial_num)
+        return trials
 
     def __repr__(self) -> str:
         return f"{self.experiment_name.upper()}-Subject {self.id}"
