@@ -95,8 +95,8 @@ class Subject:
             desc="Trials", disable=not verbose,
         ):
             # extract the trial data
-            trial_triggers = triggers[triggers[cnfg.TRIAL_STR] == trial_num]
-            trial_gaze = gaze[gaze[cnfg.TRIAL_STR] == trial_num]
+            trial_triggers = triggers[triggers[cnfg.TRIAL_STR] == trial_num].copy()
+            trial_gaze = gaze[gaze[cnfg.TRIAL_STR] == trial_num].copy()
 
             # detect eye movements
             left_labels = detect_eye_movements(
