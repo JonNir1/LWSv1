@@ -9,6 +9,7 @@ TRIGGER_STR = "trigger"
 ACTION_STR = "action"
 LABEL_STR = "label"
 EVENT_STR = "event"
+TARGET_STR = "target"
 
 X, Y = "x", "y"
 PUPIL_STR = "pupil"
