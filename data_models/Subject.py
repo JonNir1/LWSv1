@@ -7,6 +7,7 @@ import pandas as pd
 from tqdm import tqdm
 
 import config as cnfg
+import helpers as hlp
 from parse.subject_info import parse_subject_info
 from parse.triggers_and_gaze import parse_triggers_and_gaze
 from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum
@@ -122,6 +123,16 @@ class Subject:
     @property
     def num_trials(self) -> int:
         return len(self._trials)
+
+    @property
+    def px2deg(self) -> float:
+        """
+        Returns the conversion factor from pixels to degrees of visual angle (DVA).
+        To move from `d` pixels to DVA, use the formula: `d * px2deg`.
+        """
+        return hlp.convert_units(
+            1, "px", "deg", cnfg.TOBII_PIXEL_SIZE_MM / 10, self._screen_distance_cm
+        )
 
     def get_trials(self, sort: bool = True) -> List["Trial"]:
         if not sort:
