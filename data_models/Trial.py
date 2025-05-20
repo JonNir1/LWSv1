@@ -79,15 +79,18 @@ class Trial:
         return self._distance_unit
 
     @distance_unit.setter
-    def distance_unit(self, value: Literal['px', 'cm', 'deg']):
-        if self._distance_unit == value:
+    def distance_unit(self, new_unit: Literal['px', 'cm', 'deg']):
+        if self._distance_unit == new_unit:
             return
-        if value not in ['px', 'cm', 'deg']:
-            raise ValueError(f"Invalid distance unit: {value}. Must be one of ['px', 'cm', 'deg'].")
-        # recalculate target distances:
-        dists = self.calculate_gaze_target_distances(unit=value)
-        self._gaze.loc[:, dists.columns] = dists
-        self._distance_unit = value
+        if new_unit not in ['px', 'cm', 'deg']:
+            raise ValueError(f"Invalid distance unit: {new_unit}. Must be one of ['px', 'cm', 'deg'].")
+        # convert target distances:
+        target_distance_columns = [col for col in self._gaze.columns if col.startswith(cnfg.TARGET_STR)]
+        new_distances = self._gaze[target_distance_columns].map(lambda dist: hlp.convert_units(
+            dist, self.distance_unit, new_unit, cnfg.TOBII_PIXEL_SIZE_MM / 10, self._subject.screen_distance_cm
+        ))
+        self._gaze.loc[:, target_distance_columns] = new_distances
+        self._distance_unit = new_unit
 
     def get_search_array(self) -> SearchArray:
         return self._search_array
