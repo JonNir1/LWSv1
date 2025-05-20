@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import warnings
 from typing import Optional, Literal
 
 import numpy as np
@@ -146,6 +147,67 @@ class Trial:
                 )
         dists = pd.DataFrame(dists, index=self._gaze.index, columns=targets.index)
         return dists
+
+    def extract_target_identification(self) -> pd.DataFrame:
+        """
+        Extracts the time, gaze location and distance from the target for each target identification during the trial.
+        If a taget was never identified, the time and distance are set to np.inf and gaze data is set to NaN.
+        If a target was identified multiple times, we record all identifications and raise a warning.
+
+        :return: pd.DataFrame indexed by targets (`target_0`, `target_1`, etc.) with the following columns:
+            - `time`: time of identification
+            - `distance`: distance from the target at the time of identification
+            - `left_x`, `left_y`: gaze coordinates in the left eye at the time of identification
+            - `right_x`, `right_y`: gaze coordinates in the right eye at the time of identification
+            - `left_pupil`, `right_pupil`: pupil size in the left/right eye at the time of identification
+            - `'left_label'`, `'right_label'`: eye movement labels in the left/right eye at the time of identification
+            - `target_x`, `target_y`: target coordinates
+            - `target_category`: target category
+        """
+        # extract gaze on target identification
+        MAX_GAZE_TO_TRIGGER_TIME_DIFF = 10  # in ms
+        identification_triggers = self._triggers[
+            self._triggers[cnfg.ACTION_STR] == SearchActionTypesEnum.MARK_AND_CONFIRM
+        ].reset_index(drop=True)
+        gaze_when_ident = self._gaze.loc[hlp.closest_indices(
+            self._gaze['time'], identification_triggers['time'], threshold=MAX_GAZE_TO_TRIGGER_TIME_DIFF
+        )].reset_index(drop=True)
+
+        # calculate minimal distance from targets
+        dists = gaze_when_ident[[col for col in gaze_when_ident.columns if col.startswith(cnfg.TARGET_STR)]].copy()
+        closest_target = dists.idxmin(axis=1)
+        dists = pd.Series(
+            dists.to_numpy()[dists.index, dists.columns.get_indexer(closest_target)],
+            name=f"{cnfg.DISTANCE_STR}_{self.distance_unit}"
+        )
+
+        # concatenate results
+        res = pd.concat([
+            identification_triggers[cnfg.TIME_STR],
+            dists,
+            gaze_when_ident[[col for col in gaze_when_ident.columns if col.startswith(cnfg.LEFT_STR)]],
+            gaze_when_ident[[col for col in gaze_when_ident.columns if col.startswith(cnfg.RIGHT_STR)]],
+        ], axis=1)
+        res.index = closest_target.values
+        target_data = self.get_targets()[[cnfg.X, cnfg.Y, cnfg.CATEGORY_STR]].rename(
+            columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False
+        )
+        res = pd.concat([res, target_data], axis=1)
+
+        # replace unidentified targets' `time` and `distance` with np.inf
+        non_nan_cols = [cnfg.TIME_STR] + [col for col in res if col.startswith(cnfg.DISTANCE_STR)]
+        res.loc[res[cnfg.TIME_STR].isna(), non_nan_cols] = np.inf
+
+        # warn if a target was identified multiple times
+        target_counts = res.index.value_counts()
+        multi_detected = target_counts[target_counts > 1]
+        if not multi_detected.empty:
+            # TODO: consider resolving this in code rather than manually?
+            warnings.warn(
+                f"Multiple identifications for targets {multi_detected.index.tolist()} in trial {self.trial_num}.",
+                RuntimeWarning,
+            )
+        return res
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Trial):

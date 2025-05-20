@@ -19,9 +19,9 @@ subj = Subject.from_raw(
 )
 
 # extract specific trial
-trial = subj.get_trials()[9]
-# arr = trial.get_search_array()
+trial = subj.get_trials()[33]
 
+arr = trial.get_search_array()
 targets = trial.get_targets()
 triggers = trial.get_triggers()
 gaze = trial.get_gaze()
@@ -29,9 +29,14 @@ gaze = trial.get_gaze()
 # identify targets' identification time
 import helpers as hlp
 
-mark_and_confirm_triggers = triggers[triggers[cnfg.ACTION_STR] == SearchActionTypesEnum.MARK_AND_CONFIRM]
-gaze_on_mark = gaze.loc[hlp.closest_indices(gaze['time'], mark_and_confirm_triggers['time'], threshold=10)]
-# TODO: find out which is the closest target when marking and register its identification time
+
+target_identification_data = trial.extract_target_identification()
+# TODO: ignore if distance is above predefined threshold (replace `time>threshold` with inf)
+
+
+
+
+
 
 
 

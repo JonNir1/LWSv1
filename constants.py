@@ -25,4 +25,5 @@ CONDITION_STR = "condition"
 CATEGORY_STR = "category"
 IMAGE_STR = "image"
 IS_RECORDING_STR = "is_recording"
+DISTANCE_STR = "distance"
 
