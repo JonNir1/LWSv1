@@ -1,5 +1,5 @@
 import os
-from typing import NamedTuple, List
+from typing import NamedTuple, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -63,6 +63,8 @@ class SearchArray:
 
     _NUM_ROWS, _NUM_COLS = 10, 18
     _RESOLUTION = (1920, 1080)
+    # bottom of screen contains examples of target images, within the following rectangle:
+    _TARGET_EXEMPLARS_TOP_LEFT, TARGET_EXEMPLARS_BOTTOM_RIGHT = (720, 910), (1200, cnfg.TOBII_MONITOR.height)   # TODO: read this from stimulus generation config
 
     def __init__(
             self,
@@ -163,6 +165,14 @@ class SearchArray:
         :return: A 2D array of ImageCategoryEnum values.
         """
         return np.array([[img.category for img in row] for row in self._images])
+
+    @classmethod
+    def is_in_target_exemplar_rectangle(cls, p: Tuple[float, float]) -> bool:
+        """ Check if a point is within the target exemplars rectangle, at the bottom of the screen. """
+        return (
+            cls._TARGET_EXEMPLARS_TOP_LEFT[0] <= p[0] <= cls.TARGET_EXEMPLARS_BOTTOM_RIGHT[0]
+            and cls._TARGET_EXEMPLARS_TOP_LEFT[1] <= p[1] <= cls.TARGET_EXEMPLARS_BOTTOM_RIGHT[1]
+        )
 
     @staticmethod
     def _get_path(
