@@ -32,17 +32,42 @@ def distance(
     pixel_distance = np.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
     if unit == 'px':
         return pixel_distance
-    if pixel_size_cm is None or not np.isfinite(pixel_size_cm):
-        raise ValueError("pixel size must be provided for 'cm' or 'deg' units.")
-    cm_distance = pixel_distance * pixel_size_cm
     if unit == 'cm':
-        return cm_distance
-    if screen_distance_cm is None or not np.isfinite(screen_distance_cm):
-        raise ValueError("screen distance must be provided for 'deg' unit.")
-    deg_dist = 2 * np.degrees(np.arctan2(cm_distance / 2, screen_distance_cm))
+        return convert_units(pixel_distance, 'px', 'cm', pixel_size_cm, screen_distance_cm)
     if unit == 'deg':
-        return deg_dist
+        return convert_units(pixel_distance, 'px', 'deg', pixel_size_cm, screen_distance_cm)
     raise ValueError(f"Invalid unit '{unit}'. Valid options are: 'px', 'cm', 'deg'.")
+
+
+def convert_units(
+        length: float,
+        orig_unit: Literal['px', 'cm', 'deg'], new_unit: Literal['px', 'cm', 'deg'],
+        pixel_size_cm: Optional[float] = None, screen_distance_cm: Optional[float] = None
+) -> float:
+    assert length >= 0 or np.isnan(length), "Length must be non-negative"
+    if orig_unit == new_unit:
+        return length
+    def validate_argument(name: str, value: Optional[float]):
+        if value is None or not np.isfinite(value):
+            raise ValueError(f"`{name}` must be provided and finite to convert from {orig_unit} to {new_unit}.")
+
+    if {orig_unit, new_unit} == {'px', 'cm'}:
+        validate_argument("pixel_size_cm", pixel_size_cm)
+        return length * pixel_size_cm if orig_unit == 'px' else length / pixel_size_cm
+    if {orig_unit, new_unit} == {'cm', 'deg'}:
+        validate_argument("screen_distance_cm", screen_distance_cm)
+        if orig_unit == 'cm':
+            return 2 * np.degrees(np.arctan2(length / 2, screen_distance_cm))   # cm to deg
+        else:
+            return 2 * screen_distance_cm * np.tan(np.radians(length / 2))      # deg to cm
+    if {orig_unit, new_unit} == {'px', 'deg'}:
+        validate_argument("pixel_size_cm", pixel_size_cm)
+        validate_argument("screen_distance_cm", screen_distance_cm)
+        cm_length = convert_units(length, orig_unit, 'cm', pixel_size_cm, screen_distance_cm)
+        return convert_units(cm_length, 'cm', new_unit, pixel_size_cm, screen_distance_cm)
+    raise ValueError(
+        f"Invalid unit conversion from {orig_unit} to {new_unit}. Valid options are: 'px', 'cm', 'deg'."
+    )
 
 
 def change_pixel_origin(

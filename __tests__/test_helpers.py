@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from helpers import distance, change_pixel_origin, flatten_or_raise
+from helpers import distance, convert_units, change_pixel_origin, flatten_or_raise
 
 class TestHelpers(unittest.TestCase):
 
@@ -13,6 +13,37 @@ class TestHelpers(unittest.TestCase):
             distance(p1, p1, unit='cm')
             distance((0, 0), (1, 1), unit='deg', pixel_size_cm=0.1)
             distance((0, 0), (1, 1), unit='inch')
+
+    def test_convert_units(self):
+        # Identity conversions
+        self.assertEqual(convert_units(5, 'px', 'px'), 5)
+        self.assertEqual(convert_units(2.5, 'cm', 'cm'), 2.5)
+        self.assertEqual(convert_units(1.2, 'deg', 'deg'), 1.2)
+        self.assertTrue(np.array_equal(convert_units(np.nan, 'deg', 'deg'), np.nan, equal_nan=True))
+
+        # px ↔ cm
+        self.assertAlmostEqual(convert_units(100, 'px', 'cm', pixel_size_cm=0.05), 5.0)
+        self.assertAlmostEqual(convert_units(5, 'cm', 'px', pixel_size_cm=0.05), 100)
+
+        # cm ↔ deg
+        cm = 1.5
+        sd = 60
+        deg = convert_units(cm, 'cm', 'deg', screen_distance_cm=sd)
+        self.assertAlmostEqual(convert_units(deg, 'deg', 'cm', screen_distance_cm=sd), cm, places=5)
+
+        # px ↔ deg (via cm)
+        px = 60
+        pixel_size = 0.05
+        angle = convert_units(px, 'px', 'deg', pixel_size_cm=pixel_size, screen_distance_cm=sd)
+        px_back = convert_units(angle, 'deg', 'px', pixel_size_cm=pixel_size, screen_distance_cm=sd)
+        self.assertAlmostEqual(px, px_back, places=5)
+
+        # missing params and invalid conversions
+        with self.assertRaises(ValueError):
+            convert_units(100, 'px', 'cm')
+            convert_units(5, 'cm', 'deg')
+            convert_units(20, 'px', 'deg', pixel_size_cm=0.05)
+            convert_units(1, 'px', 'inch')  # invalid conversion
 
     def test_change_pixel_origin(self):
         x, y = np.array([0]), np.array([0])
