@@ -109,9 +109,6 @@ class Trial:
         target_images = self._search_array.targets
         target_df = pd.DataFrame(target_images, index=[f"{cnfg.TARGET_STR}_{i}" for i in range(len(target_images))])
         target_df[cnfg.CATEGORY_STR] = [img.category for img in target_images]
-
-        # extract when targets were identified by the subject
-        # target_df["time_identified"] = np.inf
         return target_df
 
     def extract_target_identification(self) -> pd.DataFrame:
