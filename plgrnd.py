@@ -39,3 +39,13 @@ del left_em, right_em, left_fixs, right_fixs, left_fixs_df, right_fixs_df
 targets = trial.get_targets()
 center_pixels = np.vstack(fixs_df['center_pixel'].values)
 fix_dists = trial.calculate_target_distances(center_pixels[:, 0], center_pixels[:, 1]) * subj.px2deg
+# TODO: determine if fixation close to target, number proximal fixations
+# TODO: determine if fixation is prior to target identification
+# TODO: determine if fixation within bottom strip
+
+# LWS instance:
+#   fixation on target
+#   before identification
+#   not coinciding with trial end
+#   succeeding fixation is not in bottom strip
+#   succeeding fixation is not same-target's identification fixation
