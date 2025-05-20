@@ -50,7 +50,7 @@ class Trial:
 
         # pre-process inputs
         self._search_array = self._create_search_array()
-        dists = self._calculate_gaze_target_distances(unit=self._distance_unit)
+        dists = self._calculate_gaze_target_distances()
         labels, left_events, right_events = self._detect_eye_movements()
         self._gaze = pd.concat([self._gaze, labels, dists], axis=1)
         self._left_events = left_events
@@ -110,6 +110,32 @@ class Trial:
         target_df = pd.DataFrame(target_images, index=[f"{cnfg.TARGET_STR}_{i}" for i in range(len(target_images))])
         target_df[cnfg.CATEGORY_STR] = [img.category for img in target_images]
         return target_df
+
+    def calculate_target_distances(self, x: np.ndarray, y: np.ndarray,) -> pd.DataFrame:
+        """
+        Calculate the distance from each X-Y coordinate to each target in the search array.
+        :param x: 1D array of X coordinates with shape (N,) or (N, 1) or (1, N)
+        :param y: 1D array of Y coordinates with shape (N,) or (N, 1) or (1, N)
+        :return: a (num_coords, num_targets) DataFrame with the distances from each coordinate to each target.
+        """
+        x = hlp.flatten_or_raise(x)
+        y = hlp.flatten_or_raise(y)
+        if x.shape != y.shape:
+            raise ValueError(f"Input arrays must have the same shape. Got {x.shape} and {y.shape}.")
+        coords = np.column_stack((x, y))                    # shape (n_coords, 2)
+        targets = self.get_targets()
+        target_coords = targets[[cnfg.X, cnfg.Y]].values    # shape (n_targets, 2)
+        dists = np.empty((len(coords), len(targets)), dtype=float)
+        for i, (cx, cy) in enumerate(coords):
+            for j, (tx, ty) in enumerate(target_coords):
+                dists[i, j] = hlp.distance(
+                    (cx, cy), (tx, ty),
+                    unit=self._distance_unit,
+                    pixel_size_cm=cnfg.TOBII_PIXEL_SIZE_MM / 10,
+                    screen_distance_cm=self._subject.screen_distance_cm
+                )
+        dists = pd.DataFrame(dists, columns=targets.index)
+        return dists
 
     def extract_target_identification(self) -> pd.DataFrame:
         """
@@ -203,22 +229,11 @@ class Trial:
         labels = pd.concat([left_labels, right_labels], axis=1)
         return labels, left_events, right_events
 
-    def _calculate_gaze_target_distances(self, unit: Optional[Literal['px', 'cm', 'deg']] = None) -> pd.DataFrame:
-        gaze_x_col = cnfg.RIGHT_X_STR if self._subject.eye == DominantEyeEnum.Right else cnfg.LEFT_X_STR
-        gaze_y_col = cnfg.RIGHT_Y_STR if self._subject.eye == DominantEyeEnum.Right else cnfg.LEFT_Y_STR
-        gaze_coords = self._gaze[[gaze_x_col, gaze_y_col]].values  # shape (n_gazes, 2)
-        targets = self.get_targets()
-        target_coords = targets[[cnfg.X, cnfg.Y]].values  # shape (n_targets, 2)
-        dists = np.empty((len(gaze_coords), len(targets)), dtype=float)
-        for i, (gx, gy) in enumerate(gaze_coords):
-            for j, (tx, ty) in enumerate(target_coords):
-                dists[i, j] = hlp.distance(
-                    (gx, gy), (tx, ty),
-                    unit=self._distance_unit if unit is None else unit,
-                    pixel_size_cm=cnfg.TOBII_PIXEL_SIZE_MM / 10,
-                    screen_distance_cm=self._subject.screen_distance_cm
-                )
-        dists = pd.DataFrame(dists, index=self._gaze.index, columns=targets.index)
+    def _calculate_gaze_target_distances(self,) -> pd.DataFrame:
+        gaze_x = self._gaze[cnfg.RIGHT_X_STR if self._subject.eye == DominantEyeEnum.Right else cnfg.LEFT_X_STR].values
+        gaze_y = self._gaze[cnfg.RIGHT_Y_STR if self._subject.eye == DominantEyeEnum.Right else cnfg.LEFT_Y_STR].values
+        dists = self.calculate_target_distances(gaze_x, gaze_y)
+        dists.index = self._gaze.index
         return dists
 
     def __eq__(self, other) -> bool:
