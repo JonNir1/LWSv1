@@ -48,19 +48,10 @@ class Trial:
         self._triggers = triggers
         self._gaze = gaze
 
-        # generate the search array
-        search_array_type = SearchArrayTypeEnum[_extract_singleton_column(gaze, cnfg.CONDITION_STR).upper()]
-        search_array_num = int(_extract_singleton_column(gaze, "image_num"))
-        self._search_array = SearchArray.from_mat(os.path.join(
-            cnfg.SEARCH_ARRAY_PATH,
-            f"generated_stim{cnfg.STIMULI_VERSION}",
-            search_array_type.name.lower(),
-            f"image_{search_array_num}.mat"
-        ))
-
-        # process gaze data
-        labels = self.detect_eye_movements()
-        dists = self.calculate_gaze_target_distances(unit=self._distance_unit)
+        # pre-process inputs
+        self._search_array = self._create_search_array()
+        labels = self._detect_eye_movements()
+        dists = self._calculate_gaze_target_distances(unit=self._distance_unit)
         self._gaze = pd.concat([self._gaze, labels, dists], axis=1)
 
     @property
@@ -113,40 +104,6 @@ class Trial:
         # extract when targets were identified by the subject
         # target_df["time_identified"] = np.inf
         return target_df
-
-    def detect_eye_movements(self):
-        if cnfg.LEFT_LABEL_STR in self._gaze.columns:
-            left_labels = self._gaze[cnfg.LEFT_LABEL_STR]
-        else:
-            left_labels = detect_eye_movements(
-                self._gaze, DominantEyeEnum.Left, self._subject.screen_distance_cm, cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
-            )
-        if cnfg.RIGHT_LABEL_STR in self._gaze.columns:
-            right_labels = self._gaze[cnfg.RIGHT_LABEL_STR]
-        else:
-            right_labels = detect_eye_movements(
-                self._gaze, DominantEyeEnum.Right, self._subject.screen_distance_cm, cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
-            )
-        labels = pd.concat([left_labels, right_labels], axis=1)
-        return labels
-
-    def calculate_gaze_target_distances(self, unit: Optional[Literal['px', 'cm', 'deg']] = None) -> pd.DataFrame:
-        gaze_x_col = cnfg.RIGHT_X_STR if self._subject.eye == DominantEyeEnum.Right else cnfg.LEFT_X_STR
-        gaze_y_col = cnfg.RIGHT_Y_STR if self._subject.eye == DominantEyeEnum.Right else cnfg.LEFT_Y_STR
-        gaze_coords = self._gaze[[gaze_x_col, gaze_y_col]].values  # shape (n_gazes, 2)
-        targets = self.get_targets()
-        target_coords = targets[[cnfg.X, cnfg.Y]].values  # shape (n_targets, 2)
-        dists = np.empty((len(gaze_coords), len(targets)), dtype=float)
-        for i, (gx, gy) in enumerate(gaze_coords):
-            for j, (tx, ty) in enumerate(target_coords):
-                dists[i, j] = hlp.distance(
-                    (gx, gy), (tx, ty),
-                    unit=self._distance_unit if unit is None else unit,
-                    pixel_size_cm=cnfg.TOBII_PIXEL_SIZE_MM / 10,
-                    screen_distance_cm=self._subject.screen_distance_cm
-                )
-        dists = pd.DataFrame(dists, index=self._gaze.index, columns=targets.index)
-        return dists
 
     def extract_target_identification(self) -> pd.DataFrame:
         """
@@ -208,6 +165,51 @@ class Trial:
                 RuntimeWarning,
             )
         return res
+
+    def _create_search_array(self) -> SearchArray:
+        search_array_type = SearchArrayTypeEnum[_extract_singleton_column(self._gaze, cnfg.CONDITION_STR).upper()]
+        search_array_num = int(_extract_singleton_column(self._gaze, "image_num"))
+        search_array = SearchArray.from_mat(os.path.join(
+            cnfg.SEARCH_ARRAY_PATH,
+            f"generated_stim{cnfg.STIMULI_VERSION}",
+            search_array_type.name.lower(),
+            f"image_{search_array_num}.mat"
+        ))
+        return search_array
+
+    def _detect_eye_movements(self):
+        if cnfg.LEFT_LABEL_STR in self._gaze.columns:
+            left_labels = self._gaze[cnfg.LEFT_LABEL_STR]
+        else:
+            left_labels = detect_eye_movements(
+                self._gaze, DominantEyeEnum.Left, self._subject.screen_distance_cm, cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
+            )
+        if cnfg.RIGHT_LABEL_STR in self._gaze.columns:
+            right_labels = self._gaze[cnfg.RIGHT_LABEL_STR]
+        else:
+            right_labels = detect_eye_movements(
+                self._gaze, DominantEyeEnum.Right, self._subject.screen_distance_cm, cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
+            )
+        labels = pd.concat([left_labels, right_labels], axis=1)
+        return labels
+
+    def _calculate_gaze_target_distances(self, unit: Optional[Literal['px', 'cm', 'deg']] = None) -> pd.DataFrame:
+        gaze_x_col = cnfg.RIGHT_X_STR if self._subject.eye == DominantEyeEnum.Right else cnfg.LEFT_X_STR
+        gaze_y_col = cnfg.RIGHT_Y_STR if self._subject.eye == DominantEyeEnum.Right else cnfg.LEFT_Y_STR
+        gaze_coords = self._gaze[[gaze_x_col, gaze_y_col]].values  # shape (n_gazes, 2)
+        targets = self.get_targets()
+        target_coords = targets[[cnfg.X, cnfg.Y]].values  # shape (n_targets, 2)
+        dists = np.empty((len(gaze_coords), len(targets)), dtype=float)
+        for i, (gx, gy) in enumerate(gaze_coords):
+            for j, (tx, ty) in enumerate(target_coords):
+                dists[i, j] = hlp.distance(
+                    (gx, gy), (tx, ty),
+                    unit=self._distance_unit if unit is None else unit,
+                    pixel_size_cm=cnfg.TOBII_PIXEL_SIZE_MM / 10,
+                    screen_distance_cm=self._subject.screen_distance_cm
+                )
+        dists = pd.DataFrame(dists, index=self._gaze.index, columns=targets.index)
+        return dists
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Trial):
