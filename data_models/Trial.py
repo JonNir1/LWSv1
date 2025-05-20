@@ -25,13 +25,7 @@ class Trial:
     Each trial consists of its SearchArray and behavioral data (pd.DataFrame).
     """
 
-    def __init__(
-            self,
-            subject: "Subject",
-            triggers: pd.DataFrame,
-            gaze: pd.DataFrame,
-            distance_unit: Literal['px', 'cm', 'deg'] = 'px'
-    ):
+    def __init__(self, subject: "Subject", triggers: pd.DataFrame, gaze: pd.DataFrame,):
         # verify block number
         triggers_block_num = int(_extract_singleton_column(triggers, cnfg.BLOCK_STR))
         gaze_block_num = int(_extract_singleton_column(gaze, cnfg.BLOCK_STR))
@@ -43,7 +37,6 @@ class Trial:
         assert triggers_trial_num == gaze_trial_num, f"Triggers trial num {self.trial_num} does not match gaze trial num {gaze_trial_num}."
 
         # store unprocessed data
-        self._distance_unit: Literal['px', 'cm', 'deg'] = distance_unit
         self._subject = subject
         self._triggers = triggers
         self._gaze = gaze
@@ -67,24 +60,6 @@ class Trial:
     @property
     def trial_type(self) -> SearchArrayTypeEnum:
         return self._search_array.array_type
-
-    @property
-    def distance_unit(self) -> Literal['px', 'cm', 'deg']:
-        return self._distance_unit
-
-    @distance_unit.setter
-    def distance_unit(self, new_unit: Literal['px', 'cm', 'deg']):
-        if self._distance_unit == new_unit:
-            return
-        if new_unit not in ['px', 'cm', 'deg']:
-            raise ValueError(f"Invalid distance unit: {new_unit}. Must be one of ['px', 'cm', 'deg'].")
-        # convert target distances:
-        target_distance_columns = [col for col in self._gaze.columns if col.startswith(cnfg.TARGET_STR)]
-        new_distances = self._gaze[target_distance_columns].map(lambda dist: hlp.convert_units(
-            dist, self.distance_unit, new_unit, cnfg.TOBII_PIXEL_SIZE_MM / 10, self._subject.screen_distance_cm
-        ))
-        self._gaze.loc[:, target_distance_columns] = new_distances
-        self._distance_unit = new_unit
 
     def get_search_array(self) -> SearchArray:
         return self._search_array
@@ -113,7 +88,7 @@ class Trial:
 
     def calculate_target_distances(self, x: np.ndarray, y: np.ndarray,) -> pd.DataFrame:
         """
-        Calculate the distance from each X-Y coordinate to each target in the search array.
+        Calculate the pixel-distance from each X-Y coordinate to each target in the search array.
         :param x: 1D array of X coordinates with shape (N,) or (N, 1) or (1, N)
         :param y: 1D array of Y coordinates with shape (N,) or (N, 1) or (1, N)
         :return: a (num_coords, num_targets) DataFrame with the distances from each coordinate to each target.
@@ -128,24 +103,19 @@ class Trial:
         dists = np.empty((len(coords), len(targets)), dtype=float)
         for i, (cx, cy) in enumerate(coords):
             for j, (tx, ty) in enumerate(target_coords):
-                dists[i, j] = hlp.distance(
-                    (cx, cy), (tx, ty),
-                    unit=self._distance_unit,
-                    pixel_size_cm=cnfg.TOBII_PIXEL_SIZE_MM / 10,
-                    screen_distance_cm=self._subject.screen_distance_cm
-                )
+                dists[i, j] = hlp.distance((cx, cy), (tx, ty), 'px',)
         dists = pd.DataFrame(dists, columns=targets.index)
         return dists
 
     def extract_target_identification(self) -> pd.DataFrame:
         """
-        Extracts the time, gaze location and distance from the target for each target identification during the trial.
+        Extracts the time, gaze location and pixel-distance from the target during target identifications.
         If a taget was never identified, the time and distance are set to np.inf and gaze data is set to NaN.
         If a target was identified multiple times, we record all identifications and raise a warning.
 
         :return: pd.DataFrame indexed by targets (`target_0`, `target_1`, etc.) with the following columns:
             - `time`: time of identification
-            - `distance`: distance from the target at the time of identification
+            - `distance`: pixel-distance from the target at the time of identification
             - `left_x`, `left_y`: gaze coordinates in the left eye at the time of identification
             - `right_x`, `right_y`: gaze coordinates in the right eye at the time of identification
             - `left_pupil`, `right_pupil`: pupil size in the left/right eye at the time of identification
@@ -167,7 +137,7 @@ class Trial:
         closest_target = dists.idxmin(axis=1)
         dists = pd.Series(
             dists.to_numpy()[dists.index, dists.columns.get_indexer(closest_target)],
-            name=f"{cnfg.DISTANCE_STR}_{self.distance_unit}"
+            name=f"{cnfg.DISTANCE_STR}_px",
         )
 
         # concatenate results
