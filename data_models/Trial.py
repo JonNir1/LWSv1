@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 import warnings
-from typing import Optional, Literal
+from typing import Optional, Literal, Tuple
 
 import numpy as np
 import pandas as pd
@@ -50,9 +50,11 @@ class Trial:
 
         # pre-process inputs
         self._search_array = self._create_search_array()
-        labels = self._detect_eye_movements()
         dists = self._calculate_gaze_target_distances(unit=self._distance_unit)
+        labels, left_events, right_events = self._detect_eye_movements()
         self._gaze = pd.concat([self._gaze, labels, dists], axis=1)
+        self._left_events = left_events
+        self._right_events = right_events
 
     @property
     def block_num(self) -> int:
@@ -92,6 +94,13 @@ class Trial:
 
     def get_gaze(self) -> pd.DataFrame:
         return self._gaze
+
+    def get_eye_movements(self, eye: DominantEyeEnum) -> pd.Series:
+        if eye == DominantEyeEnum.Left:
+            return self._left_events
+        if eye == DominantEyeEnum.Right:
+            return self._right_events
+        raise ValueError(f"Invalid eye: {eye}. Must be either 'left' or 'right'.")
 
     def get_subject(self) -> "Subject":
         return self._subject
@@ -177,21 +186,25 @@ class Trial:
         ))
         return search_array
 
-    def _detect_eye_movements(self):
-        if cnfg.LEFT_LABEL_STR in self._gaze.columns:
-            left_labels = self._gaze[cnfg.LEFT_LABEL_STR]
-        else:
-            left_labels = detect_eye_movements(
-                self._gaze, DominantEyeEnum.Left, self._subject.screen_distance_cm, cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
-            )
-        if cnfg.RIGHT_LABEL_STR in self._gaze.columns:
-            right_labels = self._gaze[cnfg.RIGHT_LABEL_STR]
-        else:
-            right_labels = detect_eye_movements(
-                self._gaze, DominantEyeEnum.Right, self._subject.screen_distance_cm, cnfg.DETECTOR, cnfg.TOBII_PIXEL_SIZE_MM / 10
-            )
+    def _detect_eye_movements(self) -> Tuple[pd.DataFrame, pd.Series, pd.Series]:
+        left_labels, left_events = detect_eye_movements(
+            self._gaze,
+            DominantEyeEnum.Left,
+            self._subject.screen_distance_cm,
+            cnfg.DETECTOR,
+            cnfg.TOBII_PIXEL_SIZE_MM / 10,
+            only_labels=False
+        )
+        right_labels, right_events = detect_eye_movements(
+            self._gaze,
+            DominantEyeEnum.Right,
+            self._subject.screen_distance_cm,
+            cnfg.DETECTOR,
+            cnfg.TOBII_PIXEL_SIZE_MM / 10,
+            only_labels=False
+        )
         labels = pd.concat([left_labels, right_labels], axis=1)
-        return labels
+        return labels, left_events, right_events
 
     def _calculate_gaze_target_distances(self, unit: Optional[Literal['px', 'cm', 'deg']] = None) -> pd.DataFrame:
         gaze_x_col = cnfg.RIGHT_X_STR if self._subject.eye == DominantEyeEnum.Right else cnfg.LEFT_X_STR
