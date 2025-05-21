@@ -73,6 +73,11 @@ class Trial:
         triggers_max_time = self._triggers[cnfg.TIME_STR].max()
         return np.nanmax([gaze_max_time, triggers_max_time])
 
+    @staticmethod
+    def is_in_bottom_strip(p: Tuple[float, float]) -> bool:
+        """ Check if a point is within the bottom strip rectangle, containing target exemplars. """
+        return SearchArray.is_in_bottom_strip(p)
+
     def get_search_array(self) -> SearchArray:
         return self._search_array
 

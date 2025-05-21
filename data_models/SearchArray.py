@@ -7,6 +7,7 @@ import numpy.typing as npt_
 from pymatreader import read_mat
 
 import config as cnfg
+import helpers as hlp
 from data_models.LWSEnums import SearchArrayTypeEnum, ImageCategoryEnum
 
 
@@ -169,10 +170,7 @@ class SearchArray:
     @classmethod
     def is_in_bottom_strip(cls, p: Tuple[float, float]) -> bool:
         """ Check if a point is within the bottom strip rectangle, containing target exemplars. """
-        return (
-            cls._BOTTOM_STRIP_TOP_LEFT[0] <= p[0] <= cls._BOTTOM_STRIP_BOTTOM_RIGHT[0]
-            and cls._BOTTOM_STRIP_TOP_LEFT[1] <= p[1] <= cls._BOTTOM_STRIP_BOTTOM_RIGHT[1]
-        )
+        return hlp.is_in_rectangle(p[0], p[1], cls._BOTTOM_STRIP_TOP_LEFT, cls._BOTTOM_STRIP_BOTTOM_RIGHT)
 
     @staticmethod
     def _get_path(
