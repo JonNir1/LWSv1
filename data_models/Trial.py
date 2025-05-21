@@ -142,7 +142,7 @@ class Trial:
 
         # concatenate results
         res = pd.concat([
-            identification_triggers[cnfg.TIME_STR],
+            identification_triggers[cnfg.TIME_STR].astype(float),
             dists,
             gaze_when_ident[[col for col in gaze_when_ident.columns if col.startswith(cnfg.LEFT_STR)]],
             gaze_when_ident[[col for col in gaze_when_ident.columns if col.startswith(cnfg.RIGHT_STR)]],
