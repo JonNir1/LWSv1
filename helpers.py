@@ -1,7 +1,27 @@
-from typing import Tuple, Literal, Optional
+from typing import Union, Tuple, Literal, Optional
 
 import numpy as np
 import pandas as pd
+import numpy.typing as npt_
+
+_PixelType = Tuple[float, float]
+_NDArrayBoolType = npt_.NDArray[np.bool_]
+_NDArrayFloatType = npt_.NDArray[np.float_]
+
+
+def is_in_rectangle(
+        x: Union[float, _NDArrayFloatType],
+        y: Union[float, _NDArrayFloatType],
+        tl: _PixelType, br: _PixelType,
+) -> Union[bool, _NDArrayBoolType]:
+    x = flatten_or_raise(np.asarray(x))
+    y = flatten_or_raise(np.asarray(y))
+    assert x.shape == y.shape
+    left, top = tl
+    right, bottom = br
+    if x.ndim == 0 and y.ndim == 0:
+        return left <= x <= right and top <= y <= bottom
+    return (left <= x) & (x <= right) & (top <= y) & (y <= bottom)
 
 
 def closest_indices(s: pd.Series, vals: pd.Series, threshold: float) -> pd.Series:

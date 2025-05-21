@@ -1,8 +1,47 @@
 import unittest
 import numpy as np
-from helpers import distance, convert_units, change_pixel_origin, flatten_or_raise
+from helpers import *
 
 class TestHelpers(unittest.TestCase):
+
+    def test_is_in_rectangle(self):
+        tl, br = (0, 0), (10, 10)
+
+        # Scalar cases
+        self.assertTrue(is_in_rectangle(5, 5, tl, br))  # inside
+        self.assertFalse(is_in_rectangle(15, 5, tl, br))  # outside x
+        self.assertFalse(is_in_rectangle(5, -1, tl, br))  # outside y
+        self.assertTrue(is_in_rectangle(0, 0, tl, br))  # on top-left edge
+        self.assertTrue(is_in_rectangle(10, 10, tl, br))  # on bottom-right edge
+
+        # Array input — all inside
+        x = np.array([1, 3, 5])
+        y = np.array([2, 4, 6])
+        expected = np.array([True, True, True])
+        np.testing.assert_array_equal(is_in_rectangle(x, y, tl, br), expected)
+
+        # Array input — mixed
+        x = np.array([1, 11, -5])
+        y = np.array([2, 4, 20])
+        expected = np.array([True, False, False])
+        np.testing.assert_array_equal(is_in_rectangle(x, y, tl, br), expected)
+
+        # Array input — edge values
+        x = np.array([0, 10])
+        y = np.array([10, 0])
+        expected = np.array([True, True])
+        np.testing.assert_array_equal(is_in_rectangle(x, y, tl, br), expected)
+
+        # Invalid input
+        self.assertRaises(  # non-flat input should raise
+            ValueError, is_in_rectangle, np.array([[1, 2], [3, 4]]), np.array([[5, 6], [7, 8]]), tl, br
+        )
+        self.assertRaises(  # mismatched shapes should raise
+            AssertionError, is_in_rectangle, np.array([1, 2]), 3, tl, br
+        )
+        self.assertRaises(  # mismatched shapes should raise
+            AssertionError, is_in_rectangle, np.array([1, 2]), np.array([3]), tl, br
+        )
 
     def test_distance(self):
         p1, p2 = (0, 0), (3, 4)
