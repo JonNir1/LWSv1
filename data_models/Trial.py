@@ -61,6 +61,18 @@ class Trial:
     def trial_type(self) -> SearchArrayTypeEnum:
         return self._search_array.array_type
 
+    @property
+    def start_time(self) -> float:
+        gaze_min_time = self._gaze[cnfg.TIME_STR].min()
+        triggers_min_time = self._triggers[cnfg.TIME_STR].min()
+        return np.nanmin([gaze_min_time, triggers_min_time])
+
+    @property
+    def end_time(self) -> float:
+        gaze_max_time = self._gaze[cnfg.TIME_STR].max()
+        triggers_max_time = self._triggers[cnfg.TIME_STR].max()
+        return np.nanmax([gaze_max_time, triggers_max_time])
+
     def get_search_array(self) -> SearchArray:
         return self._search_array
 
