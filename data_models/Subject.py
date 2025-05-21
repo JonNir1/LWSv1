@@ -128,7 +128,7 @@ class Subject:
     def px2deg(self) -> float:
         """
         Returns the conversion factor from pixels to degrees of visual angle (DVA).
-        To move from `d` pixels to DVA, use the formula: `d * px2deg`.
+        To move from `d` pixels to DVA, use the formula: `d * self.px2deg`.
         """
         return hlp.convert_units(
             1, "px", "deg", cnfg.TOBII_PIXEL_SIZE_MM / 10, self._screen_distance_cm
