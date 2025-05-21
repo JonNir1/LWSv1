@@ -3,7 +3,7 @@ from typing import NamedTuple, List, Tuple
 
 import numpy as np
 import pandas as pd
-import numpy.typing as npt
+import numpy.typing as npt_
 from pymatreader import read_mat
 
 import config as cnfg
@@ -50,9 +50,9 @@ class _SearchArrayImage(NamedTuple):
         raise ValueError(f"Unknown image category for {basename}.")
 
 
-_NDArrayImageType = npt.NDArray[_SearchArrayImage]
-_NDArrayBoolType = npt.NDArray[np.bool_]
-_NDArrayGrayScaleType = npt.NDArray[np.float_]
+_NDArrayImageType = npt_.NDArray[_SearchArrayImage]
+_NDArrayBoolType = npt_.NDArray[np.bool_]
+_NDArrayGrayScaleType = npt_.NDArray[np.float_]
 
 
 class SearchArray:
@@ -159,7 +159,7 @@ class SearchArray:
     def image_path(self) -> str:
         return self._get_path(self._version, self._array_type, self._num, "bmp")
 
-    def get_categories(self) -> npt.NDArray[ImageCategoryEnum]:
+    def get_categories(self) -> npt_.NDArray[ImageCategoryEnum]:
         """
         Get the categories of the images in the search array.
         :return: A 2D array of ImageCategoryEnum values.
