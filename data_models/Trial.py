@@ -62,6 +62,14 @@ class Trial:
         return self._search_array.array_type
 
     @property
+    def px2deg(self) -> float:
+        """
+        Returns the conversion factor from pixels to degrees of visual angle (DVA).
+        To move from `d` pixels to DVA, use the formula: `d * self.px2deg`.
+        """
+        return self._subject.px2deg
+
+    @property
     def start_time(self) -> float:
         gaze_min_time = self._gaze[cnfg.TIME_STR].min()
         triggers_min_time = self._triggers[cnfg.TIME_STR].min()
@@ -93,9 +101,6 @@ class Trial:
         if eye == DominantEyeEnum.Right:
             return self._right_events
         raise ValueError(f"Invalid eye: {eye}. Must be either 'left' or 'right'.")
-
-    def get_subject(self) -> "Subject":
-        return self._subject
 
     def get_targets(self) -> pd.DataFrame:
         target_images = self._search_array.targets
