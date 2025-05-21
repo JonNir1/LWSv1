@@ -5,6 +5,8 @@ MISSING_VALUE = np.nan
 DATE_TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
 
 TIME_STR = "time"
+START_TIME_STR, END_TIME_STR = f"start_{TIME_STR}", f"end_{TIME_STR}"
+
 TRIGGER_STR = "trigger"
 ACTION_STR = "action"
 LABEL_STR = "label"
