@@ -43,8 +43,8 @@ def closest_indices(s: pd.Series, vals: pd.Series, threshold: float) -> pd.Serie
 
 
 def distance(
-        p1: Tuple[float, float],
-        p2: Tuple[float, float],
+        p1: _PixelType,
+        p2: _PixelType,
         unit: Literal['px', 'cm', 'deg'] = 'px',
         pixel_size_cm: Optional[float] = None,
         screen_distance_cm: Optional[float] = None,
