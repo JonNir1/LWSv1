@@ -18,16 +18,14 @@ def extract_fixations(trial: Trial) -> pd.DataFrame:
     - center-pixel: tuple (x, y) - the mean pixel coordinates of the fixation
     - pixel_std: tuple (x, y) - the standard deviation of the pixel coordinates of the fixation
     - outlier_reasons: List[str] - reasons for the fixation being an outlier (or [] if not and outlier)
-    - is_in_strip: bool - whether the fixation is in the bottom strip of the screen
+    - target_0, target_1, ...: float - pixel-distances to each target in the trial
     - all_marked: List[str] - all targets that were identified previously or during the current fixation
     - curr_marked: str - the target that was identified during the current fixation (or None)
-    - target_0, target_1, ...: float - pixel-distances to each target in the trial
     """
     fixs_df = _fixations_to_frame(trial)
-    is_in_strip = _is_in_strip(trial, fixs_df)
-    marked_targets = _marked_targets(trial, fixs_df)
     pixel_distances = _calculate_distances(trial, fixs_df)
-    res = pd.concat([fixs_df, is_in_strip, marked_targets, pixel_distances], axis=1)
+    marked_targets = _marked_targets(trial, fixs_df)
+    res = pd.concat([fixs_df, pixel_distances, marked_targets], axis=1)
     return res
 
 
@@ -47,11 +45,6 @@ def _fixations_to_frame(trial: Trial) -> pd.DataFrame:
     to_drop = [col for feat in _REDUNDANT_FEATURES for col in fixs_df.columns if feat in col]
     fixs_df.drop(columns=to_drop, inplace=True, errors='ignore')
     return fixs_df
-
-
-def _is_in_strip(trial: Trial, fixs_df: pd.DataFrame) -> pd.Series:
-    """ Checks if fixations are in the bottom strip of the trial. """
-    return fixs_df['center_pixel'].map(lambda p: trial.is_in_bottom_strip(p)).rename("is_in_strip")
 
 
 def _marked_targets(trial: Trial, fixs_df: pd.DataFrame) -> pd.DataFrame:
