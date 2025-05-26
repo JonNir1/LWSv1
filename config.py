@@ -13,10 +13,10 @@ STIMULI_VERSION = 1
 ## PATHS ##
 _BASE_PATH = r"S:\Lab-Shared\Experiments\LWS Free Viewing Demo"
 RAW_DATA_PATH = os.path.join(_BASE_PATH, "RawData")
+OUTPUT_PATH = os.path.join(_BASE_PATH, "Results")
 
 IMAGE_DIR_PATH = r"S:\Lab-Shared\Experiments\N170 free scan\ClutteredObjects_scan\Origional_Objects_Pics\organized"
-SEARCH_ARRAY_PATH = r"S:\Lab-Shared\Experiments\LWS Free Viewing Demo\Stimuli"
-
+SEARCH_ARRAY_PATH = os.path.join(_BASE_PATH, "Stimuli")
 
 ## Screen Monitor ##
 TOBII_MONITOR = _Monitor(
