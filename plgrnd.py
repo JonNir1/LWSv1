@@ -3,7 +3,6 @@ import copy
 
 import numpy as np
 import pandas as pd
-import peyes
 
 import config as cnfg
 from data_models.LWSEnums import DominantEyeEnum
@@ -50,7 +49,7 @@ del target_identification_data
 
 
 # check if the **current or 1-next** fixation is in the bottom strip
-is_in_strip = fixs_df['center_pixel'].map(lambda p: trial.is_in_bottom_strip(p)).rename("is_in_strip")
+is_in_strip = fixs_df['in_strip']
 is_next_in_strip = pd.concat([
     is_in_strip.xs(DominantEyeEnum.Left, level="eye").shift(-1),
     is_in_strip.xs(DominantEyeEnum.Right, level="eye").shift(-1)

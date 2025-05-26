@@ -21,11 +21,13 @@ def extract_fixations(trial: Trial) -> pd.DataFrame:
     - target_0, target_1, ...: float - pixel-distances to each target in the trial
     - all_marked: List[str] - all targets that were identified previously or during the current fixation
     - curr_marked: str - the target that was identified during the current fixation (or None)
+    - in_strip: bool - whether the fixation is in the bottom strip of the trial
     """
     fixs_df = _fixations_to_frame(trial)
     pixel_distances = _calculate_distances(trial, fixs_df)
     marked_targets = _marked_targets(trial, fixs_df)
-    res = pd.concat([fixs_df, pixel_distances, marked_targets], axis=1)
+    in_strip = _in_bottom_strip(trial, fixs_df)
+    res = pd.concat([fixs_df, pixel_distances, marked_targets, in_strip], axis=1)
     return res
 
 
@@ -68,3 +70,7 @@ def _calculate_distances(trial: Trial, fixs_df: pd.DataFrame) -> pd.DataFrame:
     dists.index = fixs_df.index
     return dists
 
+def _in_bottom_strip(trial: Trial, fixs_df: pd.DataFrame) -> pd.Series:
+    """ Checks if the fixation is in the bottom strip of the trial. """
+    in_strip = fixs_df['center_pixel'].map(lambda p: trial.is_in_bottom_strip(p)).rename("in_strip")
+    return in_strip
