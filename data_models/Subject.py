@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import pickle as pkl
 from typing import Union, Optional, List
 from datetime import datetime
 
@@ -84,6 +85,26 @@ class Subject:
             print("#####################################")
         return subject
 
+    @staticmethod
+    def from_pickle(
+            path: Optional[str] = None, exp_name: Optional[str] = None, subject_id: Optional[int] = None
+    ) -> "Subject":
+        """
+        Reads a Subject object from a pickle file, either from a specified `path` or by constructing the path using
+        the experiment name and subject ID.
+        :raise ValueError: If neither `path` nor both `exp_name` and `subject_id` are provided.
+        :raise FileNotFoundError: If the file does not exist at the specified path.
+        :return: The Subject object.
+        """
+        if not path and not (exp_name and subject_id):
+            raise ValueError("Either `path` or both `exp_name` and `subject_id` must be provided to load a Subject from pickle.")
+        path = path or Subject.get_pickle_path(exp_name, subject_id, makedirs=False)
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File {path} does not exist.")
+        with open(path, "rb") as f:
+            subject = pkl.load(f)
+        return subject
+
     @property
     def experiment_name(self) -> str:
         return self._experiment_name
@@ -138,6 +159,16 @@ class Subject:
             1, "px", "deg", cnfg.TOBII_PIXEL_SIZE_MM / 10, self._screen_distance_cm
         )
 
+    @property
+    def out_dir(self) -> str:
+        """
+        Returns the output directory for the subject's data, constructed as:
+        <OUTPUT_PATH>/<experiment_name>/Subject_<subject_id>/
+        If the directory does not exist, it will be created.
+        """
+        pickle_path = self.get_pickle_path(self._experiment_name, self._id, makedirs=True)
+        return os.path.dirname(pickle_path)
+
     def get_trials(self, sort: bool = True) -> List["Trial"]:
         if not sort:
             return self._trials
@@ -168,6 +199,35 @@ class Subject:
             trials.append(trial)
         trials = sorted(trials, key=lambda t: t.trial_num)
         return trials
+
+    def to_pickle(self, overwrite: bool = False) -> str:
+        """
+        Saves the Subject object to a pickle file and returns the path to the file, constructed as:
+        <OUTPUT_PATH>/<experiment_name>/Subject_<subject_id>/Subject.pkl
+        If the file already exists and `overwrite` is False, it will raise a FileExistsError.
+        """
+        pickle_path = self.get_pickle_path(self._experiment_name, self._id, makedirs=True)
+        if not os.path.exists(pickle_path):
+            with open(pickle_path, "wb") as f:
+                pkl.dump(self, f)
+        elif overwrite:
+            with open(pickle_path, "wb") as f:
+                pkl.dump(self, f)
+        else:
+            raise FileExistsError(f"Pickle file {pickle_path} already exists. Use `overwrite=True` to overwrite it.")
+        return pickle_path
+
+    @staticmethod
+    def get_pickle_path(exp_name: str, subject_id: int, makedirs: bool) -> str:
+        """
+        Returns the path to the pickle file for the subject's data, constructed as:
+        <OUTPUT_PATH>/<experiment_name>/Subject_<subject_id>/Subject.pkl
+        If `makedirs` is True, the directory will be created if it does not exist.
+        """
+        out_dir = os.path.join(cnfg.OUTPUT_PATH, f"{exp_name}", f"{cnfg.SUBJECT_STR.capitalize()}_{subject_id}")
+        if makedirs:
+            os.makedirs(out_dir, exist_ok=True)
+        return os.path.join(out_dir, "Subject.pkl")
 
     def __repr__(self) -> str:
         return f"{self.experiment_name.upper()}-{cnfg.SUBJECT_STR.capitalize()}_{self.id}"
