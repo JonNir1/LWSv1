@@ -173,7 +173,10 @@ class Trial:
         target_data = self.get_targets()[[cnfg.X, cnfg.Y, cnfg.CATEGORY_STR]].rename(
             columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False
         )
-        res = pd.concat([res, target_data], axis=1)
+        try:
+            res = pd.concat([res, target_data], axis=1)
+        except pd.errors.InvalidIndexError:
+            raise ValueError
 
         # replace unidentified targets' `time` and `distance` with np.inf
         non_nan_cols = [cnfg.TIME_STR] + [col for col in res if col.startswith(cnfg.DISTANCE_STR)]
@@ -222,9 +225,15 @@ class Trial:
         return labels, left_events, right_events
 
     def _calculate_gaze_target_distances(self,) -> pd.DataFrame:
-        gaze_x = self._gaze[cnfg.RIGHT_X_STR if self._subject.eye == DominantEyeEnum.Right else cnfg.LEFT_X_STR].values
-        gaze_y = self._gaze[cnfg.RIGHT_Y_STR if self._subject.eye == DominantEyeEnum.Right else cnfg.LEFT_Y_STR].values
-        dists = self.calculate_target_distances(gaze_x, gaze_y)
+        left_dists = self.calculate_target_distances(
+            self._gaze[cnfg.LEFT_X_STR].values, self._gaze[cnfg.LEFT_Y_STR].values
+        )
+        right_dists = self.calculate_target_distances(
+            self._gaze[cnfg.RIGHT_X_STR].values, self._gaze[cnfg.RIGHT_Y_STR].values
+        )
+        main = left_dists if self._subject.eye == DominantEyeEnum.Left else right_dists
+        second = right_dists if self._subject.eye == DominantEyeEnum.Left else left_dists
+        dists = main.fillna(second)
         dists.index = self._gaze.index
         return dists
 
