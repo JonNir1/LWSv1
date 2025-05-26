@@ -62,6 +62,7 @@ def _read_or_extract(subject: Subject, descriptor: str, verbose: bool = False) -
     - all_marked: List[str] - all targets that were identified previously or during the current fixation
     - curr_marked: str - the target that was identified during the current fixation (or None)
     - in_strip: bool - whether the fixation is in the bottom strip of the trial
+    - time_to_trial_end: float - time from fixation's end to the end of the trial (in ms)
 
     :raises ValueError: if descriptor does not match any of the expected values ("fixation", "action", "target").
     """

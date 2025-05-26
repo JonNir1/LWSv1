@@ -17,6 +17,7 @@ _FIXATION_LABEL = peyes.parse_label(cnfg.FIXATION_STR)
 _REDUNDANT_FIXATION_FEATURES = [
     'label', 'distance', 'velocity', 'amplitude', 'azimuth', 'dispersion', 'area', 'is_outlier'
 ]
+_MAX_GAZE_TO_TRIGGER_TIME_DIFF = 10  # in ms    # Maximum allowed time difference between gaze and trigger events for them to be considered as part of the same event.
 
 
 def _extract_singleton_column(df: pd.DataFrame, col_name: str):
@@ -156,12 +157,11 @@ class Trial:
             - `target_category`: target category
         """
         # extract gaze on target identification
-        MAX_GAZE_TO_TRIGGER_TIME_DIFF = 10  # in ms
         identification_triggers = self._triggers[
             self._triggers[cnfg.ACTION_STR] == SearchActionTypesEnum.MARK_AND_CONFIRM
         ].reset_index(drop=True)
         gaze_when_ident = self._gaze.loc[hlp.closest_indices(
-            self._gaze['time'], identification_triggers['time'], threshold=MAX_GAZE_TO_TRIGGER_TIME_DIFF
+            self._gaze['time'], identification_triggers['time'], threshold=_MAX_GAZE_TO_TRIGGER_TIME_DIFF
         )].reset_index(drop=True)
 
         # calculate minimal distance from targets
@@ -212,6 +212,7 @@ class Trial:
         - all_marked: List[str] - all targets that were identified previously or during the current fixation
         - curr_marked: str - the target that was identified during the current fixation (or None)
         - in_strip: bool - whether the fixation is in the bottom strip of the trial
+        - time_to_trial_end: float - time from fixation's end to the end of the trial (in ms)
         """
         left_em = self.get_eye_movements(eye=DominantEyeEnum.Left)
         left_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, left_em))
@@ -248,8 +249,11 @@ class Trial:
         # checks if the fixation is in the bottom strip of the trial
         in_strip = fixs_df['center_pixel'].map(lambda p: self.is_in_bottom_strip(p)).rename("in_strip")
 
+        # calculate the time to trial's end
+        time_to_trial_end = fixs_df[cnfg.END_TIME_STR].map(lambda t: self.end_time - t).rename("time_to_trial_end")
+
         # concatenate all data into a single DataFrame
-        fixs_df = pd.concat([fixs_df, dists, marked, in_strip], axis=1)
+        fixs_df = pd.concat([fixs_df, dists, marked, in_strip, time_to_trial_end], axis=1)
         return fixs_df
 
     def _create_search_array(self) -> SearchArray:
