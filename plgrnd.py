@@ -24,7 +24,7 @@ actions_df, targets_df, fixs_df = process_trials(subj, verbose=True)
 
 
 
-### LWD IDENTIFICATION ###
+### LWS IDENTIFICATION ###
 
 # extract specific trial
 trial = subj.get_trials()[9]
