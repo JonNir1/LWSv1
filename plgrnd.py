@@ -25,6 +25,9 @@ from analysis.extract_fixations import extract_fixations
 fixs_df = extract_fixations(trial)
 
 
+
+
+
 ### LWD IDENTIFICATION ###
 
 # check if fixations don't end too close to the trial end
