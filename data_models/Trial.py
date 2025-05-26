@@ -177,10 +177,7 @@ class Trial:
         target_data = self.get_targets()[[cnfg.X, cnfg.Y, cnfg.CATEGORY_STR]].rename(
             columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False
         )
-        try:
-            res = pd.concat([res, target_data], axis=1)
-        except pd.errors.InvalidIndexError:
-            raise ValueError
+        res = pd.concat([res, target_data], axis=1)
 
         # replace unidentified targets' `time` and `distance` with np.inf
         non_nan_cols = [cnfg.TIME_STR] + [col for col in res if col.startswith(cnfg.DISTANCE_STR)]
