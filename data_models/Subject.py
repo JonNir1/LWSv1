@@ -22,8 +22,12 @@ class Subject:
     """
 
     __E_PRIME_FIELDS = {
-        "Name": "name", "Subject": "subject_id", "Age": "age", "Sex": "sex", "Handedness": "hand", "DominantEye": "eye",
-        "Session": "session", "SessionDate": "session_date", "SessionTime": "session_time", "Distance": "screen_distance_cm",
+        "Name": "name", "Age": "age", "Sex": "sex", "Handedness": "hand", "DominantEye": "eye",
+        cnfg.SUBJECT_STR.capitalize(): f"{cnfg.SUBJECT_STR}_id",
+        cnfg.SESSION_STR.capitalize(): cnfg.SESSION_STR,
+        f"{cnfg.SESSION_STR.capitalize()}Date": f"{cnfg.SESSION_STR}_date",
+        f"{cnfg.SESSION_STR.capitalize()}Time": f"{cnfg.SESSION_STR}_time",
+        cnfg.DISTANCE_STR.capitalize(): "screen_distance_cm",
     }
 
     def __init__(
@@ -166,4 +170,4 @@ class Subject:
         return trials
 
     def __repr__(self) -> str:
-        return f"{self.experiment_name.upper()}-Subject {self.id}"
+        return f"{self.experiment_name.upper()}-{cnfg.SUBJECT_STR.capitalize()}_{self.id}"
