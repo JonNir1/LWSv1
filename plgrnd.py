@@ -8,27 +8,26 @@ import config as cnfg
 from data_models.LWSEnums import DominantEyeEnum
 from data_models.Subject import Subject
 
-SUBJ_PREFIX = "v4-1-1"
-SUBJ_PATH = os.path.join(cnfg.RAW_DATA_PATH, f"{SUBJ_PREFIX} GalChen Demo")
-
 
 # read subject data
-subj = Subject.from_raw(
-    exp_name=cnfg.EXPERIMENT_NAME, subject_id=1, session=1, dirname="v4-1-1 GalChen Demo", verbose=True
-)
+# subj = Subject.from_raw(
+#     exp_name=cnfg.EXPERIMENT_NAME, subject_id=1, session=1, data_dir="v4-1-1 GalChen Demo", verbose=True
+# )
+# subj.to_pickle(overwrite=False)
+subj = Subject.from_pickle(exp_name=cnfg.EXPERIMENT_NAME, subject_id=1,)
 
-# extract specific trial
-trial = subj.get_trials()[9]
-
-# process trial fixations
-from analysis.extract_fixations import extract_fixations
-fixs_df = extract_fixations(trial)
+# process subject trials
+from analysis.process_trials import process_trials
+actions_df, targets_df, fixs_df = process_trials(subj, verbose=True)
 
 
 
 
 
 ### LWD IDENTIFICATION ###
+
+# extract specific trial
+trial = subj.get_trials()[9]
 
 # check if fixations don't end too close to the trial end
 MIN_TIME_FROM_TRIAL_END = 100   # ms

@@ -1,16 +1,22 @@
 from __future__ import annotations
 import os
 import warnings
-from typing import Optional, Literal, Tuple
+from typing import Tuple
 
 import numpy as np
 import pandas as pd
+import peyes
 
 import config as cnfg
 import helpers as hlp
 from data_models.SearchArray import SearchArray
 from data_models.LWSEnums import SearchArrayTypeEnum, SearchActionTypesEnum, DominantEyeEnum
 from parse.eye_movements import detect_eye_movements
+
+_FIXATION_LABEL = peyes.parse_label(cnfg.FIXATION_STR)
+_REDUNDANT_FIXATION_FEATURES = [
+    'label', 'distance', 'velocity', 'amplitude', 'azimuth', 'dispersion', 'area', 'is_outlier'
+]
 
 
 def _extract_singleton_column(df: pd.DataFrame, col_name: str):
@@ -193,6 +199,58 @@ class Trial:
                 RuntimeWarning,
             )
         return res
+
+    def process_fixations(self) -> pd.DataFrame:
+        """
+        Processes the trial's fixations and returns a DataFrame indexed by (eye, fixation ID), containing the following
+        information about each fixation:
+        - start-time, end-time and duration: float (in ms)
+        - center-pixel: tuple (x, y) - the mean pixel coordinates of the fixation
+        - pixel_std: tuple (x, y) - the standard deviation of the pixel coordinates of the fixation
+        - outlier_reasons: List[str] - reasons for the fixation being an outlier (or [] if not and outlier)
+        - target_0, target_1, ...: float - pixel-distances to each target in the trial
+        - all_marked: List[str] - all targets that were identified previously or during the current fixation
+        - curr_marked: str - the target that was identified during the current fixation (or None)
+        - in_strip: bool - whether the fixation is in the bottom strip of the trial
+        """
+        left_em = self.get_eye_movements(eye=DominantEyeEnum.Left)
+        left_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, left_em))
+        left_fixs_df = peyes.summarize_events(left_fixs)
+        right_em = self.get_eye_movements(eye=DominantEyeEnum.Right)
+        right_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, right_em))
+        right_fixs_df = peyes.summarize_events(right_fixs)
+        fixs_df = pd.concat(
+            [left_fixs_df, right_fixs_df], keys=[cnfg.LEFT_STR, cnfg.RIGHT_STR],
+            names=["eye", cnfg.FIXATION_STR], axis=0
+        )
+        fixs_df.drop(  # drop redundant columns
+            columns=[col for feat in _REDUNDANT_FIXATION_FEATURES for col in fixs_df.columns if feat in col],
+            inplace=True, errors='ignore'
+        )
+
+        # calculate distances from fixations to targets
+        center_pixels = np.vstack(fixs_df['center_pixel'].values)
+        dists = self.calculate_target_distances(center_pixels[:, 0], center_pixels[:, 1])
+        dists.index = fixs_df.index
+
+        # identifies targets that were already identified or identified during the current fixation
+        target_identification_data = self.extract_target_identification()  # targets' identification time
+        is_end_after = pd.DataFrame(
+            fixs_df[cnfg.END_TIME_STR].values >= target_identification_data[cnfg.TIME_STR].values[:, np.newaxis],
+            columns=fixs_df.index, index=target_identification_data.index
+        ).T
+        curr_and_prior_marked = is_end_after.apply(lambda row: set(row.index[row]), axis=1).rename("all_marked")
+        curr_mark = curr_and_prior_marked.diff().map(
+            lambda s: list(s)[0] if isinstance(s, set) and len(s) else None
+        ).rename("curr_marked")
+        marked = pd.concat([curr_and_prior_marked, curr_mark], axis=1)
+
+        # checks if the fixation is in the bottom strip of the trial
+        in_strip = fixs_df['center_pixel'].map(lambda p: self.is_in_bottom_strip(p)).rename("in_strip")
+
+        # concatenate all data into a single DataFrame
+        fixs_df = pd.concat([fixs_df, dists, marked, in_strip], axis=1)
+        return fixs_df
 
     def _create_search_array(self) -> SearchArray:
         search_array_type = SearchArrayTypeEnum[_extract_singleton_column(self._gaze, cnfg.CONDITION_STR).upper()]
