@@ -95,6 +95,10 @@ class Trial:
     def get_gaze(self) -> pd.DataFrame:
         return self._gaze
 
+    def get_actions(self) -> pd.DataFrame:
+        """ Returns the times and actions performed by the subject during the trial. """
+        return self._triggers.loc[self._triggers[cnfg.ACTION_STR].notnull(), [cnfg.TIME_STR, cnfg.ACTION_STR]]
+
     def get_eye_movements(self, eye: DominantEyeEnum) -> pd.Series:
         if eye == DominantEyeEnum.Left:
             return self._left_events
