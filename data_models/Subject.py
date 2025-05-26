@@ -214,7 +214,7 @@ class Subject:
             with open(pickle_path, "wb") as f:
                 pkl.dump(self, f)
         else:
-            raise FileExistsError(f"Pickle file {pickle_path} already exists. Use `overwrite=True` to overwrite it.")
+            raise FileExistsError(f"Pickle file already exists. Use `overwrite=True` to overwrite it.")
         return pickle_path
 
     @staticmethod
