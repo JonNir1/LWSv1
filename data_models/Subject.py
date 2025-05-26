@@ -56,23 +56,23 @@ class Subject:
 
     @staticmethod
     def from_raw(
-            exp_name: str, subject_id: int, session: int, dirname: Optional[str] = None, verbose: bool = False,
+            exp_name: str, subject_id: int, session: int, data_dir: Optional[str] = None, verbose: bool = False,
     ) -> "Subject":
         """
         Reads the subject information from the raw data file and returns a Subject object.
-        If a dirname is provided, uses this to find the file, otherwise constructs the dirname from the experiment name,
-        subject ID, and session number.
+        If a `data_dir` is provided, uses this to find the file, otherwise constructs the dirname from the experiment
+        name, subject ID, and session number.
         """
         if verbose:
             print("#####################################")
             print(f"Experiment: {exp_name}\tSubject: {subject_id}\tSession: {session}")
             print("Reading subject data...")
         file_prefix = f"{exp_name}-{subject_id}-{session}"
-        dirname = dirname or file_prefix
-        subject_info = parse_subject_info(os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}.txt"))
+        data_dir = data_dir or file_prefix
+        subject_info = parse_subject_info(os.path.join(cnfg.RAW_DATA_PATH, data_dir, f"{file_prefix}.txt"))
         subject_info["exp_name"] = exp_name
         subject = Subject(**subject_info)
-        trials = subject.read_trials(dirname=dirname, verbose=verbose)
+        trials = subject.read_trials(data_dir=data_dir, verbose=verbose)
         for trial in trials:
             subject.add_trial(trial)
         if verbose:
@@ -142,15 +142,15 @@ class Subject:
     def add_trial(self, trial: "Trial") -> None:
         self._trials.append(trial)
 
-    def read_trials(self, dirname: Optional[str] = None, verbose: bool = False) -> List["Trial"]:
+    def read_trials(self, data_dir: Optional[str] = None, verbose: bool = False) -> List["Trial"]:
         from data_models.Trial import Trial
         file_prefix = f"{self._experiment_name}-{self._id}-{self._session}"
-        dirname = dirname or file_prefix
+        data_dir = data_dir or file_prefix
         if verbose:
-            print(f"Reading trials from {dirname}.")
+            print(f"Reading trials from {data_dir}.")
         triggers, gaze = parse_triggers_and_gaze(
-            os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-TriggerLog.txt"),
-            os.path.join(cnfg.RAW_DATA_PATH, dirname, f"{file_prefix}-GazeData.txt"),
+            os.path.join(cnfg.RAW_DATA_PATH, data_dir, f"{file_prefix}-TriggerLog.txt"),
+            os.path.join(cnfg.RAW_DATA_PATH, data_dir, f"{file_prefix}-GazeData.txt"),
         )
         trials = []
         for trial_num in tqdm(
