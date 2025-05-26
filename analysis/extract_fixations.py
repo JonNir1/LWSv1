@@ -49,6 +49,14 @@ def _fixations_to_frame(trial: Trial) -> pd.DataFrame:
     return fixs_df
 
 
+def _calculate_distances(trial: Trial, fixs_df: pd.DataFrame) -> pd.DataFrame:
+    """ Calculates distances from fixations to targets. """
+    center_pixels = np.vstack(fixs_df['center_pixel'].values)
+    dists = trial.calculate_target_distances(center_pixels[:, 0], center_pixels[:, 1])
+    dists.index = fixs_df.index
+    return dists
+
+
 def _marked_targets(trial: Trial, fixs_df: pd.DataFrame) -> pd.DataFrame:
     """ Identifies targets that were already identified or identified during the current fixation. """
     target_identification_data = trial.extract_target_identification()      # targets' identification time
@@ -63,12 +71,6 @@ def _marked_targets(trial: Trial, fixs_df: pd.DataFrame) -> pd.DataFrame:
     marked = pd.concat([curr_and_prior_marked, curr_mark], axis=1)
     return marked
 
-def _calculate_distances(trial: Trial, fixs_df: pd.DataFrame) -> pd.DataFrame:
-    """ Calculates distances from fixations to targets. """
-    center_pixels = np.vstack(fixs_df['center_pixel'].values)
-    dists = trial.calculate_target_distances(center_pixels[:, 0], center_pixels[:, 1])
-    dists.index = fixs_df.index
-    return dists
 
 def _in_bottom_strip(trial: Trial, fixs_df: pd.DataFrame) -> pd.Series:
     """ Checks if the fixation is in the bottom strip of the trial. """
