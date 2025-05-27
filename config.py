@@ -1,8 +1,6 @@
 import os
 from enum import IntEnum as _IntEnum
 
-import numpy as np
-from screeninfo import Monitor as _Monitor
 import peyes
 
 from constants import *
@@ -18,24 +16,12 @@ OUTPUT_PATH = os.path.join(_BASE_PATH, "Results")
 IMAGE_DIR_PATH = r"S:\Lab-Shared\Experiments\N170 free scan\ClutteredObjects_scan\Origional_Objects_Pics\organized"
 SEARCH_ARRAY_PATH = os.path.join(_BASE_PATH, "Stimuli")
 
-## Screen Monitor ##
-TOBII_MONITOR = _Monitor(
-    width=1920, height=1080,
-    width_mm=530, height_mm=300,
-    x=0, y=0, name="tobii", is_primary=True,
-)
-TOBII_PIXEL_SIZE_MM = np.mean([
-    TOBII_MONITOR.width_mm / TOBII_MONITOR.width,
-    TOBII_MONITOR.height_mm / TOBII_MONITOR.height,
-])
-TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan, MISSING_VALUE]
-
 
 ## Eye Movement Detection ##
-DETECTION_ALGORITHM = "Engbert"
-MIN_EVENT_DURATION_MS = 5
-PAD_BLINKS_MS = 0
-DETECTOR = peyes.create_detector(DETECTION_ALGORITHM, MISSING_VALUE, MIN_EVENT_DURATION_MS, PAD_BLINKS_MS)
+_DETECTION_ALGORITHM = "Engbert"
+_MIN_EVENT_DURATION_MS = 5
+_PAD_BLINKS_MS = 0
+DETECTOR = peyes.create_detector(_DETECTION_ALGORITHM, MISSING_VALUE, _MIN_EVENT_DURATION_MS, _PAD_BLINKS_MS)
 
 
 ## Parsing Fields ##

@@ -11,7 +11,7 @@ def detect_eye_movements(
         eye: DominantEyeEnum,
         viewer_distance_cm: float,
         detector = cnfg.DETECTOR,
-        pixel_size_cm: float = cnfg.TOBII_PIXEL_SIZE_MM,
+        pixel_size_cm: float = cnfg.PIXEL_SIZE_MM,
         only_labels: bool = True,
 ) -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
     t = gaze[cnfg.TIME_STR].values

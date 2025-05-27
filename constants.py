@@ -1,8 +1,18 @@
 import numpy as np
+from screeninfo import Monitor as _Monitor
 
 ## GENERAL ##
 MISSING_VALUE = np.nan
 DATE_TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
+
+## TOBII SCREEN TOBII_MONITOR ##
+TOBII_MONITOR = _Monitor(
+    width=1920, height=1080,
+    width_mm=530, height_mm=300,
+    x=0, y=0, name="tobii", is_primary=True,
+)
+TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan, MISSING_VALUE]
+PIXEL_SIZE_MM = np.mean([TOBII_MONITOR.width_mm / TOBII_MONITOR.width, TOBII_MONITOR.height_mm / TOBII_MONITOR.height,])
 
 ## STRINGS ##
 SUBJECT_STR, SESSION_STR = "subject", "session"

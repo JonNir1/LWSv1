@@ -284,7 +284,7 @@ class Trial:
             DominantEyeEnum.Left,
             self._subject.screen_distance_cm,
             cnfg.DETECTOR,
-            cnfg.TOBII_PIXEL_SIZE_MM / 10,
+            cnfg.PIXEL_SIZE_MM / 10,
             only_labels=False
         )
         right_labels, right_events = detect_eye_movements(
@@ -292,7 +292,7 @@ class Trial:
             DominantEyeEnum.Right,
             self._subject.screen_distance_cm,
             cnfg.DETECTOR,
-            cnfg.TOBII_PIXEL_SIZE_MM / 10,
+            cnfg.PIXEL_SIZE_MM / 10,
             only_labels=False
         )
         labels = pd.concat([left_labels, right_labels], axis=1)

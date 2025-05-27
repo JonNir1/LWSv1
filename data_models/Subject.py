@@ -159,7 +159,7 @@ class Subject:
         To move from `d` pixels to DVA, use the formula: `d * self.px2deg`.
         """
         return hlp.convert_units(
-            1, "px", "deg", cnfg.TOBII_PIXEL_SIZE_MM / 10, self._screen_distance_cm
+            1, "px", "deg", cnfg.PIXEL_SIZE_MM / 10, self._screen_distance_cm
         )
 
     @property
