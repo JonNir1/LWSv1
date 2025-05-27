@@ -19,7 +19,7 @@ def percent_bad_trials_figure(ident_data: pd.DataFrame,) -> go.Figure:
     sub_data[_BAD_TRIAL_STR] = sub_data[_BAD_TRIAL_STR].astype(int)     # convert to int for calculating percentage
     bad_trials = _calculate_rate_per_trial_type(sub_data)
     fig = px.bar(
-        bad_trials, x=_TRIAL_TYPE_STR, y='mean', color=_TRIAL_TYPE_STR,
+        bad_trials, x=_TRIAL_TYPE_STR, y='mean', color=_TRIAL_TYPE_STR, error_y='sem',
         labels={_TRIAL_TYPE_STR: 'Trial Type', 'mean': '% Bad Trials'},
         color_discrete_map={typ: color for typ, color in bad_trials[[_TRIAL_TYPE_STR, 'color']].values}
     )
