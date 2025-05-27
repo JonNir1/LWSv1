@@ -122,12 +122,6 @@ class Trial:
             return self._right_events
         raise ValueError(f"Invalid eye: {eye}. Must be either 'left' or 'right'.")
 
-    def get_targets(self) -> pd.DataFrame:
-        target_images = self._search_array.targets
-        target_df = pd.DataFrame(target_images, index=[f"{cnfg.TARGET_STR}_{i}" for i in range(len(target_images))])
-        target_df[cnfg.CATEGORY_STR] = [img.category for img in target_images]
-        return target_df
-
     def calculate_target_distances(self, x: np.ndarray, y: np.ndarray,) -> pd.DataFrame:
         """
         Calculate the pixel-distance from each X-Y coordinate to each target in the search array.
