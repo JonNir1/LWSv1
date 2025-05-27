@@ -223,7 +223,8 @@ class Trial:
         - all_marked: List[str] - all targets that were identified previously or during the current fixation
         - curr_marked: str - the target that was identified during the current fixation (or None)
         - in_strip: bool - whether the fixation is in the bottom strip of the trial
-        - time_to_trial_end: float - time from fixation's end to the end of the trial (in ms)
+        - from_trial_start: float - time from trial's start to the start of the fixation (in ms)
+        - to_trial_end: float - time from fixation's end to the end of the trial (in ms)
         """
         left_em = self.get_eye_movements(eye=DominantEyeEnum.Left)
         left_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, left_em))
@@ -260,11 +261,12 @@ class Trial:
         # checks if the fixation is in the bottom strip of the trial
         in_strip = fixs_df['center_pixel'].map(lambda p: self.is_in_bottom_strip(p)).rename("in_strip")
 
-        # calculate the time to trial's end
-        time_to_trial_end = fixs_df[cnfg.END_TIME_STR].map(lambda t: self.end_time - t).rename("time_to_trial_end")
+        # calculate the time from trial's start and to its end
+        time_from_trial_start = fixs_df[cnfg.START_TIME_STR].map(lambda t: t - self.start_time).rename("from_trial_start")
+        time_to_trial_end = fixs_df[cnfg.END_TIME_STR].map(lambda t: self.end_time - t).rename("to_trial_end")
 
         # concatenate all data into a single DataFrame
-        fixs_df = pd.concat([fixs_df, dists, marked, in_strip, time_to_trial_end], axis=1)
+        fixs_df = pd.concat([fixs_df, dists, marked, in_strip, time_from_trial_start, time_to_trial_end], axis=1)
         return fixs_df
 
     def _create_search_array(self) -> SearchArray:

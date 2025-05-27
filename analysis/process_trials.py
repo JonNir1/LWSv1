@@ -49,6 +49,8 @@ def process_trials(
     - all_marked: List[str] - all targets that were identified previously or during the current fixation
     - curr_marked: str - the target that was identified during the current fixation (or None)
     - in_strip: bool - whether the fixation is in the bottom strip of the trial
+    - from_trial_start: float - time from trial's start to the start of the fixation (in ms)
+    - to_trial_end: float - time from fixation's end to the end of the trial (in ms)
     """
     metadata = _read_or_extract(subject, cnfg.METADATA_STR, save=save, verbose=verbose).droplevel(1)
     actions = _read_or_extract(subject, cnfg.ACTION_STR, save=save, verbose=verbose).droplevel(1)
