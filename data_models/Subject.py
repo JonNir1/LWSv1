@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import time
 import pickle as pkl
 from typing import Union, Optional, List
 from datetime import datetime
@@ -68,6 +69,7 @@ class Subject:
         If a `data_dir` is provided, uses this to find the file, otherwise constructs the dirname from the experiment
         name, subject ID, and session number.
         """
+        start = time.time()
         if verbose:
             print("#####################################")
             print(f"Experiment: {exp_name}\tSubject: {subject_id}\tSession: {session}")
@@ -82,6 +84,7 @@ class Subject:
             subject.add_trial(trial)
         if verbose:
             print(f"Subject {subject_id} has {len(subject._trials)} trials.")
+            print(f"Completed in {time.time() - start:.2f} seconds.")
             print("#####################################")
         return subject
 
