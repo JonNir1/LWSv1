@@ -106,6 +106,15 @@ class Trial:
         """ Returns the times and actions performed by the subject during the trial. """
         return self._triggers.loc[self._triggers[cnfg.ACTION_STR].notnull(), [cnfg.TIME_STR, cnfg.ACTION_STR]]
 
+    def get_metadata(self) -> pd.Series:
+        return pd.Series({
+            "trial_num": self.trial_num,
+            "block_num": self.block_num,
+            "trial_type": self.trial_type,
+            "duration": self.end_time - self.start_time,
+            "num_targets": len(self._search_array.targets),
+        })
+
     def get_eye_movements(self, eye: DominantEyeEnum) -> pd.Series:
         if eye == DominantEyeEnum.Left:
             return self._left_events
