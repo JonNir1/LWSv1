@@ -37,6 +37,7 @@ def _align_triggers_and_gaze(triggers, gaze) -> (pd.DataFrame, pd.DataFrame):
             continue
         start_idx = is_block_start.idxmax()  # find the first occurrence of the block trigger
         merged.loc[merged.index[start_idx:], cnfg.BLOCK_STR] = block_num
+    merged[cnfg.BLOCK_STR] = merged[cnfg.BLOCK_STR].astype('Int64')
     del trg, name, block_num, is_block_start, start_idx
 
     def _is_between_triggers(trigs: pd.Series, start: int, end: int) -> pd.Series:
@@ -58,20 +59,25 @@ def _align_triggers_and_gaze(triggers, gaze) -> (pd.DataFrame, pd.DataFrame):
     is_trial_start = is_trial.ne(is_trial.shift()) & is_trial  # find the start of each trial
     trial_num = is_trial_start.cumsum()  # assign trial numbers
     trial_num.loc[~is_trial] = np.nan  # set non-trial rows to NaN
-    merged[cnfg.TRIAL_STR] = trial_num
+    merged[cnfg.TRIAL_STR] = trial_num.astype('Int64')
 
     # add `is_recording` columns
     merged[cnfg.IS_RECORDING_STR] = _is_between_triggers(
         merged[cnfg.TRIGGER_STR], cnfg.ExperimentTriggerEnum.START_RECORD, cnfg.ExperimentTriggerEnum.STOP_RECORD
     )
+    merged[cnfg.IS_RECORDING_STR] = merged[cnfg.IS_RECORDING_STR].astype(bool)
 
     # reorder columns
     cols_ord = [cnfg.TIME_STR, cnfg.TRIGGER_STR]
     cols_ord += [col for col in merged.columns if col not in cols_ord]
     merged = merged[cols_ord]
 
-    # split back to gaze and triggers
+    # split out the triggers
     triggers = merged.loc[merged[cnfg.TRIGGER_STR].notna(), cnfg.MUTUAL_COLUMNS + cnfg.TRIGGER_COLUMNS]
+    triggers.loc[:, cnfg.TRIGGER_COLUMNS] = triggers[cnfg.TRIGGER_COLUMNS].fillna(0).astype('Int64')
+    triggers[cnfg.ACTION_STR] = triggers[cnfg.ACTION_STR].map(lambda act: SearchActionTypesEnum(act))
+
+    # split out the gaze data
     is_gaze = merged[cnfg.GAZE_COLUMNS].notna().any(axis=1)
     gaze = merged.loc[is_gaze, cnfg.MUTUAL_COLUMNS + cnfg.GAZE_COLUMNS]
     return triggers, gaze
@@ -105,7 +111,7 @@ def _read_triggers(triggers_path: str) -> pd.DataFrame:
     triggers[cnfg.TRIGGER_STR] = triggers[cnfg.TRIGGER_STR].map(lambda trgr: cnfg.ExperimentTriggerEnum(trgr))
 
     # add `action` column
-    triggers[cnfg.ACTION_STR] = cnfg.MISSING_VALUE
+    triggers[cnfg.ACTION_STR] = SearchActionTypesEnum.NO_ACTION
     start_identify_idx = None
     for idx, series in triggers.iterrows():
         trg = series[cnfg.TRIGGER_STR]
@@ -147,6 +153,6 @@ def _read_triggers(triggers_path: str) -> pd.DataFrame:
             triggers.loc[start_identify_idx, 'subj_action'] = SearchActionTypesEnum.MARK_ONLY
             start_identify_idx = None
             continue
-
+    triggers[cnfg.ACTION_STR] = triggers[cnfg.ACTION_STR].astype('Int64')
     return triggers
 

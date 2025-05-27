@@ -34,6 +34,7 @@ class SearchArrayTypeEnum(IntEnum):
 
 
 class SearchActionTypesEnum(IntEnum):
+    NO_ACTION = 0
     MARK_AND_CONFIRM = 1
     MARK_ONLY = 2
     ATTEMPTED_MARK = 3
