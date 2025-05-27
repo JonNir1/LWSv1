@@ -10,10 +10,10 @@ from data_models.Subject import Subject
 
 
 # read subject data
-subj = Subject.from_raw(
-    exp_name=cnfg.EXPERIMENT_NAME, subject_id=1, session=1, data_dir="v4-1-1 GalChen Demo", verbose=True
-)
-subj.to_pickle(overwrite=False)
+# subj = Subject.from_raw(
+#     exp_name=cnfg.EXPERIMENT_NAME, subject_id=1, session=1, data_dir="v4-1-1 GalChen Demo", verbose=True
+# )
+# subj.to_pickle(overwrite=False)
 subj = Subject.from_pickle(exp_name=cnfg.EXPERIMENT_NAME, subject_id=1,)
 
 # process subject trials
