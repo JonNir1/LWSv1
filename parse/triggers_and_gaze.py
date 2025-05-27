@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 import config as cnfg
-from data_models.LWSEnums import SearchActionTypesEnum
+from data_models.LWSEnums import SubjectActionTypesEnum
 
 
 def parse_triggers_and_gaze(triggers_path, gaze_path) -> (pd.DataFrame, pd.DataFrame):
@@ -75,7 +75,7 @@ def _align_triggers_and_gaze(triggers, gaze) -> (pd.DataFrame, pd.DataFrame):
     # split out the triggers
     triggers = merged.loc[merged[cnfg.TRIGGER_STR].notna(), cnfg.MUTUAL_COLUMNS + cnfg.TRIGGER_COLUMNS]
     triggers.loc[:, cnfg.TRIGGER_COLUMNS] = triggers[cnfg.TRIGGER_COLUMNS].fillna(0).astype('Int64')
-    triggers[cnfg.ACTION_STR] = triggers[cnfg.ACTION_STR].map(lambda act: SearchActionTypesEnum(act))
+    triggers[cnfg.ACTION_STR] = triggers[cnfg.ACTION_STR].map(lambda act: SubjectActionTypesEnum(act))
 
     # split out the gaze data
     is_gaze = merged[cnfg.GAZE_COLUMNS].notna().any(axis=1)
@@ -111,14 +111,14 @@ def _read_triggers(triggers_path: str) -> pd.DataFrame:
     triggers[cnfg.TRIGGER_STR] = triggers[cnfg.TRIGGER_STR].map(lambda trgr: cnfg.ExperimentTriggerEnum(trgr))
 
     # add `action` column
-    triggers[cnfg.ACTION_STR] = SearchActionTypesEnum.NO_ACTION
+    triggers[cnfg.ACTION_STR] = SubjectActionTypesEnum.NO_ACTION
     start_identify_idx = None
     for idx, series in triggers.iterrows():
         trg = series[cnfg.TRIGGER_STR]
 
         if trg == cnfg.ExperimentTriggerEnum.SPACE_NO_ACT:
             # subject attempted to mark target but failed
-            triggers.loc[start_identify_idx, cnfg.ACTION_STR] = SearchActionTypesEnum.ATTEMPTED_MARK
+            triggers.loc[start_identify_idx, cnfg.ACTION_STR] = SubjectActionTypesEnum.ATTEMPTED_MARK
             continue
 
         if trg == cnfg.ExperimentTriggerEnum.SPACE_ACT:
@@ -136,10 +136,10 @@ def _read_triggers(triggers_path: str) -> pd.DataFrame:
                 f"{trg.name} not follows a previous {cnfg.ExperimentTriggerEnum.SPACE_ACT.name} (idx: {idx})"
             if trg == cnfg.ExperimentTriggerEnum.CONFIRM_ACT:
                 # subject confirms the identified target
-                triggers.loc[start_identify_idx, cnfg.ACTION_STR] = SearchActionTypesEnum.MARK_AND_CONFIRM
+                triggers.loc[start_identify_idx, cnfg.ACTION_STR] = SubjectActionTypesEnum.MARK_AND_CONFIRM
             else:
                 # subject rejects previously identified (non-target) item
-                triggers.loc[start_identify_idx, cnfg.ACTION_STR] = SearchActionTypesEnum.MARK_AND_REJECT
+                triggers.loc[start_identify_idx, cnfg.ACTION_STR] = SubjectActionTypesEnum.MARK_AND_REJECT
             start_identify_idx = None
             continue
 
@@ -150,7 +150,7 @@ def _read_triggers(triggers_path: str) -> pd.DataFrame:
         ]:
             # subject ran out of time before confirming target
             assert start_identify_idx < idx, f"{trg.name} not follows a previous {cnfg.ExperimentTriggerEnum.SPACE_ACT.name} (idx: {idx})"
-            triggers.loc[start_identify_idx, 'subj_action'] = SearchActionTypesEnum.MARK_ONLY
+            triggers.loc[start_identify_idx, 'subj_action'] = SubjectActionTypesEnum.MARK_ONLY
             start_identify_idx = None
             continue
     triggers[cnfg.ACTION_STR] = triggers[cnfg.ACTION_STR].astype('Int64')

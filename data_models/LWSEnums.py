@@ -33,7 +33,7 @@ class SearchArrayTypeEnum(IntEnum):
     NOISE = 3
 
 
-class SearchActionTypesEnum(IntEnum):
+class SubjectActionTypesEnum(IntEnum):
     NO_ACTION = 0
     MARK_AND_CONFIRM = 1
     MARK_ONLY = 2

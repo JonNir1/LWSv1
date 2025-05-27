@@ -10,7 +10,7 @@ import peyes
 import config as cnfg
 import helpers as hlp
 from data_models.SearchArray import SearchArray
-from data_models.LWSEnums import SearchArrayTypeEnum, SearchActionTypesEnum, DominantEyeEnum
+from data_models.LWSEnums import SearchArrayTypeEnum, SubjectActionTypesEnum, DominantEyeEnum
 from parse.eye_movements import detect_eye_movements
 
 _FIXATION_LABEL = peyes.parse_label(cnfg.FIXATION_STR)
@@ -19,7 +19,7 @@ _REDUNDANT_FIXATION_FEATURES = [
 ]
 _MAX_GAZE_TO_TRIGGER_TIME_DIFF = 10  # in ms    # Maximum allowed time difference between gaze and trigger events for them to be considered as part of the same event.
 _BAD_SUBJECT_ACTIONS = [
-    SearchActionTypesEnum.MARK_ONLY, SearchActionTypesEnum.ATTEMPTED_MARK, SearchActionTypesEnum.MARK_AND_REJECT
+    SubjectActionTypesEnum.MARK_ONLY, SubjectActionTypesEnum.ATTEMPTED_MARK, SubjectActionTypesEnum.MARK_AND_REJECT
 ]
 
 
@@ -166,8 +166,8 @@ class Trial:
         """
         # extract gaze on target identification
         identification_triggers = self._triggers[
-            self._triggers[cnfg.ACTION_STR] == SearchActionTypesEnum.MARK_AND_CONFIRM
-        ].reset_index(drop=True)
+            self._triggers[cnfg.ACTION_STR] == SubjectActionTypesEnum.MARK_AND_CONFIRM
+            ].reset_index(drop=True)
         gaze_when_ident = self._gaze.loc[hlp.closest_indices(
             self._gaze['time'], identification_triggers['time'], threshold=_MAX_GAZE_TO_TRIGGER_TIME_DIFF
         )].reset_index(drop=True)

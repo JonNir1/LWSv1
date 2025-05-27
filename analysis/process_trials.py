@@ -26,7 +26,7 @@ def process_trials(
 
     Actions: indexed by trial number, with columns:
     - time: float - time of the action in ms
-    - action: int (SearchActionTypesEnum) - type of the action
+    - action: int (SubjectActionTypesEnum) - type of the action
 
     Targets: indexed by (trial number, target ID), with columns:
     - `time`: time of identification
