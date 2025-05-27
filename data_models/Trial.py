@@ -18,6 +18,9 @@ _REDUNDANT_FIXATION_FEATURES = [
     'label', 'distance', 'velocity', 'amplitude', 'azimuth', 'dispersion', 'area', 'is_outlier'
 ]
 _MAX_GAZE_TO_TRIGGER_TIME_DIFF = 10  # in ms    # Maximum allowed time difference between gaze and trigger events for them to be considered as part of the same event.
+_BAD_SUBJECT_ACTIONS = [
+    SearchActionTypesEnum.MARK_ONLY, SearchActionTypesEnum.ATTEMPTED_MARK, SearchActionTypesEnum.MARK_AND_REJECT
+]
 
 
 def _extract_singleton_column(df: pd.DataFrame, col_name: str):
@@ -113,6 +116,7 @@ class Trial:
             "trial_type": self.trial_type,
             "duration": self.end_time - self.start_time,
             "num_targets": len(self._search_array.targets),
+            "bad_actions": np.isin(self.get_actions()[cnfg.ACTION_STR], _BAD_SUBJECT_ACTIONS).any(),
         })
 
     def get_eye_movements(self, eye: DominantEyeEnum) -> pd.Series:
