@@ -1,7 +1,9 @@
 import os
 from enum import IntEnum as _IntEnum
+from typing import Union, Literal
 
 import peyes
+import plotly.express.colors as _colors
 
 from constants import *
 
@@ -52,6 +54,31 @@ MUTUAL_COLUMNS = [TIME_STR, BLOCK_STR, TRIAL_STR, IS_RECORDING_STR]
 TRIGGER_COLUMNS = [TRIGGER_STR, ACTION_STR]
 GAZE_COLUMNS = [col for col in TOBII_FIELD_MAP.values() if col != TIME_STR]
 DETECTOR_COLUMNS = [LEFT_LABEL_STR, RIGHT_LABEL_STR]
+
+
+## VISUALIZATION CONFIGURATION ##
+_DISCRETE_COLORMAP = _colors.qualitative.Dark24
+_CONTINUOUS_COLORMAP = _colors.sequential.Viridis
+_GENERIC_COLOR = "#808080"  # gray color for generic cases
+
+
+def get_discrete_color(value: Union[Literal["all"], int], loop: bool = False) -> str:
+    """
+    Get a discrete color for a given value, either a specific integer or the string "all".
+    If `loop` is False, raises an error if the value is not in the expected range.
+    """
+    if isinstance(value, str) and value.lower() == ALL_STR:
+        return _GENERIC_COLOR
+    if isinstance(value, int):
+        if loop:
+            value = value % len(_DISCRETE_COLORMAP)
+        assert 0 <= value < len(_DISCRETE_COLORMAP), f"Value {value} out of range for discrete colormap (0-{len(_DISCRETE_COLORMAP)-1})."
+        return _DISCRETE_COLORMAP[value]
+    if isinstance(value, float) and value == int(value):
+        return get_discrete_color(int(value), loop=loop)
+    raise TypeError(
+        f"Value must be an integer or 'all', got `{value}` of type {type(value)}."
+    )
 
 
 ## TRIGGERS ##
