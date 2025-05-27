@@ -28,9 +28,16 @@ def process_trials(
     - action: int (SearchActionTypesEnum) - type of the action
 
     Targets: indexed by (trial number, target ID), with columns:
-    - x, y, angle: float - pixel coordinates and rotation-angle of the target
-    - sub_path: str - path to the target image
-    - category: int (ImageCategoryEnum) - category of the target image
+    - `time`: time of identification
+    - `distance_px`: pixel-distance from the target at the time of identification
+    - `left_x`, `left_y`: gaze coordinates in the left eye at the time of identification
+    - `right_x`, `right_y`: gaze coordinates in the right eye at the time of identification
+    - `left_pupil`, `right_pupil`: pupil size in the left/right eye at the time of identification
+    - `'left_label'`, `'right_label'`: eye movement labels in the left/right eye at the time of identification
+    - `target_x`, `target_y`: target coordinates
+    - `target_angle`: target rotation angle
+    - `target_sub_path`: path to the target image
+    - `target_category`: target category
 
     Fixations: indexed by (trial number, eye, fixation ID), with columns:
     - start-time, end-time, duration: float (in ms)
@@ -61,7 +68,7 @@ def _read_or_extract(subject: Subject, descriptor: str, save: bool = True, verbo
     if descriptor == cnfg.ACTION_STR:
         extraction_function = lambda trl: trl.get_actions()
     elif descriptor == cnfg.TARGET_STR:
-        extraction_function = lambda trl: trl.get_targets()
+        extraction_function = lambda trl: trl.get_target_identification_data()
     elif descriptor == cnfg.FIXATION_STR:
         extraction_function = lambda trl: trl.process_fixations()
     elif descriptor == cnfg.METADATA_STR:

@@ -140,16 +140,15 @@ class Trial:
         if x.shape != y.shape:
             raise ValueError(f"Input arrays must have the same shape. Got {x.shape} and {y.shape}.")
         coords = np.column_stack((x, y))                    # shape (n_coords, 2)
-        targets = self.get_targets()
-        target_coords = targets[[cnfg.X, cnfg.Y]].values    # shape (n_targets, 2)
-        dists = np.empty((len(coords), len(targets)), dtype=float)
+        target_coords = np.array([(img.x, img.y) for img in self._search_array.targets])  # shape (n_targets, 2)
+        dists = np.empty((len(coords), len(target_coords)), dtype=float)
         for i, (cx, cy) in enumerate(coords):
             for j, (tx, ty) in enumerate(target_coords):
                 dists[i, j] = hlp.distance((cx, cy), (tx, ty), 'px',)
-        dists = pd.DataFrame(dists, columns=targets.index)
+        dists = pd.DataFrame(dists, columns=[f"{cnfg.TARGET_STR}_{i}" for i in range(target_coords.shape[0])])
         return dists
 
-    def extract_target_identification(self) -> pd.DataFrame:
+    def get_target_identification_data(self) -> pd.DataFrame:
         """
         Extracts the time, gaze location and pixel-distance from the target during target identifications.
         If a taget was never identified, the time and distance are set to np.inf and gaze data is set to NaN.
@@ -163,6 +162,8 @@ class Trial:
             - `left_pupil`, `right_pupil`: pupil size in the left/right eye at the time of identification
             - `'left_label'`, `'right_label'`: eye movement labels in the left/right eye at the time of identification
             - `target_x`, `target_y`: target coordinates
+            - `target_angle`: target rotation angle
+            - `target_sub_path`: path to the target image
             - `target_category`: target category
         """
         # extract gaze on target identification
@@ -181,6 +182,12 @@ class Trial:
             name=f"{cnfg.DISTANCE_STR}_px",
         )
 
+        # extract the target data
+        target_images = self._search_array.targets
+        target_df = pd.DataFrame(target_images, index=[f"{cnfg.TARGET_STR}_{i}" for i in range(len(target_images))])
+        target_df[cnfg.CATEGORY_STR] = [img.category for img in target_images]
+        target_df = target_df.rename(columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False)
+
         # concatenate results
         res = pd.concat([
             identification_triggers[cnfg.TIME_STR].astype(float),
@@ -189,10 +196,7 @@ class Trial:
             gaze_when_ident[[col for col in gaze_when_ident.columns if col.startswith(cnfg.RIGHT_STR)]],
         ], axis=1)
         res.index = closest_target.values
-        target_data = self.get_targets()[[cnfg.X, cnfg.Y, cnfg.CATEGORY_STR]].rename(
-            columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False
-        )
-        res = pd.concat([res, target_data], axis=1)
+        res = pd.concat([res, target_df], axis=1)
 
         # replace unidentified targets' `time` and `distance` with np.inf
         non_nan_cols = [cnfg.TIME_STR] + [col for col in res if col.startswith(cnfg.DISTANCE_STR)]
@@ -244,7 +248,7 @@ class Trial:
         dists.index = fixs_df.index
 
         # identifies targets that were already identified or identified during the current fixation
-        target_identification_data = self.extract_target_identification()  # targets' identification time
+        target_identification_data = self.get_target_identification_data()  # targets' identification time
         is_end_after = pd.DataFrame(
             fixs_df[cnfg.END_TIME_STR].values >= target_identification_data[cnfg.TIME_STR].values[:, np.newaxis],
             columns=fixs_df.index, index=target_identification_data.index
