@@ -22,7 +22,7 @@ def process_trials(
     - trial_type: int (SearchArrayTypeEnum) - type of the trial (e.g., color, bw, etc.)
     - duration: float - duration of the trial in ms
     - num_targets: int - number of targets in the trial
-    - bad_actions: bool - whether the subject performed any "bad" actions during the trial (e.g. mark-and-reject)
+    - is_bad: bool - whether the trial is "bad", i,e, the subject performed "bad" actions during it (e.g. mark-and-reject)
 
     Actions: indexed by trial number, with columns:
     - time: float - time of the action in ms

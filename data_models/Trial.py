@@ -91,6 +91,12 @@ class Trial:
         triggers_max_time = self._triggers[cnfg.TIME_STR].max()
         return np.nanmax([gaze_max_time, triggers_max_time])
 
+    @property
+    def is_bad(self) -> bool:
+        """ Returns True if the trial is considered 'bad', i.e. contains bad subject actions. """
+        # TODO: add logic to exclude more trials
+        return bool(np.isin(self.get_actions()[cnfg.ACTION_STR], _BAD_SUBJECT_ACTIONS).any())
+
     @staticmethod
     def is_in_bottom_strip(p: Tuple[float, float]) -> bool:
         """ Check if a point is within the bottom strip rectangle, containing target exemplars. """
@@ -116,7 +122,7 @@ class Trial:
             "trial_type": self.trial_type,
             "duration": self.end_time - self.start_time,
             "num_targets": len(self._search_array.targets),
-            "bad_actions": np.isin(self.get_actions()[cnfg.ACTION_STR], _BAD_SUBJECT_ACTIONS).any(),
+            "is_bad": self.is_bad,
         })
 
     def get_eye_movements(self, eye: DominantEyeEnum) -> pd.Series:

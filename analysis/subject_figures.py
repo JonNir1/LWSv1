@@ -89,10 +89,10 @@ def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) 
 def _target_identification_data(targets_df: pd.DataFrame, metadata_df: pd.DataFrame):
     ident_data = pd.merge(
         targets_df[[cnfg.TIME_STR, f"{cnfg.TARGET_STR}_{cnfg.CATEGORY_STR}"]],
-        metadata_df[[f"{cnfg.TRIAL_STR}_type", "bad_actions"]],
+        metadata_df[[f"{cnfg.TRIAL_STR}_type", "is_bad"]],
         left_index=True, right_index=True, how='left'
     ).reset_index(drop=False)
-    ident_data.rename(columns={"level_1": cnfg.TARGET_STR, "bad_actions": _BAD_TRIAL_STR}, inplace=True)
+    ident_data.rename(columns={"level_1": cnfg.TARGET_STR, "is_bad": _BAD_TRIAL_STR}, inplace=True)
     ident_data['identified'] = np.isfinite(ident_data[cnfg.TIME_STR].values)
     return ident_data
 
