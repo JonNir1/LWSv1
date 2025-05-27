@@ -2,14 +2,32 @@ from enum import EnumType
 
 import numpy as np
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 import config as cnfg
 
+_TRIAL_TYPE_STR = f"{cnfg.TRIAL_STR}_type"
+_BAD_TRIAL_STR = f"bad_{cnfg.TRIAL_STR}"
+_TARGET_CATEGORY_STR = f"{cnfg.TARGET_STR}_{cnfg.CATEGORY_STR}"
+
+
+def percent_bad_trials_figure(ident_data: pd.DataFrame,) -> go.Figure:
+    """ Creates a figure showing the percentage of bad trials. """
+    sub_data = ident_data[[cnfg.TRIAL_STR, _TRIAL_TYPE_STR, _BAD_TRIAL_STR]].drop_duplicates().set_index(cnfg.TRIAL_STR)
+    sub_data[_BAD_TRIAL_STR] = sub_data[_BAD_TRIAL_STR].astype(int)     # convert to int for calculating percentage
+    bad_trials = _calculate_rate_per_trial_type(sub_data)
+    fig = px.bar(
+        bad_trials, x=_TRIAL_TYPE_STR, y='mean', color=_TRIAL_TYPE_STR,
+        labels={_TRIAL_TYPE_STR: 'Trial Type', 'mean': '% Bad Trials'},
+        color_discrete_map={typ: color for typ, color in bad_trials[[_TRIAL_TYPE_STR, 'color']].values}
+    )
+    fig.update_layout(title='Percentage of Trials with "Bad" Subject-Action by Trial Type')
+    return fig
+
 
 def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) -> go.Figure:
-    BAD_TRIAL_STR = f"bad_{cnfg.TRIAL_STR}"
     fig = make_subplots(
         rows=2, cols=2, shared_xaxes=False, shared_yaxes=False, specs=[[{"colspan": 2}, None], [{}, {}]],
         subplot_titles=["Trial", "Trial Type", "Target Category",],
@@ -17,7 +35,7 @@ def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) 
     )
 
     # Top Row: percent identified per trial
-    per_trial = ident_data.groupby([cnfg.TRIAL_STR, BAD_TRIAL_STR])['identified'].mean().rename("% identified") * 100
+    per_trial = ident_data.groupby([cnfg.TRIAL_STR, _BAD_TRIAL_STR])['identified'].mean().rename("% identified") * 100
     per_trial = per_trial.reset_index(inplace=False)
     fig.add_trace(
         row=1, col=1,
@@ -26,23 +44,22 @@ def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) 
             mode='markers+lines', name='trial',
             line=dict(width=2, color='black'),
             marker=dict(
-                size=15,
-                symbol=per_trial[BAD_TRIAL_STR].map(lambda bad: 'x' if bad else 'circle'),
-                opacity=per_trial[BAD_TRIAL_STR].map(lambda bad: 0.75 if bad else 1.0),
+                size=10,
+                symbol=per_trial[_BAD_TRIAL_STR].map(lambda bad: 'x' if bad else 'circle'),
+                opacity=per_trial[_BAD_TRIAL_STR].map(lambda bad: 0.75 if bad else 1.0),
             ),
         )
     )
 
     if drop_bads:
-        ident_data = ident_data[~ident_data[BAD_TRIAL_STR]]
+        ident_data = ident_data[~ident_data[_BAD_TRIAL_STR]]
 
     # Bottom Left: percent identified by trial type
-    TRIAL_TYPE_STR = f"{cnfg.TRIAL_STR}_type"
-    per_trial_type = _calculate_rate_per_trial_type(ident_data[[TRIAL_TYPE_STR, "identified"]])
+    per_trial_type = _calculate_rate_per_trial_type(ident_data[[_TRIAL_TYPE_STR, "identified"]])
     fig.add_trace(
         row=2, col=1,
         trace=go.Bar(
-            x=per_trial_type[TRIAL_TYPE_STR], y=per_trial_type['mean'],
+            x=per_trial_type[_TRIAL_TYPE_STR], y=per_trial_type['mean'],
             error_y=dict(type='data', array=per_trial_type['sem'], visible=True),
             name='trial type',
             marker_color=per_trial_type['color'],
@@ -50,12 +67,11 @@ def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) 
     )
 
     # Bottom Right: percent identified by target category
-    TARGET_CATEGORY_STR = f"{cnfg.TARGET_STR}_category"
-    per_target_category = _calculate_rate_per_target_category(ident_data[[TARGET_CATEGORY_STR, "identified"]])
+    per_target_category = _calculate_rate_per_target_category(ident_data[[_TARGET_CATEGORY_STR, "identified"]])
     fig.add_trace(
         row=2, col=2,
         trace=go.Bar(
-            x=per_target_category[TARGET_CATEGORY_STR], y=per_target_category['mean'],
+            x=per_target_category[_TARGET_CATEGORY_STR], y=per_target_category['mean'],
             error_y=dict(type='data', array=per_target_category['sem'], visible=True),
             name='target category',
             marker_color=per_target_category['color'],
@@ -64,6 +80,7 @@ def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) 
 
     # update layout
     fig.update_layout(
+        title="Percentage of Targets Identified",
         showlegend=False,
     )
     return fig
@@ -75,7 +92,7 @@ def _target_identification_data(targets_df: pd.DataFrame, metadata_df: pd.DataFr
         metadata_df[[f"{cnfg.TRIAL_STR}_type", "bad_actions"]],
         left_index=True, right_index=True, how='left'
     ).reset_index(drop=False)
-    ident_data.rename(columns={"level_1": cnfg.TARGET_STR, "bad_actions": BAD_TRIAL_STR}, inplace=True)
+    ident_data.rename(columns={"level_1": cnfg.TARGET_STR, "bad_actions": _BAD_TRIAL_STR}, inplace=True)
     ident_data['identified'] = np.isfinite(ident_data[cnfg.TIME_STR].values)
     return ident_data
 
@@ -87,12 +104,11 @@ def _calculate_rate_per_trial_type(df: pd.DataFrame) -> pd.DataFrame:
     :return: a DataFrame with the average and sem for each trial type.
     """
     from data_models.LWSEnums import SearchArrayTypeEnum
-    TRIAL_TYPE_STR = f"{cnfg.TRIAL_STR}_type"
-    per_trial_type = _calculate_rate_per_nominal_col(df, TRIAL_TYPE_STR)
-    per_trial_type[TRIAL_TYPE_STR] = per_trial_type[TRIAL_TYPE_STR].map(
+    per_trial_type = _calculate_rate_per_nominal_col(df, _TRIAL_TYPE_STR)
+    per_trial_type[_TRIAL_TYPE_STR] = per_trial_type[_TRIAL_TYPE_STR].map(
         lambda typ: SearchArrayTypeEnum(typ).name.lower() if typ in SearchArrayTypeEnum else typ
     )
-    per_trial_type['color'] = per_trial_type[TRIAL_TYPE_STR].map(
+    per_trial_type['color'] = per_trial_type[_TRIAL_TYPE_STR].map(
         lambda typ: cnfg.get_discrete_color(typ if typ==cnfg.ALL_STR else SearchArrayTypeEnum[typ.upper()].value)
     )
     return per_trial_type
@@ -105,12 +121,11 @@ def _calculate_rate_per_target_category(df: pd.DataFrame) -> pd.DataFrame:
     :return: a DataFrame with the average and sem for each target category.
     """
     from data_models.LWSEnums import ImageCategoryEnum
-    TARGET_CATEGORY_STR = f"{cnfg.TARGET_STR}_category"
-    per_target_category = _calculate_rate_per_nominal_col(df, TARGET_CATEGORY_STR)
-    per_target_category[TARGET_CATEGORY_STR] = per_target_category[TARGET_CATEGORY_STR].map(
+    per_target_category = _calculate_rate_per_nominal_col(df, _TARGET_CATEGORY_STR)
+    per_target_category[_TARGET_CATEGORY_STR] = per_target_category[_TARGET_CATEGORY_STR].map(
         lambda typ: ImageCategoryEnum(typ).name.lower() if typ in ImageCategoryEnum else typ
     )
-    per_target_category['color'] = per_target_category[TARGET_CATEGORY_STR].map(
+    per_target_category['color'] = per_target_category[_TARGET_CATEGORY_STR].map(
         lambda typ: cnfg.get_discrete_color(typ if typ == cnfg.ALL_STR else ImageCategoryEnum[typ.upper()].value)
     )
     return per_target_category
@@ -125,7 +140,7 @@ def _calculate_rate_per_nominal_col(df: pd.DataFrame, nominal_col: str) -> pd.Da
     """
     assert nominal_col in df.columns, f"Expected column `{nominal_col}` in DataFrame."
     assert len(df.columns) == 2, "DataFrame should only contain 2 columns."
-    other_col = [col for col in df.columns if col != col][0]
+    other_col = [col for col in df.columns if col != nominal_col][0]
     per_category = df.groupby(nominal_col)[other_col]
     per_category = pd.concat([per_category.mean().rename("mean"), per_category.sem().rename("sem")], axis=1)
     per_category.loc[cnfg.ALL_STR] = (df[other_col].mean(), df[other_col].sem())

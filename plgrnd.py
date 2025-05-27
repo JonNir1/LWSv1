@@ -31,42 +31,18 @@ curr_marked = fixs_df[fixs_df['curr_marked'].notnull()]  # fixations where targe
 
 
 
-## percent identified figure
-from analysis.subject_figures import _target_identification_data, percent_identified_figure
+# figures
+
+from analysis.subject_figures import _target_identification_data, percent_identified_figure, percent_bad_trials_figure
 ident_data = _target_identification_data(targets_df, metadata_df)
-fig = percent_identified_figure(ident_data)
-fig.show()
-
-
-
-
 
 # percent bad trials
-def bad_trials_figure(metadata_df: pd.DataFrame) -> go.Figure:
-    # TODO: convert this to a multi-subject figure
-    """ Creates a figure showing the percentage of bad trials. """
-    bad_trials = metadata_df.groupby(f"{cnfg.TRIAL_STR}_type")['bad_actions'].mean().rename("bad trials")
-    bad_trials = bad_trials.reset_index(drop=False, inplace=False).rename(columns={f"{cnfg.TRIAL_STR}_type": "trial type"})
-    bad_trials['trial type'] = bad_trials['trial type'].astype(object)
-    # add overall bad trials percentage:
-    bad_trials.loc[len(bad_trials.index), ["trial type", "bad trials"]] = [cnfg.ALL_STR, metadata_df['bad_actions'].mean()]
-    # convert to percentage
-    bad_trials['bad trials'] *= 100
-    # add color column for plotting
-    bad_trials["color"] = bad_trials['trial type'].map(lambda typ: cnfg.get_discrete_color(typ))
-    # map trial types to enum names
-    from data_models.LWSEnums import SearchArrayTypeEnum
-    bad_trials['trial type'] = bad_trials['trial type'].map(
-        lambda typ: SearchArrayTypeEnum(typ).name.lower() if typ in SearchArrayTypeEnum else typ
-    )
-    # create bar plot
-    fig = px.bar(
-        bad_trials, x='trial type', y='bad trials',
-        labels={'trial type': 'Trial Type', 'bad trials': '% Bad Trials'},
-    )
-    fig.update_layout(title='Percentage of Trials with "Bad" Subject-Action by Trial Type')
-    return fig
+fig = percent_bad_trials_figure(ident_data)
+fig.show()
 
+# percent identified figure
+fig = percent_identified_figure(ident_data)
+fig.show()
 
 
 
