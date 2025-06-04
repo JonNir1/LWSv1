@@ -45,6 +45,14 @@ fig = percent_identified_figure(ident_data)
 fig.show()
 
 
+# TODO:
+#   1. generic function to create figures with 3 subplots like `percent_identified_figure`:
+#       line over trial num, bar over trial type, bar over target type
+#   2. time till first identification - line plot (with and without bad-action trials; split by category and search-array type)
+#   3. total fixations till first identification - line plot (with and without bad-action trials; split by category and search-array type)
+#   4. number of visits before identification - histogram (with and without bad-action trials; split by category and overall)
+
+
 
 
 

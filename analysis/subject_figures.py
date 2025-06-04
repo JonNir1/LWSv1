@@ -93,6 +93,7 @@ def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) 
 
 
 def _target_identification_data(targets_df: pd.DataFrame, metadata_df: pd.DataFrame):
+    # TODO: add fixation start-time and time from trial start, for the identification fixation
     ident_data = pd.merge(
         targets_df[[cnfg.TIME_STR, f"{cnfg.TARGET_STR}_{cnfg.CATEGORY_STR}"]],
         metadata_df[[f"{cnfg.TRIAL_STR}_type", "is_bad"]],
