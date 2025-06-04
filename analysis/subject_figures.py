@@ -23,7 +23,11 @@ def percent_bad_trials_figure(ident_data: pd.DataFrame,) -> go.Figure:
         labels={_TRIAL_TYPE_STR: 'Trial Type', 'mean': '% Bad Trials'},
         color_discrete_map={typ: color for typ, color in bad_trials[[_TRIAL_TYPE_STR, 'color']].values}
     )
-    fig.update_layout(title='Percentage of Trials with "Bad" Subject-Action by Trial Type')
+    fig.update_layout(
+        title='Percentage of Trials with "Bad" Subject-Action by Trial Type',
+        # paper_bgcolor='rgba(0, 0, 0, 0)',
+        plot_bgcolor='rgba(0, 0, 0, 0)',
+    )
     return fig
 
 
@@ -46,7 +50,7 @@ def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) 
             marker=dict(
                 size=10,
                 symbol=per_trial[_BAD_TRIAL_STR].map(lambda bad: 'x' if bad else 'circle'),
-                opacity=per_trial[_BAD_TRIAL_STR].map(lambda bad: 0.75 if bad else 1.0),
+                color=per_trial[_BAD_TRIAL_STR].map(lambda bad: 'red' if bad else 'black'),
             ),
         )
     )
@@ -81,6 +85,8 @@ def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) 
     # update layout
     fig.update_layout(
         title="Percentage of Targets Identified",
+        # paper_bgcolor='rgba(0, 0, 0, 0)',
+        plot_bgcolor='rgba(0, 0, 0, 0)',
         showlegend=False,
     )
     return fig
