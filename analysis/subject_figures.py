@@ -52,7 +52,7 @@ def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) 
     )
 
     if drop_bads:
-        ident_data = ident_data[~ident_data[_BAD_TRIAL_STR]]
+        ident_data = ident_data[~ident_data[_BAD_TRIAL_STR].astype(bool)]
 
     # Bottom Left: percent identified by trial type
     per_trial_type = _calculate_rate_per_trial_type(ident_data[[_TRIAL_TYPE_STR, "identified"]])
