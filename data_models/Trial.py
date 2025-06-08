@@ -239,8 +239,10 @@ class Trial:
         right_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, right_em))
         right_fixs_df = peyes.summarize_events(right_fixs)
         fixs_df = pd.concat(
-            [left_fixs_df, right_fixs_df], keys=[cnfg.LEFT_STR, cnfg.RIGHT_STR],
-            names=["eye", cnfg.FIXATION_STR], axis=0
+            [left_fixs_df, right_fixs_df],
+            keys=[cnfg.LEFT_STR, cnfg.RIGHT_STR],
+            names=["eye", cnfg.FIXATION_STR],
+            axis=0
         )
         fixs_df.drop(  # drop redundant columns
             columns=[col for feat in _REDUNDANT_FIXATION_FEATURES for col in fixs_df.columns if feat in col],
