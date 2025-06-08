@@ -254,17 +254,31 @@ class Trial:
         dists = self.calculate_target_distances(center_pixels[:, 0], center_pixels[:, 1])
         dists.index = fixs_df.index
 
-        # identifies targets that were already identified or identified during the current fixation
+        # see if a target was marked during the current fixation
         target_identification_data = self.get_target_identification_data()  # targets' identification time
+        is_start_before = pd.DataFrame(
+            fixs_df[cnfg.START_TIME_STR].values <= target_identification_data[cnfg.TIME_STR].values[:, np.newaxis],
+            columns=fixs_df.index, index=target_identification_data.index
+        ).T
         is_end_after = pd.DataFrame(
             fixs_df[cnfg.END_TIME_STR].values >= target_identification_data[cnfg.TIME_STR].values[:, np.newaxis],
             columns=fixs_df.index, index=target_identification_data.index
         ).T
+        is_marking = is_start_before & is_end_after  # fixation starts before and ends after the target identification time
+        if not is_marking[is_marking.sum(axis=1) > 1].empty:
+            # TODO: consider resolving this in code rather than manually?
+            warnings.warn(
+                f"Multiple targets marked during the same fixation in trial {self.trial_num}. "
+                "This is not expected and may indicate an error in the data. "
+                f"Erroneous fixations: {is_marking[is_marking.sum(axis=1) > 1].index.tolist()}",
+                RuntimeWarning,
+            )
+
+        # set the "currently marked" column and the "currently or previously marked" column
+        marked_targets = is_marking[is_marking.any(axis=1)].idxmax(axis=1)  # pd.Series of len num_marking_fixs
+        curr_marked = pd.Series(None, index=fixs_df.index, name="curr_marked", dtype=str)
+        curr_marked.loc[marked_targets.index] = marked_targets.values  # set the currently marked target for marking fixations
         curr_and_prior_marked = is_end_after.apply(lambda row: set(row.index[row]), axis=1).rename("all_marked")
-        curr_mark = curr_and_prior_marked.diff().map(
-            lambda s: list(s)[0] if isinstance(s, set) and len(s) else None
-        ).rename("curr_marked")
-        marked = pd.concat([curr_and_prior_marked, curr_mark], axis=1)
 
         # checks if the fixation is in the bottom strip of the trial
         in_strip = fixs_df['center_pixel'].map(lambda p: self.is_in_bottom_strip(p)).rename("in_strip")
@@ -274,7 +288,9 @@ class Trial:
         time_to_trial_end = fixs_df[cnfg.END_TIME_STR].map(lambda t: self.end_time - t).rename("to_trial_end")
 
         # concatenate all data into a single DataFrame
-        fixs_df = pd.concat([fixs_df, dists, marked, in_strip, time_from_trial_start, time_to_trial_end], axis=1)
+        fixs_df = pd.concat([
+            fixs_df, dists, curr_marked, curr_and_prior_marked, in_strip, time_from_trial_start, time_to_trial_end
+        ], axis=1)
         return fixs_df
 
     def _create_search_array(self) -> SearchArray:
