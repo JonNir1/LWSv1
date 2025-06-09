@@ -136,54 +136,6 @@ def _read_or_extract(subject: Subject, descriptor: str, save: bool = True, verbo
             f"Unknown descriptor: {descriptor}. Expected one of: {cnfg.ACTION_STR}/{cnfg.TARGET_STR}/{cnfg.FIXATION_STR}/{cnfg.METADATA_STR}"
         )
     extraction_function = _DESCRIPTOR_MAP[descriptor]
-    if descriptor == cnfg.ACTION_STR:
-        # indexed by trial number, with columns:
-        #   - time: float - time of the action in ms
-        #   - action: int (SubjectActionTypesEnum) - type of the action
-        extraction_function = lambda trl: trl.get_actions()
-
-    elif descriptor == cnfg.TARGET_STR:
-        # indexed by (trial number, target ID), with columns:
-        #   - `time`: time of identification
-        #   - `distance_px`: pixel-distance from the target at the time of identification
-        #   - `left_x`, `left_y`: gaze coordinates in the left eye at the time of identification
-        #   - `right_x`, `right_y`: gaze coordinates in the right eye at the time of identification
-        #   - `left_pupil`, `right_pupil`: pupil size in the left/right eye at the time of identification
-        #   - `'left_label'`, `'right_label'`: eye movement labels in the left/right eye at the time of identification
-        #   - `target_x`, `target_y`: target coordinates
-        #   - `target_angle`: target rotation angle
-        #   - `target_sub_path`: path to the target image
-        #   - `target_category`: target category
-        extraction_function = lambda trl: trl.get_target_identification_data()
-
-    elif descriptor == cnfg.FIXATION_STR:
-        # indexed by (trial number, eye, fixation ID), with columns:
-        #   - start-time, end-time, duration: float (in ms)
-        #   - center-pixel: tuple (x, y) - the mean pixel coordinates of the fixation
-        #   - pixel_std: tuple (x, y) - the standard deviation of the pixel coordinates of the fixation
-        #   - outlier_reasons: List[str] - reasons for the fixation being an outlier (or [] if not an outlier)
-        #   - target_0, target_1, ...: float - pixel-distances to each target in the trial
-        #   - all_marked: List[str] - all targets that were identified previously or during the current fixation
-        #   - curr_marked: str - the target that was identified during the current fixation (or None)
-        #   - in_strip: bool - whether the fixation is in the bottom strip of the trial
-        #   - from_trial_start: float - time from trial's start to the start of the fixation (in ms)
-        #   - to_trial_end: float - time from fixation's end to the end of the trial (in ms)
-        extraction_function = lambda trl: trl.process_fixations()
-
-    elif descriptor == cnfg.METADATA_STR:
-        # indexed by trial number, with columns:
-        #   - block_num: int - block number of the trial
-        #   - trial_type: int (SearchArrayTypeEnum) - type of the trial (e.g., color, bw, etc.)
-        #   - duration: float - duration of the trial in ms
-        #   - num_targets: int - number of targets in the trial
-        #   - is_bad: bool - whether the trial is "bad", i,e, the subject performed "bad" actions during it (e.g. mark-and-reject)
-        extraction_function = lambda trl: trl.get_metadata().to_frame().T.drop(columns=[f"{cnfg.TRIAL_STR}_num"])
-
-    else:
-        raise ValueError(
-            f"Unknown descriptor: {descriptor}. Expected one of: {cnfg.ACTION_STR}/{cnfg.TARGET_STR}/{cnfg.FIXATION_STR}/{cnfg.METADATA_STR}"
-        )
-
     path = os.path.join(subject.out_dir, f'{descriptor}_df.pkl')
     try:
         df = pd.read_pickle(path)
