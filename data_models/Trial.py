@@ -201,6 +201,7 @@ class Trial:
         ], axis=1)
         res.index = closest_target.values
         res = pd.concat([res, target_df], axis=1)
+        res.index.names = [cnfg.TARGET_STR]
 
         # replace unidentified targets' `time` and `distance` with np.inf
         non_nan_cols = [cnfg.TIME_STR] + [col for col in res if col.startswith(cnfg.DISTANCE_STR)]

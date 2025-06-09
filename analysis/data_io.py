@@ -150,9 +150,7 @@ def _read_or_extract(subject: Subject, descriptor: str, save: bool = True, verbo
             dfs[trial.trial_num] = trial_df
         df = pd.concat(dfs.values(), names=[cnfg.TRIAL_STR] + list(trial_df.index.names), keys=dfs.keys(), axis=0)
 
-        # ensure the DF has the correct index names (and levels)
-        if descriptor == cnfg.TARGET_STR:
-            df.index.names = [cnfg.TRIAL_STR, cnfg.TARGET_STR]
+        # remove unnamed index levels if any
         index_names = pd.Series(df.index.names)
         if pd.isnull(index_names).any():
             # if any of the index names are NaN, remove those levels from the dataframe
