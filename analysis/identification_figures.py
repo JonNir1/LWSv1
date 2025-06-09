@@ -38,17 +38,19 @@ def time_to_identification_figure(ident_data: pd.DataFrame, drop_bads: bool = Tr
 
 
 def identification_fixation_start_time_figure(
-        ident_data: pd.DataFrame,
+        ident_with_fixs_data: pd.DataFrame,
         dominant_eye: Optional[Union[DominantEyeEnum, Literal["left", "right"]]] = None,
         drop_bads: bool = True
 ) -> go.Figure:
-    identifications = ident_data.copy()
+    identifications = ident_with_fixs_data.copy()
     colname_format = f"%s_{cnfg.FIXATION_STR}_{cnfg.START_TIME_STR}"
     if dominant_eye is None:
-        identifications[cnfg.START_TIME_STR] = ident_data[[colname_format % eye for eye in DominantEyeEnum]].min(axis=1)
+        identifications[cnfg.START_TIME_STR] = ident_with_fixs_data[
+            [colname_format % eye for eye in DominantEyeEnum]
+        ].min(axis=1)
     else:
         dominant_eye = DominantEyeEnum(dominant_eye.lower()) if isinstance(dominant_eye, str) else dominant_eye
-        identifications[cnfg.START_TIME_STR] = ident_data[colname_format % dominant_eye.name.lower()]
+        identifications[cnfg.START_TIME_STR] = ident_with_fixs_data[colname_format % dominant_eye.name.lower()]
     fig = _create_figure(
         identifications,
         y_col=cnfg.START_TIME_STR,

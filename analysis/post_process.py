@@ -83,10 +83,6 @@ def identification_data(subject: Subject, save: bool = True, verbose: bool = Fal
     - trial_type: int - type of the trial (see LWSEnums.SearchArrayTypeEnum)
     - is_bad: bool - whether the trial is "bad", i.e., the subject performed "bad" actions during the trial (e.g. mark-and-reject)
     - identified: bool - whether the target was identified in the trial (True if `time` is finite, False otherwise)
-    - left_fixation, right_fixation: the fixation's ID (fixation number in the trial).
-    - left_fixation_start_time, right_fixation_start_time: the start time of the fixation.
-    - left_fixation_end_time, right_fixation_end_time: the end time of the fixation.
-    - left_fixation_target_distance, right_fixation_target_distance: the fixation's distance to the target (in pixels).
     """
     path = os.path.join(subject.out_dir, f'{cnfg.IDENTIFIED_STR}_df.pkl')
     try:
@@ -110,45 +106,6 @@ def identification_data(subject: Subject, save: bool = True, verbose: bool = Fal
             for col in ["", f"{cnfg.START_TIME_STR}", f"{cnfg.END_TIME_STR}", f"{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"]:
                 col_name = f"{eye}_{cnfg.FIXATION_STR}_{col}".strip("_")
                 ident_data[col_name] = np.nan
-
-        # match fixations to identifications
-        fixs_df = _read_or_extract(subject, cnfg.FIXATION_STR, save=save, verbose=verbose)
-        for i, row in ident_data.iterrows():
-            trial, target, ident_time = row[cnfg.TRIAL_STR], row[cnfg.TARGET_STR], row[cnfg.TIME_STR]
-            if not np.isfinite(ident_time):
-                # no identification time, skip
-                continue
-            for eye in DominantEyeEnum:
-                try:
-                    trial_fixs = fixs_df.xs((trial, eye), level=[cnfg.TRIAL_STR, "eye"])
-                except KeyError as _e:
-                    # no fixations in this trial for this eye, skip
-                    continue
-                # check if identified during a fixation
-                during = trial_fixs[
-                    (trial_fixs[cnfg.START_TIME_STR] <= ident_time) & (ident_time <= trial_fixs[cnfg.END_TIME_STR])
-                ]
-                if not during.empty:
-                    # identified during a fixation, take the only one
-                    assert len(during) == 1
-                    chosen = during.iloc[0]
-                else:
-                    # not identified during a fixation, find the closest preceding fixation
-                    delta_t = ident_time - trial_fixs[cnfg.START_TIME_STR]
-                    trial_fixs_before = trial_fixs[
-                        # only consider fixations that ended before identification and within the allowed time-difference
-                        (0 <= delta_t) & (delta_t <= _MAX_IDENTIFICATION_FIXATION_TIME_DIFF)
-                    ].copy()
-                    if trial_fixs_before.empty:
-                        # no fixations before identification, skip
-                        continue
-                    trial_fixs_before["delta_t"] = ident_time - trial_fixs_before[cnfg.END_TIME_STR]
-                    chosen = trial_fixs_before.loc[trial_fixs_before["delta_t"].idxmin()]
-                # write chosen fixation's data to identifications DataFrame
-                ident_data.at[i, f"{eye}_{cnfg.FIXATION_STR}"] = chosen.name  # fixation ID
-                ident_data.at[i, f"{eye}_{cnfg.FIXATION_STR}_{cnfg.START_TIME_STR}"] = chosen[cnfg.START_TIME_STR]
-                ident_data.at[i, f"{eye}_{cnfg.FIXATION_STR}_{cnfg.END_TIME_STR}"] = chosen[cnfg.END_TIME_STR]
-                ident_data.at[i, f"{eye}_{cnfg.FIXATION_STR}_{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"] = chosen[target]
     if save:
         ident_data.to_pickle(path)
     return ident_data
@@ -184,7 +141,7 @@ def visits_data(
         fixations_df = _read_or_extract(subject, cnfg.FIXATION_STR, save=save, verbose=verbose)
         visits = []
         target_cols = [col for col in fixations_df.columns if col.startswith(f"{cnfg.TARGET_STR}_")]
-        for (trial, eye), group in fixations_df.groupby(level=[cnfg.TRIAL_STR, "eye"]):
+        for (trial, eye), group in fixations_df.groupby(level=[cnfg.TRIAL_STR, cnfg.EYE_STR]):
             group = group.reset_index().sort_values(cnfg.FIXATION_STR, inplace=False)
             for target in target_cols:
                 on_target = group[target] < distance_threshold_dva / subject.px2deg
@@ -196,7 +153,7 @@ def visits_data(
                         continue
                     visits.append({
                         cnfg.TRIAL_STR: trial,
-                        "eye": eye,
+                        cnfg.EYE_STR: eye,
                         cnfg.TARGET_STR: target,
                         cnfg.VISIT_STR: int(visit_idx),
                         f"start_{cnfg.FIXATION_STR}": int(visit_fixs[cnfg.FIXATION_STR].iloc[0]),
@@ -213,6 +170,64 @@ def visits_data(
     if save:
         visits_df.to_pickle(path)
     return visits_df
+
+
+def append_fixation_to_identifications(ident_data: pd.DataFrame, fixs_data: pd.DataFrame) -> pd.DataFrame:
+    """
+    For each target identification in the `ident_data`, finds a co-occurring fixation in the `fixs_data` if such exists,
+    or the closest preceding fixation if not (as long as it is within time-difference of _MAX_IDENTIFICATION_FIXATION_TIME_DIFF).
+
+    Adds the following columns to the `ident_data` DataFrame:
+    - left_fixation, right_fixation: the fixation's ID (fixation number in the trial).
+    - left_fixation_start_time, right_fixation_start_time: the start time of the fixation.
+    - left_fixation_end_time, right_fixation_end_time: the end time of the fixation.
+    - left_fixation_target_distance, right_fixation_target_distance: the fixation's distance to the target (in pixels).
+    """
+    ident_data2 = ident_data.copy()
+    # add fixation-related columns
+    for eye in DominantEyeEnum:
+        for col in ["", f"{cnfg.START_TIME_STR}", f"{cnfg.END_TIME_STR}", f"{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"]:
+            col_name = f"{eye}_{cnfg.FIXATION_STR}_{col}".strip("_")
+            ident_data2[col_name] = np.nan
+
+    # match fixations to identifications
+    for i, row in ident_data2.iterrows():
+        trial, target, ident_time = row[cnfg.TRIAL_STR], row[cnfg.TARGET_STR], row[cnfg.TIME_STR]
+        if not np.isfinite(ident_time):
+            # no identification time, skip
+            continue
+        for eye in DominantEyeEnum:
+            try:
+                trial_fixs = fixs_data.xs((trial, eye), level=[cnfg.TRIAL_STR, cnfg.EYE_STR])
+            except KeyError as _e:
+                # no fixations in this trial for this eye, skip
+                continue
+            # check if identified during a fixation
+            during = trial_fixs[
+                (trial_fixs[cnfg.START_TIME_STR] <= ident_time) & (ident_time <= trial_fixs[cnfg.END_TIME_STR])
+                ]
+            if not during.empty:
+                # identified during a fixation, take the only one
+                assert len(during) == 1
+                chosen = during.iloc[0]
+            else:
+                # not identified during a fixation, find the closest preceding fixation
+                delta_t = ident_time - trial_fixs[cnfg.START_TIME_STR]
+                trial_fixs_before = trial_fixs[
+                    # only consider fixations that ended before identification and within the allowed time-difference
+                    (0 <= delta_t) & (delta_t <= _MAX_IDENTIFICATION_FIXATION_TIME_DIFF)
+                    ].copy()
+                if trial_fixs_before.empty:
+                    # no fixations before identification, skip
+                    continue
+                trial_fixs_before["delta_t"] = ident_time - trial_fixs_before[cnfg.END_TIME_STR]
+                chosen = trial_fixs_before.loc[trial_fixs_before["delta_t"].idxmin()]
+            # write chosen fixation's data to identifications DataFrame
+            ident_data2.at[i, f"{eye}_{cnfg.FIXATION_STR}"] = chosen.name  # fixation ID
+            ident_data2.at[i, f"{eye}_{cnfg.FIXATION_STR}_{cnfg.START_TIME_STR}"] = chosen[cnfg.START_TIME_STR]
+            ident_data2.at[i, f"{eye}_{cnfg.FIXATION_STR}_{cnfg.END_TIME_STR}"] = chosen[cnfg.END_TIME_STR]
+            ident_data2.at[i, f"{eye}_{cnfg.FIXATION_STR}_{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"] = chosen[target]
+    return ident_data2
 
 
 def _read_or_extract(subject: Subject, descriptor: str, save: bool = True, verbose: bool = False) -> pd.DataFrame:

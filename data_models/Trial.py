@@ -242,7 +242,7 @@ class Trial:
         fixs_df = pd.concat(
             [left_fixs_df, right_fixs_df],
             keys=[cnfg.LEFT_STR, cnfg.RIGHT_STR],
-            names=["eye", cnfg.FIXATION_STR],
+            names=[cnfg.EYE_STR, cnfg.FIXATION_STR],
             axis=0
         )
         fixs_df.drop(  # drop redundant columns

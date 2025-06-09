@@ -25,7 +25,7 @@ class Subject:
     """
 
     __E_PRIME_FIELDS = {
-        "Name": "name", "Age": "age", "Sex": "sex", "Handedness": "hand", "DominantEye": "eye",
+        "Name": "name", "Age": "age", "Sex": "sex", "Handedness": "hand", "DominantEye": cnfg.EYE_STR,
         cnfg.SUBJECT_STR.capitalize(): f"{cnfg.SUBJECT_STR}_id",
         cnfg.SESSION_STR.capitalize(): cnfg.SESSION_STR,
         f"{cnfg.SESSION_STR.capitalize()}Date": f"{cnfg.SESSION_STR}_date",
