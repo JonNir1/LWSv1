@@ -61,6 +61,16 @@ _DISCRETE_COLORMAP = _colors.qualitative.Dark24
 _CONTINUOUS_COLORMAP = _colors.sequential.Viridis
 _GENERIC_COLOR = "#808080"  # gray color for generic cases
 
+FONT_FAMILY, FONT_COLOR = "Calibri", "black"
+TITLE_FONT = dict(family=FONT_FAMILY, size=26, color=FONT_COLOR)
+SUBTITLE_FONT = dict(family=FONT_FAMILY, size=20, color=FONT_COLOR)
+AXIS_LABEL_FONT = dict(family=FONT_FAMILY, size=20, color=FONT_COLOR)
+AXIS_TICK_FONT = dict(family=FONT_FAMILY, size=18, color=FONT_COLOR)
+AXIS_LABEL_STANDOFF = 2
+
+GRID_LINE_COLOR, GRID_LINE_WIDTH = "lightgray", 1
+ZERO_LINE_WIDTH = 2 * GRID_LINE_WIDTH
+
 
 def get_discrete_color(value: Union[Literal["all"], int], loop: bool = False) -> str:
     """
