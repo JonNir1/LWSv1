@@ -1,15 +1,9 @@
-import os
-import copy
-
 import numpy as np
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import plotly.io as pio
 
 import config as cnfg
-from data_models.LWSEnums import DominantEyeEnum, SubjectActionTypesEnum, SearchArrayTypeEnum, ImageCategoryEnum
+from data_models.LWSEnums import DominantEyeEnum
 from data_models.Subject import Subject
 
 pio.renderers.default = "browser"
@@ -22,35 +16,21 @@ pio.renderers.default = "browser"
 # subj.to_pickle(overwrite=False)
 subj = Subject.from_pickle(exp_name=cnfg.EXPERIMENT_NAME, subject_id=1,)
 
-# process subject trials
-from analysis.process_trials import process_trials
-metadata_df, actions_df, targets_df, fixs_df = process_trials(subj, save=True, verbose=True)
 
-
-curr_marked = fixs_df[fixs_df['curr_marked'].notnull()]  # fixations where target was marked
-
-
-
-# figures
-
-from analysis.subject_figures import _target_identification_data, percent_identified_figure, percent_bad_trials_figure
-ident_data = _target_identification_data(targets_df, metadata_df)
-
-# percent bad trials
-fig = percent_bad_trials_figure(ident_data)
-fig.show()
+### Identification Figures ###
+from analysis.data_io import identification_data
+ident_data = identification_data(subj, save=True)
 
 # percent identified figure
+from analysis.identification_figures import percent_identified_figure
 fig = percent_identified_figure(ident_data)
 fig.show()
 
+# time identified figure
+from analysis.identification_figures import time_to_identification_figure
+fig = time_to_identification_figure(ident_data)
+fig.show()
 
-# TODO:
-#   1. generic function to create figures with 3 subplots like `percent_identified_figure`:
-#       line over trial num, bar over trial type, bar over target type
-#   2. time till first identification - line plot (with and without bad-action trials; split by category and search-array type)
-#   3. total fixations till first identification - line plot (with and without bad-action trials; split by category and search-array type)
-#   4. number of visits before identification - histogram (with and without bad-action trials; split by category and overall)
 
 
 

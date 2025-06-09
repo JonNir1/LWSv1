@@ -42,6 +42,7 @@ IS_RECORDING_STR = "is_recording"
 DISTANCE_STR = "distance"
 METADATA_STR = "metadata"
 FIXATION_STR = "fixation"
+IDENTIFIED_STR = "identified"
 
 
 ## VISUALIZATION ##
