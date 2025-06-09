@@ -5,6 +5,7 @@ import pickle as pkl
 from typing import Union, Optional, List
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -196,9 +197,15 @@ class Subject:
                 desc="Trials", disable=not verbose,
         ):
             # extract the trial data
-            trial_triggers = triggers[triggers[cnfg.TRIAL_STR] == trial_num]
-            trial_gaze = gaze[gaze[cnfg.TRIAL_STR] == trial_num]
-            trial = Trial(self, trial_triggers.copy(), trial_gaze.copy())
+            trial_triggers = triggers[triggers[cnfg.TRIAL_STR] == trial_num].copy()
+            trial_gaze = gaze[gaze[cnfg.TRIAL_STR] == trial_num].copy()
+            # adjust the time to start from 0
+            min_time = np.nanmin([trial_triggers[cnfg.TIME_STR].min(), trial_gaze[cnfg.TIME_STR].min()])
+            assert np.isfinite(min_time) and min_time >= 0, f"Start-time for trial {trial_num} is not valid: {min_time}"
+            trial_triggers[cnfg.TIME_STR] -= min_time
+            trial_gaze[cnfg.TIME_STR] -= min_time
+            # create the Trial object
+            trial = Trial(self, trial_triggers, trial_gaze)
             trials.append(trial)
         trials = sorted(trials, key=lambda t: t.trial_num)
         return trials
