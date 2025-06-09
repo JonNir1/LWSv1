@@ -126,9 +126,9 @@ class Trial:
         })
 
     def get_eye_movements(self, eye: DominantEyeEnum) -> pd.Series:
-        if eye == DominantEyeEnum.Left:
+        if eye == DominantEyeEnum.LEFT:
             return self._left_events
-        if eye == DominantEyeEnum.Right:
+        if eye == DominantEyeEnum.RIGHT:
             return self._right_events
         raise ValueError(f"Invalid eye: {eye}. Must be either 'left' or 'right'.")
 
@@ -233,10 +233,10 @@ class Trial:
         - from_trial_start: float - time from trial's start to the start of the fixation (in ms)
         - to_trial_end: float - time from fixation's end to the end of the trial (in ms)
         """
-        left_em = self.get_eye_movements(eye=DominantEyeEnum.Left)
+        left_em = self.get_eye_movements(eye=DominantEyeEnum.LEFT)
         left_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, left_em))
         left_fixs_df = peyes.summarize_events(left_fixs)
-        right_em = self.get_eye_movements(eye=DominantEyeEnum.Right)
+        right_em = self.get_eye_movements(eye=DominantEyeEnum.RIGHT)
         right_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, right_em))
         right_fixs_df = peyes.summarize_events(right_fixs)
         fixs_df = pd.concat(
@@ -308,7 +308,7 @@ class Trial:
     def _detect_eye_movements(self) -> Tuple[pd.DataFrame, pd.Series, pd.Series]:
         left_labels, left_events = detect_eye_movements(
             self._gaze,
-            DominantEyeEnum.Left,
+            DominantEyeEnum.LEFT,
             self._subject.screen_distance_cm,
             cnfg.DETECTOR,
             cnfg.PIXEL_SIZE_MM / 10,
@@ -316,7 +316,7 @@ class Trial:
         )
         right_labels, right_events = detect_eye_movements(
             self._gaze,
-            DominantEyeEnum.Right,
+            DominantEyeEnum.RIGHT,
             self._subject.screen_distance_cm,
             cnfg.DETECTOR,
             cnfg.PIXEL_SIZE_MM / 10,
@@ -332,8 +332,8 @@ class Trial:
         right_dists = self.calculate_target_distances(
             self._gaze[cnfg.RIGHT_X_STR].values, self._gaze[cnfg.RIGHT_Y_STR].values
         )
-        main = left_dists if self._subject.eye == DominantEyeEnum.Left else right_dists
-        second = right_dists if self._subject.eye == DominantEyeEnum.Left else left_dists
+        main = left_dists if self._subject.eye == DominantEyeEnum.LEFT else right_dists
+        second = right_dists if self._subject.eye == DominantEyeEnum.LEFT else left_dists
         dists = main.fillna(second)
         dists.index = self._gaze.index
         return dists

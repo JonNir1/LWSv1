@@ -133,7 +133,7 @@ def visits_data(
     try:
         visits_df = pd.read_pickle(path)
         if verbose:
-            print(f"Visits DataFrame loaded from {path}.")
+            print(f"Visits DataFrame loaded.")
         return visits_df
     except FileNotFoundError:
         if verbose:
@@ -227,6 +227,64 @@ def append_fixation_to_identifications(ident_data: pd.DataFrame, fixs_data: pd.D
             ident_data2.at[i, f"{eye}_{cnfg.FIXATION_STR}_{cnfg.START_TIME_STR}"] = chosen[cnfg.START_TIME_STR]
             ident_data2.at[i, f"{eye}_{cnfg.FIXATION_STR}_{cnfg.END_TIME_STR}"] = chosen[cnfg.END_TIME_STR]
             ident_data2.at[i, f"{eye}_{cnfg.FIXATION_STR}_{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"] = chosen[target]
+    return ident_data2
+
+
+def append_visit_to_identifications(ident_data: pd.DataFrame, visits_data: pd.DataFrame) -> pd.DataFrame:
+    """
+    For each target identification in the `ident_data`, finds a co-occurring visit in the `visits_data` if such exists,
+    or the closest preceding visit if not (as long as it is within time-difference of _MAX_IDENTIFICATION_FIXATION_TIME_DIFF).
+
+    Adds the following columns to the `ident_data` DataFrame:
+    - left_visit, right_visit: the visit's ID (fixation number in the trial).
+    - left_visit_start_time, right_visit_start_time: the start time of the visit.
+    - left_visit_end_time, right_visit_end_time: the end time of the visit.
+    - left_visit_target_distance, right_visit_target_distance: the visit's distance to the target (in pixels).
+    """
+    ident_data2 = ident_data.copy()
+    # add visit-related columns
+    for eye in DominantEyeEnum:
+        for col in ["", f"{cnfg.START_TIME_STR}", f"{cnfg.END_TIME_STR}", f"{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"]:
+            col_name = f"{eye}_{cnfg.VISIT_STR}_{col}".strip("_")
+            ident_data2[col_name] = np.nan
+
+    # match visits to identifications
+    for i, row in ident_data2.iterrows():
+        trial, target, ident_time = row[cnfg.TRIAL_STR], row[cnfg.TARGET_STR], row[cnfg.TIME_STR]
+        if not np.isfinite(ident_time):
+            # no identification time, skip
+            continue
+        for eye in DominantEyeEnum:
+            try:
+                trial_visits = visits_data.xs((trial, eye), level=[cnfg.TRIAL_STR, cnfg.EYE_STR])
+            except KeyError as _e:
+                # no visits in this trial for this eye, skip
+                continue
+            # check if identified during a visit
+            during = trial_visits[
+                (trial_visits[cnfg.START_TIME_STR] <= ident_time) & (ident_time <= trial_visits[cnfg.END_TIME_STR])
+                ]
+            if not during.empty:
+                # identified during a visit, take the only one
+                assert len(during) == 1
+                chosen = during.iloc[0]
+            else:
+                # not identified during a visit, find the closest preceding visit
+                delta_t = ident_time - trial_visits[cnfg.START_TIME_STR]
+                trial_visits_before = trial_visits[
+                    # only consider visits that ended before identification and within the allowed time-difference
+                    (0 <= delta_t) & (delta_t <= _MAX_IDENTIFICATION_FIXATION_TIME_DIFF)
+                    ].copy()
+                if trial_visits_before.empty:
+                    # no visits before identification, skip
+                    continue
+                trial_visits_before["delta_t"] = ident_time - trial_visits_before[cnfg.END_TIME_STR]
+                chosen = trial_visits_before.loc[trial_visits_before["delta_t"].idxmin()]
+            # write chosen fixation's data to identifications DataFrame
+            ident_data2.at[i, f"{eye}_{cnfg.VISIT_STR}"] = chosen.name[1]  # visit ID
+            ident_data2.at[i, f"{eye}_{cnfg.VISIT_STR}_{cnfg.START_TIME_STR}"] = chosen[cnfg.START_TIME_STR]
+            ident_data2.at[i, f"{eye}_{cnfg.VISIT_STR}_{cnfg.END_TIME_STR}"] = chosen[cnfg.END_TIME_STR]
+            ident_data2.at[i, f"{eye}_{cnfg.VISIT_STR}_{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"] = chosen[f"min_{cnfg.DISTANCE_STR}"]
     return ident_data2
 
 

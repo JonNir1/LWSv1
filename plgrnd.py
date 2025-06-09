@@ -40,6 +40,12 @@ visits_df = visits_data(subj, save=True, verbose=True)
 # ident_data_with_fixs = append_fixation_to_identifications(ident_data, fixations_df)
 # fig = identification_fixation_start_time_figure(ident_data_with_fixs, dominant_eye=subj.eye)
 # fig.show()
+#
+# from analysis.post_process import append_visit_to_identifications
+# from analysis.identification_figures import identification_visit_start_time_figure
+# ident_data_with_visits = append_visit_to_identifications(ident_data, visits_df)
+# fig = identification_visit_start_time_figure(ident_data_with_visits, dominant_eye=subj.eye)
+# fig.show()
 
 
 

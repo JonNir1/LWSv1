@@ -63,6 +63,32 @@ def identification_fixation_start_time_figure(
     return fig
 
 
+def identification_visit_start_time_figure(
+        ident_with_visits_data: pd.DataFrame,
+        dominant_eye: Optional[Union[DominantEyeEnum, Literal["left", "right"]]] = None,
+        drop_bads: bool = True
+) -> go.Figure:
+    identifications = ident_with_visits_data.copy()
+    colname_format = f"%s_{cnfg.VISIT_STR}_{cnfg.START_TIME_STR}"
+    if dominant_eye is None:
+        identifications[cnfg.START_TIME_STR] = ident_with_visits_data[
+            [colname_format % eye for eye in DominantEyeEnum]
+        ].min(axis=1)
+    else:
+        dominant_eye = DominantEyeEnum(dominant_eye.lower()) if isinstance(dominant_eye, str) else dominant_eye
+        identifications[cnfg.START_TIME_STR] = ident_with_visits_data[colname_format % dominant_eye.name.lower()]
+    fig = _create_figure(
+        identifications,
+        y_col=cnfg.START_TIME_STR,
+        scale=1.0 / cnfg.MILLISECONDS_IN_SECOND,  # scale to seconds
+        title="Identification-Visit's Start-Time",
+        yaxes_title="Time (s)",
+        show_individual_trials=True,
+        drop_bads=drop_bads,
+    )
+    return fig
+
+
 def _create_figure(
         ident_data: pd.DataFrame,
         y_col: str,
