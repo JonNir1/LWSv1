@@ -154,6 +154,67 @@ def identification_data(subject: Subject, save: bool = True, verbose: bool = Fal
     return ident_data
 
 
+def visits_data(
+        subject: Subject,
+        distance_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
+        save: bool = True,
+        verbose: bool = False,
+) -> pd.DataFrame:
+    """
+    Converts the fixations DataFrame into a `visits` DataFrame for a given subject. A `visit` is defined as a sequence
+    of consecutive fixations that are within a specified distance threshold (in degrees of visual angle) from the same
+    target.
+
+    The DataFrame is indexed by (trial, target, eye, visit), with columns:
+    - start_fixation, end_fixation: int - the start and end fixation IDs of the visit
+    - start_time, end_time, duration: float - the start, end, and duration of the visit (in ms)
+    - num_fixations: int - the number of fixations in the visit
+    - min_distance, max_distance: float - the minimum and maximum distance to the target during the visit (in pixels)
+    """
+    distance_threshold_dva = round(distance_threshold_dva, 1)
+    path = os.path.join(subject.out_dir, f"{cnfg.VISIT_STR}_df_{distance_threshold_dva:.1f}DVA.pkl")
+    try:
+        visits_df = pd.read_pickle(path)
+        if verbose:
+            print(f"Visits DataFrame loaded from {path}.")
+        return visits_df
+    except FileNotFoundError:
+        if verbose:
+            print(f"No visits DataFrame found. Extracting...")
+        fixations_df = _read_or_extract(subject, cnfg.FIXATION_STR, save=save, verbose=verbose)
+        visits = []
+        target_cols = [col for col in fixations_df.columns if col.startswith(f"{cnfg.TARGET_STR}_")]
+        for (trial, eye), group in fixations_df.groupby(level=[cnfg.TRIAL_STR, "eye"]):
+            group = group.reset_index().sort_values(cnfg.FIXATION_STR, inplace=False)
+            for target in target_cols:
+                on_target = group[target] < distance_threshold_dva / subject.px2deg
+                visit_id = (on_target != on_target.shift()).cumsum()
+                group["visit_group"] = np.where(on_target, visit_id, np.nan)
+                for visit_idx in group["visit_group"].dropna().unique():
+                    visit_fixs = group[group["visit_group"] == visit_idx]
+                    if visit_fixs.empty:
+                        continue
+                    visits.append({
+                        cnfg.TRIAL_STR: trial,
+                        "eye": eye,
+                        cnfg.TARGET_STR: target,
+                        cnfg.VISIT_STR: int(visit_idx),
+                        f"start_{cnfg.FIXATION_STR}": int(visit_fixs[cnfg.FIXATION_STR].iloc[0]),
+                        f"end_{cnfg.FIXATION_STR}": int(visit_fixs[cnfg.FIXATION_STR].iloc[-1]),
+                        cnfg.START_TIME_STR: visit_fixs[cnfg.START_TIME_STR].iloc[0],
+                        cnfg.END_TIME_STR: visit_fixs[cnfg.END_TIME_STR].iloc[-1],
+                        "duration": visit_fixs[cnfg.END_TIME_STR].iloc[-1] - visit_fixs[cnfg.START_TIME_STR].iloc[0],
+                        "num_fixations": len(visit_fixs),
+                        f"min_{cnfg.DISTANCE_STR}": visit_fixs[target].min(),
+                        f"max_{cnfg.DISTANCE_STR}": visit_fixs[target].max(),
+                    })
+        visits_df = pd.DataFrame(visits)
+        visits_df.set_index([cnfg.TRIAL_STR, cnfg.TARGET_STR, cnfg.EYE_STR, cnfg.VISIT_STR], inplace=True)
+    if save:
+        visits_df.to_pickle(path)
+    return visits_df
+
+
 def _read_or_extract(subject: Subject, descriptor: str, save: bool = True, verbose: bool = False) -> pd.DataFrame:
     """
     Helper function to read or generate a DataFrame for a subject's trials based on the specified descriptor.

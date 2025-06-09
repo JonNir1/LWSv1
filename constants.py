@@ -43,4 +43,6 @@ DISTANCE_STR = "distance"
 METADATA_STR = "metadata"
 FIXATION_STR = "fixation"
 IDENTIFIED_STR = "identified"
+EYE_STR = "eye"
+VISIT_STR = "visit"
 
