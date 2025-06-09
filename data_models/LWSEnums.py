@@ -2,19 +2,19 @@ from enum import Enum, IntEnum, StrEnum
 import config as cnfg
 
 class SexEnum(StrEnum):
-    Male = 'male'
-    Female = 'female'
-    Other = 'other'
+    MALE = 'male'
+    FEMALE = 'female'
+    OTHER = 'other'
 
 
 class DominantHandEnum(StrEnum):
-    Right = cnfg.RIGHT_STR
-    Left = cnfg.LEFT_STR
+    RIGHT = cnfg.RIGHT_STR
+    LEFT = cnfg.LEFT_STR
 
 
 class DominantEyeEnum(StrEnum):
-    Right = cnfg.RIGHT_STR
-    Left = cnfg.LEFT_STR
+    RIGHT = cnfg.RIGHT_STR
+    LEFT = cnfg.LEFT_STR
 
 
 class ImageCategoryEnum(IntEnum):
