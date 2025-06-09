@@ -4,6 +4,7 @@ from screeninfo import Monitor as _Monitor
 ## GENERAL ##
 MISSING_VALUE = np.nan
 DATE_TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
+MILLISECONDS_IN_SECOND = 1000
 
 ## TOBII SCREEN TOBII_MONITOR ##
 TOBII_MONITOR = _Monitor(
@@ -41,3 +42,16 @@ IS_RECORDING_STR = "is_recording"
 DISTANCE_STR = "distance"
 METADATA_STR = "metadata"
 FIXATION_STR = "fixation"
+
+
+## VISUALIZATION ##
+FONT_FAMILY, FONT_COLOR = "Calibri", "black"
+TITLE_FONT = dict(family=FONT_FAMILY, size=26, color=FONT_COLOR)
+SUBTITLE_FONT = dict(family=FONT_FAMILY, size=20, color=FONT_COLOR)
+AXIS_LABEL_FONT = dict(family=FONT_FAMILY, size=20, color=FONT_COLOR)
+AXIS_TICK_FONT = dict(family=FONT_FAMILY, size=18, color=FONT_COLOR)
+AXIS_LABEL_STANDOFF = 2
+
+GRID_LINE_COLOR, GRID_LINE_WIDTH = "lightgray", 1
+ZERO_LINE_WIDTH = 2 * GRID_LINE_WIDTH
+
