@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional, Union, Literal
 
 import numpy as np
 import pandas as pd
@@ -7,7 +7,7 @@ from plotly.subplots import make_subplots
 
 import config as cnfg
 import analysis.statistics as stat
-from data_models.LWSEnums import ImageCategoryEnum, SearchArrayTypeEnum
+from data_models.LWSEnums import ImageCategoryEnum, SearchArrayTypeEnum, DominantEyeEnum
 
 
 def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) -> go.Figure:
@@ -30,6 +30,30 @@ def time_to_identification_figure(ident_data: pd.DataFrame, drop_bads: bool = Tr
         y_col=cnfg.TIME_STR,
         scale=1.0 / cnfg.MILLISECONDS_IN_SECOND,  # scale to seconds
         title="Time of Target Identification",
+        yaxes_title="Time (s)",
+        show_individual_trials=True,
+        drop_bads=drop_bads,
+    )
+    return fig
+
+
+def identification_fixation_start_time_figure(
+        ident_data: pd.DataFrame,
+        dominant_eye: Optional[Union[DominantEyeEnum, Literal["left", "right"]]] = None,
+        drop_bads: bool = True
+) -> go.Figure:
+    identifications = ident_data.copy()
+    colname_format = f"%s_{cnfg.FIXATION_STR}_{cnfg.START_TIME_STR}"
+    if dominant_eye is None:
+        identifications[cnfg.START_TIME_STR] = ident_data[[colname_format % eye for eye in DominantEyeEnum]].min(axis=1)
+    else:
+        dominant_eye = DominantEyeEnum(dominant_eye.lower()) if isinstance(dominant_eye, str) else dominant_eye
+        identifications[cnfg.START_TIME_STR] = ident_data[colname_format % dominant_eye.name.lower()]
+    fig = _create_figure(
+        identifications,
+        y_col=cnfg.START_TIME_STR,
+        scale=1.0 / cnfg.MILLISECONDS_IN_SECOND,  # scale to seconds
+        title="Identification-Fixation's Start-Time",
         yaxes_title="Time (s)",
         show_individual_trials=True,
         drop_bads=drop_bads,
