@@ -17,35 +17,28 @@ pio.renderers.default = "browser"
 subj = Subject.from_pickle(exp_name=cnfg.EXPERIMENT_NAME, subject_id=1,)
 
 ## process subject data
-from analysis.post_process import process_trials, identification_data, visits_data
-metadata, actions, targets_df, fixations_df = process_trials(subj, save=True, verbose=True)
-ident_data = identification_data(subj, save=True, verbose=True)
-visits_df = visits_data(subj, save=True, verbose=True)
+from analysis.data_io import get_identifications, get_fixations, get_visits, get_targets
+identifications_df = get_identifications(subj, save=True, verbose=True)
+fixations_df = get_fixations(subj, save=True, verbose=True)
+visits_df = get_visits(subj, save=True, verbose=True)
+targets_df = get_targets(subj, save=True, verbose=True)
 
 
-# ### Identification Figures ###
-# from analysis.data_io import identification_data
-# ident_data = identification_data(subj, save=True)
-#
-# from analysis.identification_figures import percent_identified_figure
-# fig = percent_identified_figure(ident_data)
-# fig.show()
-#
-# from analysis.identification_figures import time_to_identification_figure
-# fig = time_to_identification_figure(ident_data)
-# fig.show()
-#
-# from analysis.post_process import append_fixation_to_identifications
-# from analysis.identification_figures import identification_fixation_start_time_figure
-# ident_data_with_fixs = append_fixation_to_identifications(ident_data, fixations_df)
-# fig = identification_fixation_start_time_figure(ident_data_with_fixs, dominant_eye=subj.eye)
-# fig.show()
-#
-# from analysis.post_process import append_visit_to_identifications
-# from analysis.identification_figures import identification_visit_start_time_figure
-# ident_data_with_visits = append_visit_to_identifications(ident_data, visits_df)
-# fig = identification_visit_start_time_figure(ident_data_with_visits, dominant_eye=subj.eye)
-# fig.show()
+### Identification Figures ###
+from analysis.identification_figures import percent_identified_figure
+fig = percent_identified_figure(identifications_df)
+fig.show()
+
+from analysis.identification_figures import time_to_identification_figure
+fig = time_to_identification_figure(identifications_df)
+fig.show()
+
+from analysis.identification_figures import identification_event_start_time_figure
+fig = identification_event_start_time_figure(identifications_df, fixations_df, cnfg.FIXATION_STR, dominant_eye=subj.eye)
+fig.show()
+
+fig = identification_event_start_time_figure(identifications_df, visits_df, cnfg.VISIT_STR, dominant_eye=subj.eye)
+fig.show()
 
 
 

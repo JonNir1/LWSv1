@@ -9,6 +9,8 @@ import config as cnfg
 import analysis.statistics as stat
 from data_models.LWSEnums import ImageCategoryEnum, SearchArrayTypeEnum, DominantEyeEnum
 
+_MAX_IDENTIFICATION_FIXATION_TIME_DIFF = 200    # ms; max allowed time-diff between target identification and fixation end time
+
 
 def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) -> go.Figure:
     fig = _create_figure(
@@ -30,6 +32,39 @@ def time_to_identification_figure(ident_data: pd.DataFrame, drop_bads: bool = Tr
         y_col=cnfg.TIME_STR,
         scale=1.0 / cnfg.MILLISECONDS_IN_SECOND,  # scale to seconds
         title="Time of Target Identification",
+        yaxes_title="Time (s)",
+        show_individual_trials=True,
+        drop_bads=drop_bads,
+    )
+    return fig
+
+
+def identification_event_start_time_figure(
+        ident_data: pd.DataFrame,
+        event_data: pd.DataFrame,
+        event_type: Literal['fixation', 'visit'],
+        dominant_eye: Optional[Union[DominantEyeEnum, Literal["left", "right"]]] = None,
+        drop_bads: bool = True
+) -> go.Figure:
+    # prepare the data
+    identifications_with_events = _append_to_identifications(ident_data, event_data, event_type)
+    colname_format = f"%s_{event_type.lower()}_{cnfg.START_TIME_STR}"
+    if dominant_eye is None:
+        identifications_with_events[cnfg.START_TIME_STR] = identifications_with_events[
+            [colname_format % eye for eye in DominantEyeEnum]
+        ].min(axis=1)
+    else:
+        dominant_eye = DominantEyeEnum(dominant_eye.lower()) if isinstance(dominant_eye, str) else dominant_eye
+        identifications_with_events[cnfg.START_TIME_STR] = identifications_with_events[
+            colname_format % dominant_eye.name.lower()
+        ]
+
+    # create the figure
+    fig = _create_figure(
+        identifications_with_events,
+        y_col=cnfg.START_TIME_STR,
+        scale=1.0 / cnfg.MILLISECONDS_IN_SECOND,  # scale to seconds
+        title=f"Identification's {event_type.title()} Start-Time",
         yaxes_title="Time (s)",
         show_individual_trials=True,
         drop_bads=drop_bads,
@@ -223,3 +258,60 @@ def _apply_layout_format(
     )
     return fig
 
+
+def _append_to_identifications(
+        identifications: pd.DataFrame, events: pd.DataFrame, event_type: Literal['fixation', 'visit']
+) -> pd.DataFrame:
+    event_type = event_type
+    if event_type not in [cnfg.FIXATION_STR, cnfg.VISIT_STR]:
+        raise ValueError(
+            f"Invalid event_type: {event_type}. Must be `{cnfg.FIXATION_STR}` or `{cnfg.VISIT_STR}`."
+        )
+    # add columns to identifications DataFrame
+    new_identifications = identifications.copy()
+    for eye in DominantEyeEnum:
+        for col in ["", f"{cnfg.START_TIME_STR}", f"{cnfg.END_TIME_STR}", f"{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"]:
+            col_name = f"{eye}_{event_type}_{col}".strip("_")
+            new_identifications[col_name] = np.nan
+
+    # match event data to identifications
+    for i, row in new_identifications.iterrows():
+        trial, target, ident_time = row[cnfg.TRIAL_STR], row[cnfg.TARGET_STR], row[cnfg.TIME_STR]
+        if not np.isfinite(ident_time):
+            # no identification time, skip
+            continue
+        for eye in DominantEyeEnum:
+            try:
+                trial_events = events.xs((trial, eye), level=[cnfg.TRIAL_STR, cnfg.EYE_STR])
+            except KeyError as _e:
+                # no events in this trial for this eye, skip
+                continue
+            # check if identified during an event
+            during = trial_events[
+                (trial_events[cnfg.START_TIME_STR] <= ident_time) & (ident_time <= trial_events[cnfg.END_TIME_STR])
+            ]
+            if not during.empty:
+                # identified during an event, take the only one
+                assert len(during) == 1
+                chosen = during.iloc[0]
+            else:
+                # not identified during an event, find the closest preceding event
+                delta_t = ident_time - trial_events[cnfg.START_TIME_STR]
+                trial_events_before = trial_events[
+                    # only consider visits that ended before identification and within the allowed time-difference
+                    (0 <= delta_t) & (delta_t <= _MAX_IDENTIFICATION_FIXATION_TIME_DIFF)
+                ].copy()
+                if trial_events_before.empty:
+                    # no events before identification, skip
+                    continue
+                trial_events_before["delta_t"] = ident_time - trial_events_before[cnfg.END_TIME_STR]
+                chosen = trial_events_before.loc[trial_events_before["delta_t"].idxmin()]
+
+            # write chosen event's data to identifications DataFrame
+            event_id = chosen.name if event_type == cnfg.FIXATION_STR else chosen.name[1]  # fixation ID or visit ID
+            new_identifications.at[i, f"{eye}_{cnfg.VISIT_STR}"] = event_id
+            new_identifications.at[i, f"{eye}_{cnfg.VISIT_STR}_{cnfg.START_TIME_STR}"] = chosen[cnfg.START_TIME_STR]
+            new_identifications.at[i, f"{eye}_{cnfg.VISIT_STR}_{cnfg.END_TIME_STR}"] = chosen[cnfg.END_TIME_STR]
+            distance_col = target if event_type == cnfg.FIXATION_STR else f"min_{cnfg.DISTANCE_STR}"
+            new_identifications.at[i, f"{eye}_{cnfg.VISIT_STR}_{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"] = chosen[distance_col]
+    return new_identifications
