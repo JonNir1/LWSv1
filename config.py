@@ -24,7 +24,11 @@ _DETECTION_ALGORITHM = "Engbert"
 _MIN_EVENT_DURATION_MS = 5
 _PAD_BLINKS_MS = 0
 DETECTOR = peyes.create_detector(_DETECTION_ALGORITHM, MISSING_VALUE, _MIN_EVENT_DURATION_MS, _PAD_BLINKS_MS)
+
+
+## Analysis Parameters ##
 ON_TARGET_THRESHOLD_DVA = 1.0   # threshold to determine if a gaze point / fixation is on a target, in degrees of visual angle
+CHUNKING_TEMPORAL_WINDOW_MS = 200       # temporal window for considering two events as part of the same chunk, in milliseconds
 
 
 ## Parsing Fields ##
