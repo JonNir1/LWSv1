@@ -1,12 +1,9 @@
-import os
 from enum import Enum
 from typing import Type
 
 import pandas as pd
-from tqdm import tqdm
 
 import config as cnfg
-from data_models.Subject import Subject
 
 TRIAL_TYPE_STR = f"{cnfg.TRIAL_STR}_type"
 TARGET_CATEGORY_STR = f"{cnfg.TARGET_STR}_{cnfg.CATEGORY_STR}"
