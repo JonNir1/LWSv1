@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 import warnings
-from typing import Tuple
+from typing import Tuple, List
 
 import numpy as np
 import pandas as pd
@@ -17,7 +17,6 @@ _FIXATION_LABEL = peyes.parse_label(cnfg.FIXATION_STR)
 _REDUNDANT_FIXATION_FEATURES = [
     'label', 'distance', 'velocity', 'amplitude', 'azimuth', 'dispersion', 'area', 'is_outlier'
 ]
-_MAX_GAZE_TO_TRIGGER_TIME_DIFF = 10  # in ms    # Maximum allowed time difference between gaze and trigger events for them to be considered as part of the same event.
 _BAD_SUBJECT_ACTIONS = [
     SubjectActionTypesEnum.MARK_ONLY, SubjectActionTypesEnum.ATTEMPTED_MARK, SubjectActionTypesEnum.MARK_AND_REJECT
 ]
@@ -93,9 +92,8 @@ class Trial:
 
     @property
     def is_bad(self) -> bool:
-        """ Returns True if the trial is considered 'bad', i.e. contains bad subject actions. """
-        # TODO: add logic to exclude more trials
-        return bool(np.isin(self.get_actions()[cnfg.ACTION_STR], _BAD_SUBJECT_ACTIONS).any())
+        """ Returns True if the trial is considered 'bad', i.e. `self.get_bad_trial_reasons` is not empty. """
+        return len(self.get_bad_trial_reasons()) > 0
 
     @staticmethod
     def is_in_bottom_strip(p: Tuple[float, float]) -> bool:
@@ -122,8 +120,22 @@ class Trial:
             "trial_type": self.trial_type,
             "duration": self.end_time - self.start_time,
             "num_targets": len(self._search_array.targets),
-            "is_bad": self.is_bad,
+            f"bad_{cnfg.TRIAL_STR}": self.is_bad,
         })
+
+    def get_bad_trial_reasons(self) -> List[str]:
+        # TODO: add logic to exclude more trials
+        reasons = []
+        # bad actions - subjects performed actions that disqualify the trial
+        has_bad_actions = bool(np.isin(self.get_actions()[cnfg.ACTION_STR], _BAD_SUBJECT_ACTIONS).any())
+        if has_bad_actions:
+            reasons.append(f"bad_{cnfg.ACTION_STR}")
+        # false positives - subject identifying a target but looking at a non-target
+        ident_data = self.get_target_identification_data()
+        ident_dists = ident_data.loc[np.isfinite(ident_data[cnfg.TIME_STR]), f"{cnfg.DISTANCE_STR}_px"]
+        if not ident_dists.empty and (ident_dists * self.px2deg > cnfg.ON_TARGET_THRESHOLD_DVA).any():
+            reasons.append("false_positive_identification")
+        return reasons
 
     def get_eye_movements(self, eye: DominantEyeEnum) -> pd.Series:
         if eye == DominantEyeEnum.LEFT:
@@ -131,26 +143,6 @@ class Trial:
         if eye == DominantEyeEnum.RIGHT:
             return self._right_events
         raise ValueError(f"Invalid eye: {eye}. Must be either 'left' or 'right'.")
-
-    def calculate_target_distances(self, x: np.ndarray, y: np.ndarray,) -> pd.DataFrame:
-        """
-        Calculate the pixel-distance from each X-Y coordinate to each target in the search array.
-        :param x: 1D array of X coordinates with shape (N,) or (N, 1) or (1, N)
-        :param y: 1D array of Y coordinates with shape (N,) or (N, 1) or (1, N)
-        :return: a (num_coords, num_targets) DataFrame with the distances from each coordinate to each target.
-        """
-        x = hlp.flatten_or_raise(x)
-        y = hlp.flatten_or_raise(y)
-        if x.shape != y.shape:
-            raise ValueError(f"Input arrays must have the same shape. Got {x.shape} and {y.shape}.")
-        coords = np.column_stack((x, y))                    # shape (n_coords, 2)
-        target_coords = np.array([(img.x, img.y) for img in self._search_array.targets])  # shape (n_targets, 2)
-        dists = np.empty((len(coords), len(target_coords)), dtype=float)
-        for i, (cx, cy) in enumerate(coords):
-            for j, (tx, ty) in enumerate(target_coords):
-                dists[i, j] = hlp.distance((cx, cy), (tx, ty), 'px',)
-        dists = pd.DataFrame(dists, columns=[f"{cnfg.TARGET_STR}_{i}" for i in range(target_coords.shape[0])])
-        return dists
 
     def get_target_identification_data(self) -> pd.DataFrame:
         """
@@ -172,10 +164,10 @@ class Trial:
         """
         # extract gaze on target identification
         identification_triggers = self._triggers[
-            self._triggers[cnfg.ACTION_STR] == SubjectActionTypesEnum.MARK_AND_CONFIRM
+            self._triggers[cnfg.ACTION_STR] == SubjectActionTypesEnum.MARK_AND_CONFIRM  # TODO: consider MARK_ONLY actions as well?
             ].reset_index(drop=True)
         gaze_when_ident = self._gaze.loc[hlp.closest_indices(
-            self._gaze['time'], identification_triggers['time'], threshold=_MAX_GAZE_TO_TRIGGER_TIME_DIFF
+            self._gaze['time'], identification_triggers['time'], threshold=cnfg.MAX_GAZE_TO_TRIGGER_TIME_DIFF
         )].reset_index(drop=True)
 
         # calculate minimal distance from targets
@@ -226,12 +218,13 @@ class Trial:
         - center-pixel: tuple (x, y) - the mean pixel coordinates of the fixation
         - pixel_std: tuple (x, y) - the standard deviation of the pixel coordinates of the fixation
         - outlier_reasons: List[str] - reasons for the fixation being an outlier (or [] if not and outlier)
+        - to_trial_end: float - time from fixation's end to the end of the trial (in ms)
         - target_0, target_1, ...: float - pixel-distances to each target in the trial
+        - closest_target: str - the name of the closest target to the fixation
         - all_marked: List[str] - all targets that were identified previously or during the current fixation
         - curr_marked: str - the target that was identified during the current fixation (or None)
         - in_strip: bool - whether the fixation is in the bottom strip of the trial
-        - from_trial_start: float - time from trial's start to the start of the fixation (in ms)
-        - to_trial_end: float - time from fixation's end to the end of the trial (in ms)
+        - next_1_in_strip, next_2_in_strip, next_3_in_strip: bool - whether the next 1, 2, or 3 fixations are in the bottom strip
         """
         left_em = self.get_eye_movements(eye=DominantEyeEnum.LEFT)
         left_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, left_em))
@@ -250,10 +243,14 @@ class Trial:
             inplace=True, errors='ignore'
         )
 
+        # calculate the time to trial's end
+        time_to_trial_end = fixs_df[cnfg.END_TIME_STR].map(lambda t: self.end_time - t).rename("to_trial_end")
+
         # calculate distances from fixations to targets
         center_pixels = np.vstack(fixs_df['center_pixel'].values)
-        dists = self.calculate_target_distances(center_pixels[:, 0], center_pixels[:, 1])
+        dists = self._calculate_target_distances(center_pixels[:, 0], center_pixels[:, 1])
         dists.index = fixs_df.index
+        dists[f"closest_{cnfg.TARGET_STR}"] = dists.idxmin(axis=1)  # add a column with the name of the closest target to each fixation
 
         # see if a target was marked during the current fixation
         target_identification_data = self.get_target_identification_data()  # targets' identification time
@@ -282,15 +279,33 @@ class Trial:
         curr_and_prior_marked = is_end_after.apply(lambda row: set(row.index[row]), axis=1).rename("all_marked")
 
         # checks if the fixation is in the bottom strip of the trial
-        in_strip = fixs_df['center_pixel'].map(lambda p: self.is_in_bottom_strip(p)).rename("in_strip")
+        def is_k_next_in_strip(in_strip: pd.Series, max_k: int = 3) -> pd.DataFrame:
+            """
+            For each fixation, checks if the next 1,...,k fixations are in the bottom strip.
+            Returns a boolean DataFrame with columns `next_1_in_strip`, `next_2_in_strip`, ..., `next_k_in_strip`.
+            """
+            assert isinstance(in_strip.index, pd.MultiIndex), f"Expected MultiIndex with ({cnfg.EYE_STR}, {cnfg.FIXATION_STR}) levels."
+            result_parts = []
+            for _eye, group in in_strip.groupby(level=cnfg.EYE_STR):
+                group = group.reset_index().sort_values(cnfg.FIXATION_STR, inplace=False)
+                block = pd.DataFrame(index=group.index)
+                for k in range(1, max_k + 1):
+                    next_k_in_strip = group["in_strip"].shift(-k)
+                    next_k_in_strip.loc[next_k_in_strip.isna()] = False  # fill nans with False, avoid pd.future_warning
+                    block[f"next_{k}_{in_strip.name}".strip("_")] = next_k_in_strip
+                block.index = group.set_index([cnfg.EYE_STR, cnfg.FIXATION_STR]).index
+                result_parts.append(block)
+            # concatenate results and return
+            result = pd.concat(result_parts).sort_index()
+            result.index = in_strip.index   # enforce alignment with the original index
+            return result
 
-        # calculate the time from trial's start and to its end
-        time_from_trial_start = fixs_df[cnfg.START_TIME_STR].map(lambda t: t - self.start_time).rename("from_trial_start")
-        time_to_trial_end = fixs_df[cnfg.END_TIME_STR].map(lambda t: self.end_time - t).rename("to_trial_end")
+        in_strip = fixs_df['center_pixel'].map(lambda p: self.is_in_bottom_strip(p)).rename("in_strip")
+        next3_in_strip = is_k_next_in_strip(in_strip, max_k=3)  # check if the next 3 fixations are in the strip
 
         # concatenate all data into a single DataFrame
         fixs_df = pd.concat([
-            fixs_df, dists, curr_marked, curr_and_prior_marked, in_strip, time_from_trial_start, time_to_trial_end
+            fixs_df, dists, time_to_trial_end, curr_marked, curr_and_prior_marked, in_strip, next3_in_strip
         ], axis=1)
         return fixs_df
 
@@ -326,16 +341,36 @@ class Trial:
         return labels, left_events, right_events
 
     def _calculate_gaze_target_distances(self,) -> pd.DataFrame:
-        left_dists = self.calculate_target_distances(
+        left_dists = self._calculate_target_distances(
             self._gaze[cnfg.LEFT_X_STR].values, self._gaze[cnfg.LEFT_Y_STR].values
         )
-        right_dists = self.calculate_target_distances(
+        right_dists = self._calculate_target_distances(
             self._gaze[cnfg.RIGHT_X_STR].values, self._gaze[cnfg.RIGHT_Y_STR].values
         )
         main = left_dists if self._subject.eye == DominantEyeEnum.LEFT else right_dists
         second = right_dists if self._subject.eye == DominantEyeEnum.LEFT else left_dists
         dists = main.fillna(second)
         dists.index = self._gaze.index
+        return dists
+
+    def _calculate_target_distances(self, x: np.ndarray, y: np.ndarray,) -> pd.DataFrame:
+        """
+        Calculate the pixel-distance from each X-Y coordinate to each target in the search array.
+        :param x: 1D array of X coordinates with shape (N,) or (N, 1) or (1, N)
+        :param y: 1D array of Y coordinates with shape (N,) or (N, 1) or (1, N)
+        :return: a (num_coords, num_targets) DataFrame with the distances from each coordinate to each target.
+        """
+        x = hlp.flatten_or_raise(x)
+        y = hlp.flatten_or_raise(y)
+        if x.shape != y.shape:
+            raise ValueError(f"Input arrays must have the same shape. Got {x.shape} and {y.shape}.")
+        coords = np.column_stack((x, y))                    # shape (n_coords, 2)
+        target_coords = np.array([(img.x, img.y) for img in self._search_array.targets])  # shape (n_targets, 2)
+        dists = np.empty((len(coords), len(target_coords)), dtype=float)
+        for i, (cx, cy) in enumerate(coords):
+            for j, (tx, ty) in enumerate(target_coords):
+                dists[i, j] = hlp.distance((cx, cy), (tx, ty), 'px',)
+        dists = pd.DataFrame(dists, columns=[f"{cnfg.TARGET_STR}_{i}" for i in range(target_coords.shape[0])])
         return dists
 
     def __eq__(self, other) -> bool:

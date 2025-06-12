@@ -17,31 +17,47 @@ pio.renderers.default = "browser"
 subj = Subject.from_pickle(exp_name=cnfg.EXPERIMENT_NAME, subject_id=1,)
 
 ## process subject data
-from analysis.data_io import get_identifications, get_fixations, get_visits, get_targets
+from analysis.data_io import get_identifications, get_fixations, get_visits
 identifications_df = get_identifications(subj, save=True, verbose=True)
-fixations_df = get_fixations(subj, save=True, verbose=True)
+fixations_df = get_fixations(subj, save=True, verbose=True, include_outliers=False)
 visits_df = get_visits(subj, save=True, verbose=True)
-targets_df = get_targets(subj, save=True, verbose=True)
-
-
-### Identification Figures ###
-from analysis.identification_figures import percent_identified_figure
-fig = percent_identified_figure(identifications_df)
-fig.show()
-
-from analysis.identification_figures import time_to_identification_figure
-fig = time_to_identification_figure(identifications_df)
-fig.show()
-
-from analysis.identification_figures import identification_event_start_time_figure
-fig = identification_event_start_time_figure(identifications_df, fixations_df, cnfg.FIXATION_STR, dominant_eye=subj.eye)
-fig.show()
-
-fig = identification_event_start_time_figure(identifications_df, visits_df, cnfg.VISIT_STR, dominant_eye=subj.eye)
-fig.show()
 
 
 
+fixations = fixations_df.rename(columns={f"closest_{cnfg.TARGET_STR}": cnfg.TARGET_STR}).set_index(cnfg.TARGET_STR, append=True)
+
+
+# ### Single-Subject Identification Figures ###
+#
+# # identification (space-key hit) rate, time, distance
+# from analysis.within_subject_figures.identification_figures import identification_rate_figure
+# fig = identification_rate_figure(identifications_df)
+# fig.show()
+#
+# from analysis.within_subject_figures.identification_figures import identification_time_figure
+# fig = identification_time_figure(identifications_df)
+# fig.show()
+#
+# from analysis.within_subject_figures.identification_figures import identification_distance_figure
+# fig = identification_distance_figure(identifications_df, subj.px2deg)
+# fig.show()
+#
+# # identification-event start-time
+# from analysis.within_subject_figures.identification_figures import identification_event_start_time_figure
+# fig = identification_event_start_time_figure(identifications_df, fixations_df, cnfg.FIXATION_STR, dominant_eye=subj.eye)
+# fig.show()
+#
+# fig = identification_event_start_time_figure(identifications_df, visits_df, cnfg.VISIT_STR, dominant_eye=subj.eye)
+# fig.show()
+#
+#
+# # identification-event distance from targets
+# from analysis.within_subject_figures.identification_figures import identification_event_distance_figure
+# fig = identification_event_distance_figure(identifications_df, fixations_df, cnfg.FIXATION_STR, subj.px2deg, dominant_eye=subj.eye)
+# fig.show()
+#
+# fig = identification_event_distance_figure(identifications_df, visits_df, cnfg.VISIT_STR, subj.px2deg, dominant_eye=subj.eye)
+# fig.show()
 
 
 
@@ -49,17 +65,8 @@ fig.show()
 
 
 
-# fixations where target was marked
-
-curr_marked = fixations_df[fixations_df['curr_marked'].notnull()]
-curr_marked = curr_marked.drop(columns=["all_marked", "in_strip"], inplace=False)
-curr_marked = curr_marked.reset_index(drop=False)
 
 
-target_distances = curr_marked[[col for col in curr_marked.columns if col.startswith(cnfg.TARGET_STR)]]
-
-
-curr_marked = curr_marked.rename(columns={"curr_marked": cnfg.TARGET_STR})
 
 
 

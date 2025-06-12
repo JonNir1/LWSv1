@@ -40,3 +40,10 @@ class SubjectActionTypesEnum(IntEnum):
     MARK_ONLY = 2
     ATTEMPTED_MARK = 3
     MARK_AND_REJECT = 4
+
+
+class TargetVisitTypeEnum(StrEnum):
+    OTHER = 'other'
+    BEFORE = 'before'
+    MARKING = 'marking'
+    AFTER = 'after'

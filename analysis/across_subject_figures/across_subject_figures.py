@@ -15,8 +15,8 @@ _TARGET_CATEGORY_STR = f"{cnfg.TARGET_STR}_{cnfg.CATEGORY_STR}"
 def percent_bad_trials_figure(ident_data: pd.DataFrame,) -> go.Figure:
     # TODO: this is only interesting as a comparison across subjects, not per subject.
     """ Creates a figure showing the percentage of bad trials. """
-    sub_data = ident_data[[cnfg.TRIAL_STR, _TRIAL_TYPE_STR, "is_bad"]].drop_duplicates().set_index(cnfg.TRIAL_STR)
-    sub_data["is_bad"] = sub_data["is_bad"].astype(int)     # convert to int for calculating percentage
+    sub_data = ident_data[[cnfg.TRIAL_STR, _TRIAL_TYPE_STR, f"bad_{cnfg.TRIAL_STR}"]].drop_duplicates().set_index(cnfg.TRIAL_STR)
+    sub_data[f"bad_{cnfg.TRIAL_STR}"] = sub_data[f"bad_{cnfg.TRIAL_STR}"].astype(int)     # convert to int for calculating percentage
     bad_trials = _calculate_rate_per_trial_type(sub_data)
     fig = px.bar(
         bad_trials, x=_TRIAL_TYPE_STR, y='mean', color=_TRIAL_TYPE_STR, error_y='sem',
@@ -35,7 +35,7 @@ def _target_identification_data(targets_df: pd.DataFrame, metadata_df: pd.DataFr
     # TODO: add fixation start-time and time from trial start, for the identification fixation
     ident_data = pd.merge(
         targets_df[[cnfg.TIME_STR, f"{cnfg.TARGET_STR}_{cnfg.CATEGORY_STR}"]],
-        metadata_df[[f"{cnfg.TRIAL_STR}_type", "is_bad"]],
+        metadata_df[[f"{cnfg.TRIAL_STR}_type", f"bad_{cnfg.TRIAL_STR}"]],
         left_index=True, right_index=True, how='left'
     ).reset_index(drop=False)
     ident_data.rename(columns={"level_1": cnfg.TARGET_STR}, inplace=True)

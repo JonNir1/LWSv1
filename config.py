@@ -27,8 +27,9 @@ DETECTOR = peyes.create_detector(_DETECTION_ALGORITHM, MISSING_VALUE, _MIN_EVENT
 
 
 ## Analysis Parameters ##
-ON_TARGET_THRESHOLD_DVA = 1.0   # threshold to determine if a gaze point / fixation is on a target, in degrees of visual angle
-CHUNKING_TEMPORAL_WINDOW_MS = 200       # temporal window for considering two events as part of the same chunk, in milliseconds
+MAX_GAZE_TO_TRIGGER_TIME_DIFF = 20  # in ms    # Maximum allowed time difference between gaze and trigger events for them to be considered as part of the same event.
+ON_TARGET_THRESHOLD_DVA = 1.0       # threshold to determine if a gaze point / fixation is on a target, in degrees of visual angle
+CHUNKING_TEMPORAL_WINDOW_MS = 200   # temporal window for considering two events as part of the same chunk, in milliseconds
 
 
 ## Parsing Fields ##

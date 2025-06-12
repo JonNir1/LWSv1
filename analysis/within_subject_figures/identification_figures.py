@@ -10,7 +10,7 @@ import analysis.statistics as stat
 from data_models.LWSEnums import ImageCategoryEnum, SearchArrayTypeEnum, DominantEyeEnum
 
 
-def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) -> go.Figure:
+def identification_rate_figure(ident_data: pd.DataFrame, drop_bads: bool = True) -> go.Figure:
     fig = _create_figure(
         ident_data,
         y_col=cnfg.IDENTIFIED_STR,
@@ -24,15 +24,42 @@ def percent_identified_figure(ident_data: pd.DataFrame, drop_bads: bool = True) 
     return fig
 
 
-def time_to_identification_figure(ident_data: pd.DataFrame, drop_bads: bool = True) -> go.Figure:
+def identification_time_figure(ident_data: pd.DataFrame, drop_bads: bool = True) -> go.Figure:
+    ident_data2 = ident_data.copy()
+    ident_data2.loc[~ident_data[cnfg.IDENTIFIED_STR].values, cnfg.TIME_STR] = np.nan  # set not-identified times to NaN to avoid inf-points in the plot
     fig = _create_figure(
-        ident_data,
+        ident_data2,
         y_col=cnfg.TIME_STR,
         scale=1.0 / cnfg.MILLISECONDS_IN_SECOND,  # scale to seconds
         title="Time of Target Identification",
         yaxes_title="Time (s)",
         show_individual_trials=True,
         drop_bads=drop_bads,
+    )
+    return fig
+
+
+def identification_distance_figure(
+        ident_data: pd.DataFrame, px2deg: float, drop_bads: bool = True
+) -> go.Figure:
+    assert px2deg >= 0, f"`px2deg` must be a non-negative float, got {px2deg}."
+    dist_col = f"{cnfg.DISTANCE_STR}_px"
+    ident_data2 = ident_data.copy()
+    ident_data2.loc[~ident_data[cnfg.IDENTIFIED_STR].values, dist_col] = np.nan  # set not-identified distances to NaN to avoid inf-points in the plot
+    fig = _create_figure(
+        ident_data2,
+        y_col=dist_col,
+        scale=px2deg,   # scale to DVA
+        title="Distance to Target at Identification",
+        yaxes_title="Distance (DVA)",
+        show_individual_trials=True,
+        drop_bads=drop_bads,
+    )
+    fig.add_hline(  # mark the on-target threshold
+        row=1, col=1, y=cnfg.ON_TARGET_THRESHOLD_DVA,
+        line=dict(dash="dash", color="gray", width=1.5),
+        annotation=dict(text="On-Target Threshold", font=cnfg.AXIS_LABEL_FONT, showarrow=False,),
+        annotation_position="top left",
     )
     return fig
 
@@ -71,6 +98,45 @@ def identification_event_start_time_figure(
     return fig
 
 
+def identification_event_distance_figure(
+        ident_data: pd.DataFrame,
+        event_data: pd.DataFrame,
+        event_type: Literal['fixation', 'visit'],
+        px2deg: float,
+        temporal_window: float = cnfg.CHUNKING_TEMPORAL_WINDOW_MS,
+        dominant_eye: Optional[Union[DominantEyeEnum, Literal["left", "right"]]] = None,
+        drop_bads: bool = True
+) -> go.Figure:
+    assert px2deg >= 0, f"`px2deg` must be a non-negative float, got {px2deg}."
+    # prepare the data
+    identifications_with_events = _append_to_identifications(ident_data, event_data, event_type, temporal_window)
+    target_distance_str = f"{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"
+    colname_format = f"%s_{event_type.lower()}_{target_distance_str}"
+    if dominant_eye is None:
+        identifications_with_events[target_distance_str] = identifications_with_events[
+            [colname_format % eye for eye in DominantEyeEnum]
+        ].min(axis=1)
+    else:
+        dominant_eye = DominantEyeEnum(dominant_eye.lower()) if isinstance(dominant_eye, str) else dominant_eye
+        identifications_with_events[target_distance_str] = identifications_with_events[
+            colname_format % dominant_eye.name.lower()
+        ]
+    # set not-identified distances to NaN to avoid inf-points in the plot
+    identifications_with_events.loc[~ident_data[cnfg.IDENTIFIED_STR].values, target_distance_str] = np.nan
+
+    # create the figure
+    fig = _create_figure(
+        identifications_with_events,
+        y_col=target_distance_str,
+        scale=px2deg,   # scale to DVA
+        title=f"Identification's {event_type.title()} Distance to Target",
+        yaxes_title="Distance (DVA)",
+        show_individual_trials=True,
+        drop_bads=drop_bads,
+    )
+    return fig
+
+
 def _create_figure(
         ident_data: pd.DataFrame,
         y_col: str,
@@ -101,7 +167,7 @@ def _create_figure(
         for trace in category_traces:
             fig.add_trace(row=1, col=1, trace=trace)
     if drop_bads:
-        ident_data = ident_data[~ident_data["is_bad"].astype(bool)]
+        ident_data = ident_data[~ident_data[f"bad_{cnfg.TRIAL_STR}"].astype(bool)]
     # Bottom Left: by trial type (bar plot)
     fig.add_trace(
         row=2, col=1,
@@ -129,14 +195,14 @@ def _create_figure(
 def _create_trial_summary_trace(
         data: pd.DataFrame, col_name: str, scale: float = 1.0
 ) -> go.Scatter:
-    summary = data.groupby([cnfg.TRIAL_STR, "is_bad"])[col_name].mean().reset_index()
+    summary = data.groupby([cnfg.TRIAL_STR, f"bad_{cnfg.TRIAL_STR}"])[col_name].mean().reset_index()
     scatter = go.Scatter(
         x=summary[cnfg.TRIAL_STR], y=summary[col_name] * scale, name='mean',
         mode='markers+lines',
         marker=dict(
             size=10, opacity=1.0,
-            color=summary["is_bad"].map(lambda bad: 'red' if bad else 'black'),
-            symbol=summary["is_bad"].map(lambda bad: 'x' if bad else 'circle'),
+            color=summary[f"bad_{cnfg.TRIAL_STR}"].map(lambda bad: 'red' if bad else 'black'),
+            symbol=summary[f"bad_{cnfg.TRIAL_STR}"].map(lambda bad: 'x' if bad else 'circle'),
         ),
         line=dict(width=2, color='black'), connectgaps=False,
     )
@@ -157,7 +223,7 @@ def _create_target_category_traces(
                 marker=dict(
                     size=7.5, opacity=0.5,
                     color=cnfg.get_discrete_color(ImageCategoryEnum(cat).value),
-                    symbol=cat_data["is_bad"].map(lambda bad: 'x' if bad else 'circle'),
+                    symbol=cat_data[f"bad_{cnfg.TRIAL_STR}"].map(lambda bad: 'x' if bad else 'circle'),
                 ),
             )
             traces.append(trace)
@@ -272,9 +338,9 @@ def _append_to_identifications(
 
             # write chosen event's data to identifications DataFrame
             event_id = chosen.name if event_type == cnfg.FIXATION_STR else chosen.name[1]  # fixation ID or visit ID
-            new_identifications.at[i, f"{eye}_{cnfg.VISIT_STR}"] = event_id
-            new_identifications.at[i, f"{eye}_{cnfg.VISIT_STR}_{cnfg.START_TIME_STR}"] = chosen[cnfg.START_TIME_STR]
-            new_identifications.at[i, f"{eye}_{cnfg.VISIT_STR}_{cnfg.END_TIME_STR}"] = chosen[cnfg.END_TIME_STR]
+            new_identifications.at[i, f"{eye}_{event_type}"] = event_id
+            new_identifications.at[i, f"{eye}_{event_type}_{cnfg.START_TIME_STR}"] = chosen[cnfg.START_TIME_STR]
+            new_identifications.at[i, f"{eye}_{event_type}_{cnfg.END_TIME_STR}"] = chosen[cnfg.END_TIME_STR]
             distance_col = target if event_type == cnfg.FIXATION_STR else f"min_{cnfg.DISTANCE_STR}"
-            new_identifications.at[i, f"{eye}_{cnfg.VISIT_STR}_{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"] = chosen[distance_col]
+            new_identifications.at[i, f"{eye}_{event_type}_{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"] = chosen[distance_col]
     return new_identifications
