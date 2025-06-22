@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 import time
 import pickle as pkl
-from typing import Union, Optional, List
+from typing import Union, Optional, List, Literal
 from datetime import datetime
 
 import numpy as np
@@ -31,6 +31,12 @@ class Subject:
         f"{cnfg.SESSION_STR.capitalize()}Date": f"{cnfg.SESSION_STR}_date",
         f"{cnfg.SESSION_STR.capitalize()}Time": f"{cnfg.SESSION_STR}_time",
         cnfg.DISTANCE_STR.capitalize(): "screen_distance_cm",
+    }
+    __EXTRACTION_FUNCTIONS = {
+        cnfg.ACTION_STR: lambda trl: trl.get_actions(),
+        cnfg.TARGET_STR: lambda trl: trl.get_target_identification_data(),
+        cnfg.FIXATION_STR: lambda trl: trl.process_fixations(),
+        cnfg.METADATA_STR: lambda trl: trl.get_metadata().to_frame().T.drop(columns=[f"{cnfg.TRIAL_STR}_num"]),
     }
 
     def __init__(
@@ -173,6 +179,68 @@ class Subject:
         pickle_path = self.get_pickle_path(self._experiment_name, self._id, makedirs=True)
         return os.path.dirname(pickle_path)
 
+    def get_target_identification_summary(self, verbose=False) -> pd.DataFrame:
+        """
+        Extracts the subject's targets-identification data and returns it as a DataFrame, indexed by a regular
+        range-index, and with columns:
+        - trial: int - trial number (has repetitions for each target)
+        - trial_type: int - type of the trial (see LWSEnums.SearchArrayTypeEnum)
+        - bad_trial: bool - whether the trial is "bad" (trial.is_bad() returns True)
+        - trial_duration: float - duration of the trial in ms
+        - target: str - target ID (e.g., "target_0", "target_1", etc.)
+        - time: float - time of identification (in ms), or NaN if the target was not identified
+        - distance_px, distance_dva: float - gaze distance from the target at the time of identification (in pixels and DVAs)
+        - target_x, target_y, target_angle: target coordinates and rotation angle
+        - target_category: int - category of the target (see LWSEnums.ImageCategoryEnum)
+        """
+        _COLUMNS_TO_DROP = [
+            "target_sub_path", "left_x", "left_y", "left_pupil", "left_label", "right_x", "right_y", "right_pupil",
+            "right_label", 'block_num', 'num_targets',
+        ]
+        targets = self._extract_df_from_trials(cnfg.TARGET_STR, verbose=verbose)
+        metadata = self._extract_df_from_trials(cnfg.METADATA_STR, verbose=verbose)
+        ident_data = pd.merge(targets, metadata, left_index=True, right_index=True, how='left')
+        ident_data.reset_index(drop=False, inplace=True)
+        ident_data.drop(columns=_COLUMNS_TO_DROP, inplace=True, errors='ignore')
+        ident_data.rename(columns={"duration": f"{cnfg.TRIAL_STR}_duration"}, inplace=True)
+        return ident_data
+
+    def get_metadata(self, verbose: bool = False) -> pd.DataFrame:
+        """
+        Get the subject's trial metadata DataFrame for a subject.
+        If the DataFrame is not found in the subject's output directory, it will be generated from the subject's trials.
+
+        Returns a DataFrame containing metadata for each trial, indexed by trial number and with columns:
+            - block_num: int - block number of the trial
+            - trial_type: int (SearchArrayTypeEnum) - type of the trial (e.g., color, bw, etc.)
+            - duration: float - duration of the trial in ms
+            - num_targets: int - number of targets in the trial
+            - bad_trial: bool - whether the trial is "bad", i,e, the subject performed "bad" actions during it (e.g. mark-and-reject)
+        """
+        return self._extract_df_from_trials(cnfg.METADATA_STR, verbose=verbose)
+
+    def get_targets(self, verbose: bool = False) -> pd.DataFrame:
+        """
+        Get the target identification DataFrame for a subject.
+        If the DataFrame is not found in the subject's output directory, it will be generated from the subject's trials.
+
+        :param subject: Subject object containing trial data.
+        :param save: If True, saves the DataFrame as a pickle file in the subject's output directory.
+        :param verbose: If True, prints status messages during extraction.
+        :return: DataFrame containing target identifications for each trial, indexed by trial number and with columns:
+            - `time`: time of identification
+            - `distance_px`: pixel-distance from the target at the time of identification
+            - `left_x`, `left_y`: gaze coordinates in the left eye at the time of identification
+            - `right_x`, `right_y`: gaze coordinates in the right eye at the time of identification
+            - `left_pupil`, `right_pupil`: pupil size in the left/right eye at the time of identification
+            - `'left_label'`, `'right_label'`: eye movement labels in the left/right eye at the time of identification
+            - `target_x`, `target_y`: target coordinates
+            - `target_angle`: target rotation angle
+            - `target_sub_path`: path to the target image
+            - `target_category`: target category
+        """
+        return self._extract_df_from_trials(cnfg.TARGET_STR, verbose=verbose)
+
     def get_trials(self, sort: bool = True) -> List["Trial"]:
         if not sort:
             return self._trials
@@ -238,6 +306,31 @@ class Subject:
         if makedirs:
             os.makedirs(out_dir, exist_ok=True)
         return os.path.join(out_dir, "Subject.pkl")
+
+    def _extract_df_from_trials(
+            self, to_extract: Literal["action", "target", "metadata", "fixation"], verbose: bool = False
+    ) -> pd.DataFrame:
+        """ Iterates over the subject's trials and extracts the requested data type into a DataFrame. """
+        to_extract = to_extract.lower()
+        if to_extract not in self.__EXTRACTION_FUNCTIONS:
+            raise ValueError(
+                f"Unable to extract {to_extract}. Expected one of: "
+                f"{cnfg.ACTION_STR}/{cnfg.TARGET_STR}/{cnfg.FIXATION_STR}/{cnfg.METADATA_STR}"
+            )
+        extraction_function = self.__EXTRACTION_FUNCTIONS[to_extract]
+        dfs = dict()
+        for trial in tqdm(self.get_trials(), desc=f"Extracting {to_extract.capitalize()}s", disable=not verbose):
+            trial_df = extraction_function(trial)
+            dfs[trial.trial_num] = trial_df
+        df = pd.concat(dfs.values(), names=[cnfg.TRIAL_STR] + list(trial_df.index.names), keys=dfs.keys(), axis=0)
+
+        # remove unnamed index levels if any exist
+        index_names = pd.Series(df.index.names)
+        if pd.isnull(index_names).any():
+            df = df.reset_index(drop=False, inplace=False)
+            df = df.set_index([name for name in index_names if pd.notnull(name)])
+            df = df.drop(columns=[col for col in df.columns if col.startswith("level_")], inplace=False, errors='ignore')
+        return df
 
     def __repr__(self) -> str:
         return f"{self.experiment_name.upper()}-{cnfg.SUBJECT_STR.capitalize()}_{self.id}"

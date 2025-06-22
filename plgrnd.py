@@ -17,14 +17,80 @@ pio.renderers.default = "browser"
 subj = Subject.from_pickle(exp_name=cnfg.EXPERIMENT_NAME, subject_id=1,)
 
 ## process subject data
-from analysis.data_io import get_identifications, get_fixations, get_visits
-identifications_df = get_identifications(subj, save=True, verbose=True)
-fixations_df = get_fixations(subj, save=True, verbose=True, include_outliers=False)
+identifications_df = subj.get_target_identification_summary(verbose=False)
+
+from analysis.fixations import get_fixations
+fixations_df = get_fixations(subj, save=False, verbose=True)
+fixations_df = fixations_df[fixations_df["outlier_reasons"].apply(lambda x: len(x) == 0)]   # drop outliers
+
+from analysis.visits import get_visits
 visits_df = get_visits(subj, save=True, verbose=True)
 
 
 
-fixations = fixations_df.rename(columns={f"closest_{cnfg.TARGET_STR}": cnfg.TARGET_STR}).set_index(cnfg.TARGET_STR, append=True)
+## LWS FUNNEL ##
+metadata = subj.get_metadata(verbose=False)
+valid_trials = list(metadata[~metadata[f"bad_{cnfg.TRIAL_STR}"].astype(bool)].index)
+
+# convert fixations_df to lws-funnel format
+fixations = fixations_df.rename(
+    columns={f"closest_{cnfg.TARGET_STR}": cnfg.TARGET_STR}
+).set_index(cnfg.TARGET_STR, append=True).reorder_levels(
+    [cnfg.TRIAL_STR, cnfg.TARGET_STR, cnfg.EYE_STR, cnfg.FIXATION_STR]
+).sort_index()
+# keep the distance to the only relevant target
+fixations[cnfg.TARGET_DISTANCE_STR] = pd.Series(fixations.to_numpy()[
+    np.arange(len(fixations)), fixations.columns.get_indexer(fixations.index.get_level_values(cnfg.TARGET_STR))
+], index=fixations.index)
+fixations.drop(columns=[
+    col for col in fixations.columns if col.startswith(cnfg.TARGET_STR) and col != cnfg.TARGET_DISTANCE_STR
+], inplace=True)
+# add target detection columns
+fixations = fixations.reset_index(drop=False).set_index([cnfg.TRIAL_STR, cnfg.TARGET_STR])
+idents = identifications_df.set_index([cnfg.TRIAL_STR, cnfg.TARGET_STR]).rename(
+    columns={cnfg.TIME_STR: cnfg.TARGET_TIME_STR}
+).loc[fixations.index]
+fixations = pd.concat([fixations, idents], axis=1).reset_index(drop=False)
+
+
+# calculate the funnel
+metadata = subj.get_metadata(verbose=False)
+valid_trials = list(metadata[~metadata[f"bad_{cnfg.TRIAL_STR}"].astype(bool)].index)
+
+lws_funnel_dict = dict()
+lws_funnel_dict['all'] = fixations
+lws_funnel_dict['valid_trials'] = lws_funnel_dict['all'][
+    ~(lws_funnel_dict['all'][f"bad_{cnfg.TRIAL_STR}"].astype(bool))
+]
+lws_funnel_dict['not_outlier'] = lws_funnel_dict['valid_trials'][
+    lws_funnel_dict['valid_trials']["outlier_reasons"].map(lambda val: len(val) == 0)
+]
+lws_funnel_dict['on_target'] = lws_funnel_dict['not_outlier'][
+    lws_funnel_dict['not_outlier'][cnfg.TARGET_DISTANCE_STR] <= (cnfg.ON_TARGET_THRESHOLD_DVA / subj.px2deg)
+]
+lws_funnel_dict['before_identification'] = lws_funnel_dict['on_target'][
+    lws_funnel_dict['on_target'][f"{cnfg.END_TIME_STR}"] <= lws_funnel_dict['on_target'][cnfg.TARGET_TIME_STR]
+]
+lws_funnel_dict['next_1_not_in_strip'] = lws_funnel_dict['before_identification'][
+    ~(lws_funnel_dict['before_identification']['next_1_in_strip'].astype(bool))
+]
+lws_funnel_dict['next_2_not_in_strip'] = lws_funnel_dict['next_1_not_in_strip'][
+    ~(lws_funnel_dict['next_1_not_in_strip']['next_1_in_strip'].astype(bool)) &
+    ~(lws_funnel_dict['next_1_not_in_strip']['next_2_in_strip'].astype(bool))
+]
+lws_funnel_dict['next_3_not_in_strip'] = lws_funnel_dict['next_2_not_in_strip'][
+    ~(lws_funnel_dict['next_2_not_in_strip']['next_1_in_strip'].astype(bool)) &
+    ~(lws_funnel_dict['next_2_not_in_strip']['next_2_in_strip'].astype(bool)) &
+    ~(lws_funnel_dict['next_2_not_in_strip']['next_3_in_strip'].astype(bool))
+]
+lws_funnel_dict['not_end_with_trial'] = lws_funnel_dict['next_3_not_in_strip'][
+
+]
+
+
+def lws_funnel(events: pd.DataFrame, trial_metadata: pd.DataFrame):
+    return None
+
 
 
 # ### Single-Subject Identification Figures ###

@@ -5,9 +5,6 @@ import pandas as pd
 
 import config as cnfg
 
-TRIAL_TYPE_STR = f"{cnfg.TRIAL_STR}_type"
-TARGET_CATEGORY_STR = f"{cnfg.TARGET_STR}_{cnfg.CATEGORY_STR}"
-
 
 def calculate_stats_by_enum(df: pd.DataFrame, nominal_col: str, enum_class: Type[Enum],) -> pd.DataFrame:
     """

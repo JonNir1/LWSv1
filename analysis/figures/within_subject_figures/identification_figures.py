@@ -6,17 +6,21 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 import config as cnfg
-import analysis.statistics as stat
+import analysis.figures.within_subject_figures.statistics as stat
 from data_models.LWSEnums import ImageCategoryEnum, SearchArrayTypeEnum, DominantEyeEnum
 
 
 def identification_rate_figure(ident_data: pd.DataFrame, drop_bads: bool = True) -> go.Figure:
+    col_name = "is_identified"
+    is_identified = pd.DataFrame(
+        np.isfinite(ident_data[cnfg.TIME_STR].values), index=ident_data.index, columns=[col_name]
+    )
     fig = _create_figure(
-        ident_data,
-        y_col=cnfg.IDENTIFIED_STR,
+        is_identified,
+        y_col=col_name,
         scale=100,  # scale to percentage
         title="Percentage of Identified Targets",
-        yaxes_title=f"% {cnfg.IDENTIFIED_STR.title()}",
+        yaxes_title=f"% identified",
         show_individual_trials=False,
         drop_bads=drop_bads,
     )
@@ -26,7 +30,10 @@ def identification_rate_figure(ident_data: pd.DataFrame, drop_bads: bool = True)
 
 def identification_time_figure(ident_data: pd.DataFrame, drop_bads: bool = True) -> go.Figure:
     ident_data2 = ident_data.copy()
-    ident_data2.loc[~ident_data[cnfg.IDENTIFIED_STR].values, cnfg.TIME_STR] = np.nan  # set not-identified times to NaN to avoid inf-points in the plot
+    ident_data2.loc[
+        # set not-identified distances to NaN to avoid inf-points in the plot
+        ~np.isfinite(ident_data[cnfg.TIME_STR].values), cnfg.TIME_STR
+    ] = np.nan
     fig = _create_figure(
         ident_data2,
         y_col=cnfg.TIME_STR,
@@ -45,7 +52,10 @@ def identification_distance_figure(
     assert px2deg >= 0, f"`px2deg` must be a non-negative float, got {px2deg}."
     dist_col = f"{cnfg.DISTANCE_STR}_px"
     ident_data2 = ident_data.copy()
-    ident_data2.loc[~ident_data[cnfg.IDENTIFIED_STR].values, dist_col] = np.nan  # set not-identified distances to NaN to avoid inf-points in the plot
+    ident_data2.loc[
+        # set not-identified distances to NaN to avoid inf-points in the plot
+        ~np.isfinite(ident_data[cnfg.TIME_STR].values), dist_col
+    ] = np.nan
     fig = _create_figure(
         ident_data2,
         y_col=dist_col,
@@ -110,24 +120,25 @@ def identification_event_distance_figure(
     assert px2deg >= 0, f"`px2deg` must be a non-negative float, got {px2deg}."
     # prepare the data
     identifications_with_events = _append_to_identifications(ident_data, event_data, event_type, temporal_window)
-    target_distance_str = f"{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"
-    colname_format = f"%s_{event_type.lower()}_{target_distance_str}"
+    colname_format = f"%s_{event_type.lower()}_{cnfg.TARGET_DISTANCE_STR}"
     if dominant_eye is None:
-        identifications_with_events[target_distance_str] = identifications_with_events[
+        identifications_with_events[cnfg.TARGET_DISTANCE_STR] = identifications_with_events[
             [colname_format % eye for eye in DominantEyeEnum]
         ].min(axis=1)
     else:
         dominant_eye = DominantEyeEnum(dominant_eye.lower()) if isinstance(dominant_eye, str) else dominant_eye
-        identifications_with_events[target_distance_str] = identifications_with_events[
+        identifications_with_events[cnfg.TARGET_DISTANCE_STR] = identifications_with_events[
             colname_format % dominant_eye.name.lower()
         ]
-    # set not-identified distances to NaN to avoid inf-points in the plot
-    identifications_with_events.loc[~ident_data[cnfg.IDENTIFIED_STR].values, target_distance_str] = np.nan
+    identifications_with_events.loc[
+        # set not-identified distances to NaN to avoid inf-points in the plot
+        ~np.isfinite(ident_data[cnfg.TIME_STR].values), cnfg.TARGET_DISTANCE_STR
+    ] = np.nan
 
     # create the figure
     fig = _create_figure(
         identifications_with_events,
-        y_col=target_distance_str,
+        y_col=cnfg.TARGET_DISTANCE_STR,
         scale=px2deg,   # scale to DVA
         title=f"Identification's {event_type.title()} Distance to Target",
         yaxes_title="Distance (DVA)",
@@ -152,8 +163,8 @@ def _create_figure(
         vertical_spacing=0.1, horizontal_spacing=0.05,
         subplot_titles=[
             cnfg.TRIAL_STR.title(),
-            stat.TRIAL_TYPE_STR.replace("_", " ").title(),
-            stat.TARGET_CATEGORY_STR.replace("_", " ").title(),
+            cnfg.TRIAL_TYPE_STR.replace("_", " ").title(),
+            cnfg.TARGET_CATEGORY_STR.replace("_", " ").title(),
         ],
     )
     # Top Row: per trial (line plot)
@@ -172,14 +183,14 @@ def _create_figure(
     fig.add_trace(
         row=2, col=1,
         trace=_create_categorical_trace(
-            ident_data, stat.TRIAL_TYPE_STR, y_col, SearchArrayTypeEnum, scale=scale
+            ident_data, cnfg.TRIAL_TYPE_STR, y_col, SearchArrayTypeEnum, scale=scale
         )
     )
     # Bottom Right: by target category (bar plot)
     fig.add_trace(
         row=2, col=2,
         trace=_create_categorical_trace(
-            ident_data, stat.TARGET_CATEGORY_STR, y_col, ImageCategoryEnum, scale=scale
+            ident_data, cnfg.TARGET_CATEGORY_STR, y_col, ImageCategoryEnum, scale=scale
         )
     )
     # update layout
@@ -213,8 +224,8 @@ def _create_target_category_traces(
         data: pd.DataFrame, col_name: str, scale: float = 1.0
 ) -> List[go.Scatter]:
     traces = []
-    for cat in data[stat.TARGET_CATEGORY_STR].unique():
-        cat_data = data[data[stat.TARGET_CATEGORY_STR] == cat]
+    for cat in data[cnfg.TARGET_CATEGORY_STR].unique():
+        cat_data = data[data[cnfg.TARGET_CATEGORY_STR] == cat]
         if not cat_data.empty:
             trace = go.Scatter(
                 x=cat_data[cnfg.TRIAL_STR], y=cat_data[col_name] * scale,
@@ -299,7 +310,7 @@ def _append_to_identifications(
     # add columns to identifications DataFrame
     new_identifications = identifications.copy()
     for eye in DominantEyeEnum:
-        for col in ["", f"{cnfg.START_TIME_STR}", f"{cnfg.END_TIME_STR}", f"{cnfg.TARGET_STR}_{cnfg.DISTANCE_STR}"]:
+        for col in ["", f"{cnfg.START_TIME_STR}", f"{cnfg.END_TIME_STR}", cnfg.TARGET_DISTANCE_STR]:
             col_name = f"{eye}_{event_type}_{col}".strip("_")
             new_identifications[col_name] = np.nan
 

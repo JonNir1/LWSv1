@@ -137,13 +137,6 @@ class Trial:
             reasons.append("false_positive_identification")
         return reasons
 
-    def get_eye_movements(self, eye: DominantEyeEnum) -> pd.Series:
-        if eye == DominantEyeEnum.LEFT:
-            return self._left_events
-        if eye == DominantEyeEnum.RIGHT:
-            return self._right_events
-        raise ValueError(f"Invalid eye: {eye}. Must be either 'left' or 'right'.")
-
     def get_target_identification_data(self) -> pd.DataFrame:
         """
         Extracts the time, gaze location and pixel-distance from the target during target identifications.
@@ -152,7 +145,7 @@ class Trial:
 
         :return: pd.DataFrame indexed by targets (`target_0`, `target_1`, etc.) with the following columns:
             - `time`: time of identification
-            - `distance`: pixel-distance from the target at the time of identification
+            - `distance_px`, `distance_dva`: pixel- and DVA-distance from the target at the time of identification
             - `left_x`, `left_y`: gaze coordinates in the left eye at the time of identification
             - `right_x`, `right_y`: gaze coordinates in the right eye at the time of identification
             - `left_pupil`, `right_pupil`: pupil size in the left/right eye at the time of identification
@@ -173,10 +166,11 @@ class Trial:
         # calculate minimal distance from targets
         dists = gaze_when_ident[[col for col in gaze_when_ident.columns if col.startswith(cnfg.TARGET_STR)]].copy()
         closest_target = dists.idxmin(axis=1)
-        dists = pd.Series(
+        dists_px = pd.Series(
             dists.to_numpy()[dists.index, dists.columns.get_indexer(closest_target)],
             name=f"{cnfg.DISTANCE_STR}_px",
         )
+        dists = pd.concat([dists_px, (dists_px * self.px2deg).rename(f"{cnfg.DISTANCE_STR}_dva")], axis=1)
 
         # extract the target data
         target_images = self._search_array.targets
@@ -210,6 +204,16 @@ class Trial:
             )
         return res
 
+    def get_eye_movements(self) -> pd.DataFrame:
+        """ Returns a DataFrame summarizing the eye movements detected during the trial. """
+        left = peyes.summarize_events(self._left_events)
+        right = peyes.summarize_events(self._right_events)
+        df = pd.concat(
+            [left, right],
+            keys=[cnfg.LEFT_STR, cnfg.RIGHT_STR], names=[cnfg.EYE_STR, cnfg.EVENT_STR], axis=0
+        )
+        return df
+
     def process_fixations(self) -> pd.DataFrame:
         """
         Processes the trial's fixations and returns a DataFrame indexed by (eye, fixation ID), containing the following
@@ -226,11 +230,9 @@ class Trial:
         - in_strip: bool - whether the fixation is in the bottom strip of the trial
         - next_1_in_strip, next_2_in_strip, next_3_in_strip: bool - whether the next 1, 2, or 3 fixations are in the bottom strip
         """
-        left_em = self.get_eye_movements(eye=DominantEyeEnum.LEFT)
-        left_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, left_em))
+        left_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, self._left_events))
         left_fixs_df = peyes.summarize_events(left_fixs)
-        right_em = self.get_eye_movements(eye=DominantEyeEnum.RIGHT)
-        right_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, right_em))
+        right_fixs = list(filter(lambda e: e.label == _FIXATION_LABEL, self._right_events))
         right_fixs_df = peyes.summarize_events(right_fixs)
         fixs_df = pd.concat(
             [left_fixs_df, right_fixs_df],
