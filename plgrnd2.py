@@ -2,6 +2,7 @@ from typing import Dict
 
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import plotly.io as pio
 
 import config as cnfg
@@ -28,20 +29,27 @@ visits = get_visits(subj, save=False, verbose=True)
 
 
 ## LWS Funnel - fixations
-from analysis.lws_funnel import calc_funnel
-import plotly.graph_objects as go
-
-fixs_funnel = calc_funnel(fixations=fixs)
-funnel_sizes = {k: len(v) for (k, v) in fixs_funnel.items()}
-funnel_fig = go.Figure(go.Funnelarea(
-    labels=list(funnel_sizes.keys()),
-    values=list(funnel_sizes.values()),
+from analysis.lws_funnel import fixation_funnel
+fixs_funnel = fixation_funnel(fixations=fixs)
+fix_funnel_sizes = {k: len(v) for (k, v) in fixs_funnel.items()}
+fix_funnel_fig = go.Figure(go.Funnelarea(
+    labels=list(fix_funnel_sizes.keys()),
+    values=list(fix_funnel_sizes.values()),
     textinfo="label+value",
     title=dict(text="<b>LWS Funnel - Fixations</b>", font=dict(size=20)),
 ))
-funnel_fig.show()
+fix_funnel_fig.show()
+lws_fixations = fixs_funnel["not_end_with_trial"]
 
 
-# TODO: make `calc_funnel` work with visits too
-# visits["outlier_reasons"] = [[] for _ in range(len(visits))]
-visits_funnel = calc_funnel(visits=visits)
+from analysis.lws_funnel import visit_funnel
+visits_funnel = visit_funnel(visits=visits, distance_col="weighted_distance")
+vis_funnel_sizes = {k: len(v) for (k, v) in visits_funnel.items()}
+vis_funnel_fig = go.Figure(go.Funnelarea(
+    labels=list(vis_funnel_sizes.keys()),
+    values=list(vis_funnel_sizes.values()),
+    textinfo="label+value",
+    title=dict(text="<b>LWS Funnel - Visits</b>", font=dict(size=20)),
+))
+vis_funnel_fig.show()
+lws_visits = visits_funnel["not_end_with_trial"]

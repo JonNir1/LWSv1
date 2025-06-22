@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, List, Literal
 
 import pandas as pd
 
@@ -16,6 +16,72 @@ FUNNEL_STEPS = [
     "next_3_not_in_strip",
     "not_end_with_trial"
 ]
+
+
+def fixation_funnel(fixations: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    # TODO: exclude on-target fixations that are within K fixations from the target identification
+    return _calc_funnel(
+        data=fixations,
+        steps=FUNNEL_STEPS,
+        distance_col=cnfg.DISTANCE_STR,
+    )
+
+
+def visit_funnel(
+        visits: pd.DataFrame,
+        distance_col: Literal['min_distance', 'max_distance', 'mean_distance', 'weighted_distance']
+) -> Dict[str, pd.DataFrame]:
+    return _calc_funnel(
+        data=visits,
+        steps=[step for step in FUNNEL_STEPS if step != "not_outlier"],
+        distance_col=distance_col,
+    )
+
+
+def _calc_funnel(
+        data: pd.DataFrame, steps: List[str], distance_col: str,
+) -> Dict[str, pd.DataFrame]:
+    assert distance_col in data.columns, f"Distance column `{distance_col}` not found in data."
+    assert steps[0] == cnfg.ALL_STR, f"First step must be `{cnfg.ALL_STR}`."
+    funnel = dict()
+    funnel[cnfg.ALL_STR] = data
+    for i, step in enumerate(steps):
+        if i == 0:
+            continue
+        prev_result = funnel[steps[i - 1]]
+        if step == "valid_trials":
+            funnel[step] = prev_result[~prev_result[f"bad_{cnfg.TRIAL_STR}"].astype(bool)]
+            continue
+        if step == "not_outlier":
+            funnel[step] = prev_result[prev_result["outlier_reasons"].map(lambda val: len(val) == 0)]
+            continue
+        if step == "on_target":
+            funnel[step] = prev_result[prev_result[distance_col] <= cnfg.ON_TARGET_THRESHOLD_DVA]
+            continue
+        if step == "before_identification":
+            funnel[step] = prev_result[prev_result[f"{cnfg.END_TIME_STR}"] <= prev_result[cnfg.TARGET_TIME_STR]]
+            continue
+        if step == "next_1_not_in_strip":
+            funnel[step] = prev_result[~(prev_result['next_1_in_strip'].astype(bool))]
+            continue
+        if step == "next_2_not_in_strip":
+            funnel[step] = prev_result[
+                ~(prev_result['next_1_in_strip'].astype(bool)) &
+                ~(prev_result['next_2_in_strip'].astype(bool))
+            ]
+            continue
+        if step == "next_3_not_in_strip":
+            funnel[step] = prev_result[
+                ~(prev_result['next_1_in_strip'].astype(bool)) &
+                ~(prev_result['next_2_in_strip'].astype(bool)) &
+                ~(prev_result['next_3_in_strip'].astype(bool))
+            ]
+            continue
+        if step == "not_end_with_trial":
+            funnel[step] = prev_result[prev_result["to_trial_end"] >= cnfg.CHUNKING_TEMPORAL_WINDOW_MS]
+            continue
+        raise KeyError(f"Unknown funnel step: {step}.")
+    return funnel
 
 
 def calc_funnel(data: pd.DataFrame) -> Dict[str, pd.DataFrame]:

@@ -18,17 +18,36 @@ def get_visits(
     """
     Get the visits DataFrame for a subject.
     If the DataFrame is not found in the subject's output directory, it will be generated from the subject's fixations.
+    A visit is defined as a sequence of consecutive fixations that are within a specified distance
+    threshold (in degrees of visual angle) from the same target. A *new* visit is initiated when one of two conditions is met:
+    - the current fixation is on the target and the previous was not,
+    - OR both are on-target, but their time gap exceeds the specified temporal window.
 
     :param subject: Subject object containing trial data.
     :param distance_threshold_dva: float - the distance threshold in degrees of visual angle (DVA) to consider a fixation as "on target".
     :param time_window_ms: float - the temporal window in milliseconds to consider fixations as part of the same visit.
     :param save: If True, saves the DataFrame as a pickle file in the subject's output directory.
     :param verbose: If True, prints status messages during extraction.
-    :return: DataFrame containing visits for each trial, indexed by (trial, target, eye, visit) and with columns:
-        - start_fixation, end_fixation: int - the start and end fixation IDs of the visit
-        - start_time, end_time, duration: float - the start, end, and duration of the visit (in ms)
-        - num_fixations: int - the number of fixations in the visit
-        - min_distance, max_distance: float - the minimum and maximum distance to the target during the visit (in pixels)
+    :return: DataFrame containing visits for each trial, with the following columns:
+    - trial: int - the trial number
+    - eye: str - the eye (e.g., "left", "right")
+    - target: str - the target name (e.g., "target_1", "target_2")
+    - visit: int - the visit index
+    - fixation: List[int] - the IDs of the fixations in the visit
+    - start_time, end_time: float - the start and end time of the visit (in ms)
+    - duration: float - the duration of the visit (in ms)
+    - to_trial_end: float - the time from the visit's end to the trial's end (in ms)
+    - visit_x, visit_y: float - the average pixel coordinates of the visit's fixations
+    - min_distance, max_distance: float - the distance of the visit's closest and farthest fixations to the target (in DVA)
+    - mean_distance: float - the mean distance of the visit's fixations to the target (in pixels)
+    - weighted_distance: float - the average distance, weighted by fixation durations (in DVA)
+    - next_1_in_strip, next_2_in_strip, next_3_in_strip: bool; whether the next 1, 2, or 3 fixations are in the bottom strip
+    - target_time: float - the time of the target identification in the trial, or inf if the target was never identified
+    - target_x, target_y, target_angle: float - the pixel coordinates and angle of the target
+    - target_category: int - the category of the target (see ImageCategoryEnum)
+    - trial_type: int - the type of the trial (e.g., "color", "bw", "noise"; see SearchArrayTypeEnum)
+    - trial_duration: float - the duration of the trial (in ms)
+    - bad_trial: bool - whether the trial is considered "bad" (e.g., if the subject performed a "bad" action)
     """
     distance_threshold_dva = round(distance_threshold_dva, 1)
     assert distance_threshold_dva >= 0, "Distance threshold must be non-negative."
@@ -69,28 +88,6 @@ def extract_visits(
     threshold (in degrees of visual angle) from the same target. A *new* visit is initiated when one of two conditions is met:
     - the current fixation is on the target and the previous was not,
     - OR both are on-target, but their time gap exceeds the specified temporal window.
-
-    The resulting DataFrame contains the following columns:
-    - trial: int - the trial number
-    - eye: str - the eye (e.g., "left", "right")
-    - target: str - the target name (e.g., "target_1", "target_2")
-    - visit: int - the visit index
-    - start_fixation, end_fixation: int - the ID of the first and last fixations in the visit
-    - num_fixations: int - the number of fixations in the visit
-    - start_time, end_time: float - the start and end time of the visit (in ms)
-    - duration: float - the duration of the visit (in ms)
-    - to_trial_end: float - the time from the visit's end to the trial's end (in ms)
-    - visit_x, visit_y: float - the average pixel coordinates of the visit's fixations
-    - min_distance, max_distance: float - the distance of the visit's closest and farthest fixations to the target (in DVA)
-    - mean_distance: float - the mean distance of the visit's fixations to the target (in pixels)
-    - weighted_distance: float - the average distance, weighted by fixation durations (in DVA)
-    - next_1_in_strip, next_2_in_strip, next_3_in_strip: bool; whether the next 1, 2, or 3 visits are in the bottom strip
-    - target_time: float - the time of the target identification in the trial, or inf if the target was never identified
-    - target_x, target_y, target_angle: float - the pixel coordinates and angle of the target
-    - target_category: int - the category of the target (see ImageCategoryEnum)
-    - trial_type: int - the type of the trial (e.g., "color", "bw", "noise"; see SearchArrayTypeEnum)
-    - trial_duration: float - the duration of the trial (in ms)
-    - bad_trial: bool - whether the trial is considered "bad" (e.g., if the subject performed a "bad" action)
     """
     visits_df = _convert_fixations_to_visits(fixations_df, deg2px_coeff, distance_threshold_dva, temporal_window_ms)
     visits_df = visits_df.set_index([cnfg.TRIAL_STR, cnfg.TARGET_STR])
@@ -128,31 +125,29 @@ def _convert_fixations_to_visits(
     - eye: str - the eye (e.g., "left", "right")
     - target: str - the target name (e.g., "target_1", "target_2")
     - visit: int - the visit index
-    - start_fixation, end_fixation: int - the ID of the first and last fixations in the visit
-    - num_fixations: int - the number of fixations in the visit
+    - fixation: List[int] - the IDs of the fixations in the visit
     - start_time, end_time: float - the start and end time of the visit (in ms)
     - duration: float - the duration of the visit (in ms)
     - to_trial_end: float - the time from the visit's end to the trial's end (in ms)
     - visit_x, visit_y: float - the average pixel coordinates of the visit's fixations
     - min_distance, max_distance: float - the distance of the visit's closest and farthest fixations to the target (in DVA)
     - weighted_distance: float - the average distance, weighted by fixation durations (in DVA)
-    - next_1_in_strip, next_2_in_strip, next_3_in_strip: bool; whether the next 1, 2, or 3 visits are in the bottom strip
+    - next_1_in_strip, next_2_in_strip, next_3_in_strip: bool; whether the next 1, 2, or 3 fixations are in the bottom strip
     """
     assert deg2px_coeff > 0, "`deg2px_coeff` must be positive."
     assert distance_threshold_dva > 0, "`distance_threshold_dva` must be positive."
     assert temporal_window_ms > 0, "`temporal_window_ms` must be positive."
     visits = []
-    for (trial, eye), group in fixations_df.groupby(by=[cnfg.TRIAL_STR, cnfg.EYE_STR]):
+    for (trial, eye, target), group in fixations_df.groupby(by=[cnfg.TRIAL_STR, cnfg.EYE_STR, cnfg.TARGET_STR]):
         group = group.sort_values(cnfg.FIXATION_STR, inplace=False).reset_index(drop=True)
-        for target in group[cnfg.TARGET_STR].unique():
-            visit_ids = _assign_visit_ids(group, distance_threshold_dva, temporal_window_ms)
-            if visit_ids.isna().all():
-                continue
-            for visit_idx in visit_ids.dropna().unique():
-                visit_fixs = group[visit_ids == visit_idx]
-                visits.append(
-                    _extract_features_from_fixs(visit_fixs, visit_idx, trial, target, eye)
-                )
+        visit_ids = _assign_visit_ids(group, distance_threshold_dva, temporal_window_ms)
+        if visit_ids.isna().all():
+            continue
+        for visit_idx in visit_ids.dropna().unique():
+            visit_fixs = group[visit_ids == visit_idx]
+            visits.append(
+                _extract_features_from_fixs(visit_fixs, visit_idx, trial, target, eye)
+            )
     return pd.DataFrame(visits)
 
 
@@ -175,7 +170,7 @@ def _assign_visit_ids(
     assert distance_threshold_dva > 0, "Distance threshold must be positive."
     assert temporal_window_ms > 0, "Temporal threshold must be positive."
     on_target = visit_fixs[cnfg.DISTANCE_STR] <= distance_threshold_dva
-    prev_on_target = on_target.shift(1, fill_value=False)  # consider the 1st fixation's previous as not on target
+    prev_on_target = on_target.shift(1, fill_value=False)  # consider the 1st fixation's previous as off-target
     time_diffs = visit_fixs["start_time"] - visit_fixs["end_time"].shift(1)
     outside_time_window = (time_diffs > temporal_window_ms).fillna(
         True)  # consider the 1st fixation's previous as outside the time window
@@ -198,9 +193,7 @@ def _extract_features_from_fixs(visit_fixs: pd.DataFrame, visit_idx: int, trial:
         cnfg.EYE_STR: eye,
         cnfg.TARGET_STR: target,
         cnfg.VISIT_STR: int(visit_idx),
-        f"start_{cnfg.FIXATION_STR}": int(visit_fixs[cnfg.FIXATION_STR].iloc[0]),
-        f"end_{cnfg.FIXATION_STR}": int(visit_fixs[cnfg.FIXATION_STR].iloc[-1]),
-        "num_fixations": len(visit_fixs),
+        f"{cnfg.FIXATION_STR}": sorted(visit_fixs[cnfg.FIXATION_STR].values),
         cnfg.START_TIME_STR: visit_fixs[cnfg.START_TIME_STR].iloc[0],
         cnfg.END_TIME_STR: visit_fixs[cnfg.END_TIME_STR].iloc[-1],
         "duration": visit_fixs[cnfg.END_TIME_STR].iloc[-1] - visit_fixs[cnfg.START_TIME_STR].iloc[0],
@@ -210,9 +203,9 @@ def _extract_features_from_fixs(visit_fixs: pd.DataFrame, visit_idx: int, trial:
         f"min_{cnfg.DISTANCE_STR}": visit_fixs[cnfg.DISTANCE_STR].min(),
         f"max_{cnfg.DISTANCE_STR}": visit_fixs[cnfg.DISTANCE_STR].max(),
         f"weighted_{cnfg.DISTANCE_STR}": weighted_distance,
-        f"next_1_{cnfg.FIXATION_STR}_in_strip": visit_fixs["next_1_in_strip"].iloc[-1],
-        f"next_2_{cnfg.FIXATION_STR}_in_strip": visit_fixs["next_2_in_strip"].iloc[-1],
-        f"next_3_{cnfg.FIXATION_STR}_in_strip": visit_fixs["next_3_in_strip"].iloc[-1],
+        f"next_1_in_strip": visit_fixs["next_1_in_strip"].iloc[-1],
+        f"next_2_in_strip": visit_fixs["next_2_in_strip"].iloc[-1],
+        f"next_3_in_strip": visit_fixs["next_3_in_strip"].iloc[-1],
     }
 
 
