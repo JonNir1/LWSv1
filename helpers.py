@@ -9,6 +9,22 @@ _NDArrayBoolType = npt_.NDArray[np.bool_]
 _NDArrayFloatType = npt_.NDArray[np.float_]
 
 
+def num_to_true(bools: Union[pd.Series, _NDArrayBoolType]) -> pd.Series:
+    """
+    Converts a boolean Series or array to a Series of floats indicating the distance to the next True value, or inf
+    if no future True exists.
+    """
+    bools = pd.Series(bools, dtype=bool)
+    indices = np.arange(len(bools))
+    true_indices = np.flatnonzero(bools.to_numpy())
+    next_true_idx = np.searchsorted(true_indices, indices, side='left')
+    dist_to_true = np.full(len(bools), np.inf)
+    valid = next_true_idx < len(true_indices)
+    dist_to_true[valid] = true_indices[next_true_idx[valid]] - indices[valid]
+    assert (dist_to_true >= 0).all(), "Distances should be non-negative."
+    return pd.Series(dist_to_true, index=bools.index, dtype=float)
+
+
 def is_in_rectangle(
         x: Union[float, _NDArrayFloatType],
         y: Union[float, _NDArrayFloatType],

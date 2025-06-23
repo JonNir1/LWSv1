@@ -4,6 +4,43 @@ from helpers import *
 
 class TestHelpers(unittest.TestCase):
 
+    def test_num_to_true(self):
+        # alternating true/false
+        input_series = pd.Series([False, False, True, False, False, True, False, False, False])
+        expected = pd.Series([2.0, 1.0, 0.0, 2.0, 1.0, 0.0, np.inf, np.inf, np.inf])
+        result = num_to_true(input_series)
+        np.testing.assert_array_equal(result.to_numpy(), expected.to_numpy())
+
+        # all true
+        input_series = pd.Series([True, True, True])
+        expected = pd.Series([0.0, 0.0, 0.0])
+        result = num_to_true(input_series)
+        np.testing.assert_array_equal(result.to_numpy(), expected.to_numpy())
+
+        # all false
+        input_series = pd.Series([False, False, False])
+        expected = pd.Series([np.inf, np.inf, np.inf])
+        result = num_to_true(input_series)
+        np.testing.assert_array_equal(result.to_numpy(), expected.to_numpy())
+
+        # true at the end
+        input_series = pd.Series([False, False, True])
+        expected = pd.Series([2.0, 1.0, 0.0])
+        result = num_to_true(input_series)
+        np.testing.assert_array_equal(result.to_numpy(), expected.to_numpy())
+
+        # true at the start
+        input_series = pd.Series([True, False, False])
+        expected = pd.Series([0.0, np.inf, np.inf])
+        result = num_to_true(input_series)
+        np.testing.assert_array_equal(result.to_numpy(), expected.to_numpy())
+
+        # single true in middle
+        input_series = pd.Series([False, True, False])
+        expected = pd.Series([1.0, 0.0, np.inf])
+        result = num_to_true(input_series)
+        np.testing.assert_array_equal(result.to_numpy(), expected.to_numpy())
+
     def test_is_in_rectangle(self):
         tl, br = (0, 0), (10, 10)
 
