@@ -190,7 +190,7 @@ def _currently_identifying(fixations_df: pd.DataFrame, idents_df: pd.DataFrame) 
         curr_ident = pd.Series(None, index=trial_fixs.index, name="curr_identified", dtype=str)
         curr_ident.loc[identified.index] = identified.values  # set the currently marked targets for marking fixations
         current[trial_num] = curr_ident
-    current = pd.concat(current, axis=0).reset_index(drop=True).rename()
+    current = pd.concat(current, axis=0).reset_index(drop=True)
     current.name = "curr_identified"
     return current
 
