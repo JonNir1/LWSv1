@@ -195,6 +195,7 @@ def _currently_identifying(fixations_df: pd.DataFrame, idents_df: pd.DataFrame) 
     return current
 
 
+# TODO: add `fixs_to_identification` and `fixs_to_strip` to fixs_df (instead of `next_1/2/3_in_strip`)
 def _is_k_next_in_strip(fixations_df: pd.DataFrame, max_k: int = 3) -> pd.DataFrame:
     """
     For each fixation, checks if the next 1,...,k fixations from the same (trial, eye) are in the bottom strip.
