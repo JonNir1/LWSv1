@@ -19,13 +19,13 @@ pio.renderers.default = "browser"
 subj = Subject.from_raw(
     exp_name=cnfg.EXPERIMENT_NAME, subject_id=1, session=1, data_dir="v4-1-1 GalChen Demo", verbose=True
 )
-# subj.to_pickle(overwrite=False)
-# subj = Subject.from_pickle(exp_name=cnfg.EXPERIMENT_NAME, subject_id=1,)
+subj.to_pickle(overwrite=False)
+subj = Subject.from_pickle(exp_name=cnfg.EXPERIMENT_NAME, subject_id=1,)
 
 idents = subj.get_target_identification_summary()
-fixs = get_fixations(subj, save=False, verbose=True)
+fixs = get_fixations(subj, save=True, verbose=True)
 # fixs = fixs[fixs["outlier_reasons"].apply(lambda x: len(x) == 0)]  # drop outliers
-visits = get_visits(subj, save=False, verbose=True)
+visits = get_visits(subj, save=True, verbose=True)
 
 
 ## LWS Funnel - fixations
@@ -41,7 +41,7 @@ fix_funnel_fig = go.Figure(go.Funnelarea(
 fix_funnel_fig.show()
 lws_fixations = fixs_funnel["not_end_with_trial"]
 
-
+## LWS Funnel - visits
 from analysis.lws_funnel import visit_funnel
 visits_funnel = visit_funnel(visits=visits, distance_col="weighted_distance")
 vis_funnel_sizes = {k: len(v) for (k, v) in visits_funnel.items()}
