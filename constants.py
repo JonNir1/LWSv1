@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from screeninfo import Monitor as _Monitor
 
 ## GENERAL ##
@@ -12,7 +13,7 @@ TOBII_MONITOR = _Monitor(
     width_mm=530, height_mm=300,
     x=0, y=0, name="tobii", is_primary=True,
 )
-TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan, MISSING_VALUE]
+TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan, pd.NA, MISSING_VALUE]
 PIXEL_SIZE_MM = np.mean([TOBII_MONITOR.width_mm / TOBII_MONITOR.width, TOBII_MONITOR.height_mm / TOBII_MONITOR.height,])
 
 ## STRINGS ##
