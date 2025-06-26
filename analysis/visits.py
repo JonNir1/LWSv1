@@ -41,7 +41,7 @@ def get_visits(
     - min_distance, max_distance: float - the distance of the visit's closest and farthest fixations to the target (in DVA)
     - mean_distance: float - the mean distance of the visit's fixations to the target (in pixels)
     - weighted_distance: float - the average distance, weighted by fixation durations (in DVA)
-    - next_1_in_strip, next_2_in_strip, next_3_in_strip: bool; whether the next 1, 2, or 3 fixations are in the bottom strip
+    - num_fixs_to_strip: float - number of fixations until the next visit to the SearchArray bottom strip, or inf if no such visit exists
     - target_time: float - the time of the target identification in the trial, or inf if the target was never identified
     - target_x, target_y, target_angle: float - the pixel coordinates and angle of the target
     - target_category: int - the category of the target (see ImageCategoryEnum)
@@ -132,7 +132,7 @@ def _convert_fixations_to_visits(
     - visit_x, visit_y: float - the average pixel coordinates of the visit's fixations
     - min_distance, max_distance: float - the distance of the visit's closest and farthest fixations to the target (in DVA)
     - weighted_distance: float - the average distance, weighted by fixation durations (in DVA)
-    - next_1_in_strip, next_2_in_strip, next_3_in_strip: bool; whether the next 1, 2, or 3 fixations are in the bottom strip
+    - num_fixs_to_strip: float - number of fixations until the next visit to the SearchArray bottom strip, or inf if no such visit exists
     """
     assert deg2px_coeff > 0, "`deg2px_coeff` must be positive."
     assert distance_threshold_dva > 0, "`distance_threshold_dva` must be positive."
@@ -203,9 +203,7 @@ def _extract_features_from_fixs(visit_fixs: pd.DataFrame, visit_idx: int, trial:
         f"min_{cnfg.DISTANCE_STR}": visit_fixs[cnfg.DISTANCE_STR].min(),
         f"max_{cnfg.DISTANCE_STR}": visit_fixs[cnfg.DISTANCE_STR].max(),
         f"weighted_{cnfg.DISTANCE_STR}": weighted_distance,
-        f"next_1_in_strip": visit_fixs["next_1_in_strip"].iloc[-1],
-        f"next_2_in_strip": visit_fixs["next_2_in_strip"].iloc[-1],
-        f"next_3_in_strip": visit_fixs["next_3_in_strip"].iloc[-1],
+        "num_fixs_to_strip": visit_fixs["num_fixs_to_strip"].iloc[-1],
     }
 
 

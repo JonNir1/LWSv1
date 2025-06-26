@@ -11,17 +11,21 @@ FUNNEL_STEPS = [
     "not_outlier",  # non-outlier fixations
     "on_target",
     "before_identification",
-    "next_1_not_in_strip",
-    "next_2_not_in_strip",
-    "next_3_not_in_strip",
+    "fixs_to_strip",
     "not_end_with_trial"
 ]
 
 
-def fixation_funnel(fixations: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+def fixation_funnel(
+        fixations: pd.DataFrame,
+        min_fixs_to_strip: int = 3,
+        min_time_to_trial_end: float = cnfg.CHUNKING_TEMPORAL_WINDOW_MS,
+) -> Dict[str, pd.DataFrame]:
     # TODO: exclude on-target fixations that are within K fixations from the target identification
     return _calc_funnel(
         data=fixations,
+        min_fixs_to_strip=min_fixs_to_strip,
+        min_time_to_trial_end = min_time_to_trial_end,
         steps=FUNNEL_STEPS,
         distance_col=cnfg.DISTANCE_STR,
     )
@@ -29,20 +33,29 @@ def fixation_funnel(fixations: pd.DataFrame) -> Dict[str, pd.DataFrame]:
 
 def visit_funnel(
         visits: pd.DataFrame,
-        distance_col: Literal['min_distance', 'max_distance', 'mean_distance', 'weighted_distance']
+        distance_col: Literal['min_distance', 'max_distance', 'mean_distance', 'weighted_distance'],
+        min_fixs_to_strip: int = 3,
+        min_time_to_trial_end: float = cnfg.CHUNKING_TEMPORAL_WINDOW_MS,
 ) -> Dict[str, pd.DataFrame]:
     return _calc_funnel(
         data=visits,
-        steps=[step for step in FUNNEL_STEPS if step != "not_outlier"],
         distance_col=distance_col,
+        min_fixs_to_strip=min_fixs_to_strip,
+        min_time_to_trial_end=min_time_to_trial_end,
+        steps=[step for step in FUNNEL_STEPS if step != "not_outlier"],
     )
 
 
 def _calc_funnel(
-        data: pd.DataFrame, steps: List[str], distance_col: str,
+        data: pd.DataFrame, steps: List[str],
+        distance_col: str,
+        min_fixs_to_strip: int,
+        min_time_to_trial_end: float,
 ) -> Dict[str, pd.DataFrame]:
-    assert distance_col in data.columns, f"Distance column `{distance_col}` not found in data."
     assert steps[0] == cnfg.ALL_STR, f"First step must be `{cnfg.ALL_STR}`."
+    assert distance_col in data.columns, f"Distance column `{distance_col}` not found in data."
+    assert min_fixs_to_strip >= 0, "Minimum number of fixations to strip must be non-negative."
+    assert min_time_to_trial_end >= 0, "Minimum time to trial end must be non-negative."
     funnel = dict()
     funnel[cnfg.ALL_STR] = data
     for i, step in enumerate(steps):
@@ -61,24 +74,11 @@ def _calc_funnel(
         if step == "before_identification":
             funnel[step] = prev_result[prev_result[f"{cnfg.END_TIME_STR}"] <= prev_result[cnfg.TARGET_TIME_STR]]
             continue
-        if step == "next_1_not_in_strip":
-            funnel[step] = prev_result[~(prev_result['next_1_in_strip'].astype(bool))]
-            continue
-        if step == "next_2_not_in_strip":
-            funnel[step] = prev_result[
-                ~(prev_result['next_1_in_strip'].astype(bool)) &
-                ~(prev_result['next_2_in_strip'].astype(bool))
-            ]
-            continue
-        if step == "next_3_not_in_strip":
-            funnel[step] = prev_result[
-                ~(prev_result['next_1_in_strip'].astype(bool)) &
-                ~(prev_result['next_2_in_strip'].astype(bool)) &
-                ~(prev_result['next_3_in_strip'].astype(bool))
-            ]
+        if step == "fixs_to_strip":
+            funnel[f"{step}>={min_fixs_to_strip}"] = prev_result[prev_result["num_fixs_to_strip"] >= min_fixs_to_strip]
             continue
         if step == "not_end_with_trial":
-            funnel[step] = prev_result[prev_result["to_trial_end"] >= cnfg.CHUNKING_TEMPORAL_WINDOW_MS]
+            funnel[step] = prev_result[prev_result["to_trial_end"] >= min_time_to_trial_end]
             continue
         raise KeyError(f"Unknown funnel step: {step}.")
     return funnel

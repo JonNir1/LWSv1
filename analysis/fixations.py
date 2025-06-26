@@ -8,6 +8,7 @@ from tqdm import tqdm
 import peyes
 
 import config as cnfg
+import helpers as hlp
 from data_models.Subject import Subject
 from data_models.SearchArray import SearchArray
 
@@ -41,8 +42,7 @@ def get_fixations(subject: Subject, save: bool = True, verbose: bool = False) ->
     - x, y: float; mean pixel coordinates of the fixation
     - target: str (target_0, target_1, ...); name of closest target to the fixation
     - distance: float; distance to the closest target (in DVA)
-    - in_strip: bool; whether the fixation is in the bottom strip of the trial
-    - next_1_in_strip, next_2_in_strip, next_3_in_strip: bool; whether the next 1, 2, or 3 fixations are in the bottom strip
+    - num_fixs_to_strip: float; number of fixations until the next visit to the SearchArray bottom strip, or inf if no such visit exists
     - curr_identified: str - the target that was identified during the current fixation (or None)
     - target_time: float - the time of the target identification in the trial, or inf if the target was never identified
     - target_x, target_y, target_angle: float - the pixel coordinates and angle of the target
@@ -75,8 +75,8 @@ def extract_fixations(subject: Subject, verbose: bool = False) -> pd.DataFrame:
     all_distances = _calc_target_distances(fixations_df, idents_df)
     closest_dists = _find_closest_target(all_distances)
     currently_identifying = _currently_identifying(fixations_df, idents_df)
-    in_strip = _is_k_next_in_strip(fixations_df, max_k=3)
-    fixations_df = pd.concat([fixations_df, closest_dists, currently_identifying, in_strip], axis=1)
+    to_strip = _num_fixations_to_strip(fixations_df)
+    fixations_df = pd.concat([fixations_df, closest_dists, currently_identifying, to_strip], axis=1)
     fixations_df[cnfg.DISTANCE_STR] *= subject.px2deg   # convert pixel distances to DVA
 
     # merge with target identification data
@@ -164,6 +164,7 @@ def _find_closest_target(distances: pd.DataFrame) -> pd.DataFrame:
     return closest_target_df
 
 
+# TODO: add `num_fixs_to_identification` to fixs_df (instead of `next_1/2/3_in_strip`)
 def _currently_identifying(fixations_df: pd.DataFrame, idents_df: pd.DataFrame) -> pd.Series:
     """ For each fixation in the fixations DataFrame, determine which target was currently being identified, if any. """
     current = dict()
@@ -195,34 +196,21 @@ def _currently_identifying(fixations_df: pd.DataFrame, idents_df: pd.DataFrame) 
     return current
 
 
-# TODO: add `fixs_to_identification` and `fixs_to_strip` to fixs_df (instead of `next_1/2/3_in_strip`)
-def _is_k_next_in_strip(fixations_df: pd.DataFrame, max_k: int = 3) -> pd.DataFrame:
-    """
-    For each fixation, checks if the next 1,...,k fixations from the same (trial, eye) are in the bottom strip.
-    Returns a boolean DataFrame with columns `in_strip`, `next_1_in_strip`, `next_2_in_strip`, ..., `next_k_in_strip`.
-    """
-    def is_in_bottom_strip(fixs_df: pd.DataFrame) -> pd.Series:
-        xy = fixs_df[[cnfg.X, cnfg.Y]]      # shape (num_fixs, 2)
-        is_in_strip = pd.Series(
-            map(lambda tup: SearchArray.is_in_bottom_strip((tup.x, tup.y)), xy.itertuples()),
-            name="in_strip",
-        )
-        return is_in_strip
-
+def _num_fixations_to_strip(fixations_df: pd.DataFrame) -> pd.Series:
+    """ For each fixation, checks if it is in the bottom strip of the SearchArray. """
     fixations_copy = fixations_df.copy()
-    fixations_copy['in_strip'] = is_in_bottom_strip(fixations_df)
+    xy = fixations_df[[cnfg.X, cnfg.Y]]      # shape (num_fixs, 2)
+    fixations_copy['in_strip'] = pd.Series(
+        map(lambda tup: SearchArray.is_in_bottom_strip((tup.x, tup.y)), xy.itertuples()),
+        name="in_strip", dtype=bool,
+    )
     result_parts = []
     for (_trial, _eye), group in fixations_copy.groupby(by=[cnfg.TRIAL_STR, cnfg.EYE_STR]):
-        group = group.reset_index().sort_values(cnfg.FIXATION_STR, inplace=False)
-        block = group["in_strip"].to_frame(name="in_strip")  # keep the original in_strip column
-        for k in range(1, max_k + 1):
-            next_k_in_strip = group["in_strip"].shift(-k)
-            next_k_in_strip.loc[next_k_in_strip.isna()] = False  # fill nans with False, avoid pd.future_warning
-            block[f"next_{k}_in_strip"] = next_k_in_strip
-        block.index = group.set_index([cnfg.EYE_STR, cnfg.FIXATION_STR]).index
-        result_parts.append(block)
+        group = group.sort_values(cnfg.FIXATION_STR, inplace=False)
+        num_fixs_to_strip = hlp.num_to_true(group["in_strip"])
+        result_parts.append(num_fixs_to_strip)
     # concatenate results and return
-    result = pd.concat(result_parts).reset_index(drop=True)
-    return result
-
+    num_fixs_to_strip = pd.concat(result_parts).reset_index(drop=True)
+    num_fixs_to_strip.name = "num_fixs_to_strip"
+    return num_fixs_to_strip
 
