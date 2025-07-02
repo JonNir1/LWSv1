@@ -4,4 +4,7 @@
 - number of all fixations till first identification - line plot (with and without bad-action trials; split by category and search-array type)
 - % identified after bottom-strip visits (include non-identified) - cumulative histogram for -4, -3, ... fixations back from identification
 - exploration/exploitation - fixation duration and saccade sizes over trial time - line plot (also by category and search-array type)
-- 
+
+**TODO - Analysis Thresholds:**
+- Determine bad subjects: num bad-action trials, miss rate, FA rate, distance on hits
+- Determine on-target distance: show distance on hits for all (valid) subjects
