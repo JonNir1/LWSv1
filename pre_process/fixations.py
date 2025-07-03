@@ -17,7 +17,7 @@ from pre_process.behavior import extract_trial_behavior
 
 _FIXATION_LABEL = peyes.parse_label(cnfg.FIXATION_STR)
 _REDUNDANT_FIXATION_FEATURES = [
-    'label', "center_pixel", "pixel_std", 'azimuth', 'is_outlier', "outlier_reasons",
+    'label', "center_pixel", "pixel_std", 'azimuth', 'is_outlier',
     "distance", "cumulative_distance", "amplitude", "cumulative_amplitude",
     'velocity', "peak_velocity", "median_velocity", "min_velocity",
     'dispersion', "area", "median_dispersion", "ellipse_area",
