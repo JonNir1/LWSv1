@@ -1,19 +1,12 @@
 import os
 import warnings
-from typing import Union, Sequence
+from typing import Optional, Union, Sequence
 
-import numpy as np
 import pandas as pd
-from tqdm import tqdm
-import peyes
 
 import config as cnfg
-import helpers as hlp
 from data_models.Subject import Subject
-from data_models.Trial import Trial
-from data_models.SearchArray import SearchArray
-from data_models.LWSEnums import SubjectActionTypesEnum, TargetIdentificationTypeEnum
-from pre_process.behavior import extract_trial_behavior
+from data_models.LWSEnums import SubjectActionTypesEnum
 
 from pre_process.targets import extract_targets
 from pre_process.metadata import extract_metadata
@@ -27,6 +20,25 @@ _DEFAULT_IDENTIFICATION_ACTIONS = [
 ]
 
 
+def parse_subject(
+        subject_id: int,
+        exp_name: str = cnfg.EXPERIMENT_NAME,
+        session: int = 1,
+        data_dir: Optional[str] = None,
+        verbose: bool = False,
+) -> Subject:
+    try:
+        subj = Subject.from_pickle(exp_name=exp_name, subject_id=subject_id,)
+    except FileNotFoundError:
+        subj = Subject.from_raw(
+            exp_name=exp_name, subject_id=subject_id, session=session, data_dir=data_dir, verbose=verbose
+        )
+        if "Rotem" in data_dir:     # TODO: remove this ugly hack
+            subj._id = 3
+        subj.to_pickle(overwrite=False)
+    return subj
+
+
 def process_subject(
         subj: Subject,
         identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum] = None,
@@ -35,7 +47,7 @@ def process_subject(
         visit_separation_time_threshold: float = cnfg.CHUNKING_TEMPORAL_WINDOW_MS,
         save_fixations: bool = True,
         verbose=False,
-):
+) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame):
     identification_actions = identification_actions or _DEFAULT_IDENTIFICATION_ACTIONS
     bad_actions = [
         act for act in SubjectActionTypesEnum if act not in identification_actions and act != SubjectActionTypesEnum.NO_ACTION
@@ -43,7 +55,7 @@ def process_subject(
     targets = extract_targets(subj)
     metadata = extract_metadata(subj, bad_actions=bad_actions)
     idents = extract_behavior(
-        subj, identification_actions, temporal_matching_threshold, false_alarm_threshold_dva, verbose=verbose
+        subj, identification_actions, temporal_matching_threshold, false_alarm_threshold_dva, verbose=False
     )
     fixations = extract_fixations(
         subj, identification_actions, temporal_matching_threshold, false_alarm_threshold_dva,
@@ -51,4 +63,3 @@ def process_subject(
     )
     visits = extract_visits(fixations, false_alarm_threshold_dva, visit_separation_time_threshold)
     return targets, metadata, idents, fixations, visits
-

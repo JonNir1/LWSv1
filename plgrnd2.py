@@ -6,39 +6,30 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 import config as cnfg
-from data_models.LWSEnums import DominantEyeEnum
-from data_models.Subject import Subject
-
-from analysis.fixations import get_fixations
-from analysis.visits import get_visits
+from pre_process.pipeline import parse_subject, process_subject
 
 pio.renderers.default = "browser"
 
 
-subj = Subject.from_pickle(exp_name=cnfg.EXPERIMENT_NAME, subject_id=2)
-trial = subj.get_trials()[12]
-
-
 
 ## Read Subject Data
-_SUBJECTS = [(1, "v4-1-1 GalChen Demo"), (2, "v4-2-1 Netta Demo"), (2, "v4-2-1 Rotem Demo")]
-SUBJECT = dict()
+_SUBJECTS = [(1, "v4-1-1 GalChen Demo"), (2, "v4-2-1 Netta Demo"), (3, "v4-3-1 Rotem Demo")]
+PROCESSED_SUBJECTS = dict()
 for i, (subject_id, data_dir) in enumerate(_SUBJECTS):
-    try:
-        subj = Subject.from_pickle(exp_name=cnfg.EXPERIMENT_NAME, subject_id=subject_id,)
-    except FileNotFoundError:
-        subj = Subject.from_raw(
-            exp_name=cnfg.EXPERIMENT_NAME, subject_id=subject_id, session=1, data_dir=data_dir, verbose=True
-        )
-        if "Rotem" in data_dir:
-            subj._id = 3
-        subj.to_pickle(overwrite=False)
-    SUBJECT[subj.id] = subj
-
-    fixs = get_fixations(subj, save=True, verbose=True)
-    # fixs = fixs[fixs["outlier_reasons"].apply(lambda x: len(x) == 0)]  # drop outliers
-    visits = get_visits(subj, save=True, verbose=True)
-del _SUBJECTS, subj, fixs, visits
+    subj = parse_subject(
+        subject_id=subject_id, exp_name=cnfg.EXPERIMENT_NAME, data_dir=data_dir, session=1, verbose=True
+    )
+    targets, metadata, idents, fixations, visits = process_subject(subj, verbose=True)
+    results = {
+        cnfg.SUBJECT_STR: subj,
+        cnfg.TARGET_STR: targets,
+        cnfg.METADATA_STR: metadata,
+        "identification": idents,
+        cnfg.FIXATION_STR: fixations,
+        cnfg.VISIT_STR: visits,
+    }
+    PROCESSED_SUBJECTS[subject_id] = results
+del _SUBJECTS, i, subject_id, data_dir, subj, targets, metadata, idents, fixations, visits, results
 
 
 ## LWS Funnel - fixations
