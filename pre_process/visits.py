@@ -8,7 +8,7 @@ import config as cnfg
 def extract_visits(
         all_fixations: pd.DataFrame,
         target_distance_threshold_dva: float,
-        visit_separation_time_threshold_ms: float,
+        visit_merging_time_threshold: float,
 ) -> pd.DataFrame:
     """
     Groups the provided fixations into discrete target-visits. A target-visit is a sequence of fixations from the same
@@ -21,7 +21,7 @@ def extract_visits(
 
     :param all_fixations: pd.DataFrame; fixations to be grouped into visits.
     :param target_distance_threshold_dva: float; the distance threshold in DVA for a fixation to be considered on-target.
-    :param visit_separation_time_threshold_ms: float; the time threshold in ms for separating visits.
+    :param visit_merging_time_threshold: float; the time threshold in ms for separating visits.
     :return: a DataFrame containing the visits, with the following columns:
     - trial: int; the trial number
     - eye: str; the eye (left or right) from which the visit fixations were recorded
@@ -48,7 +48,7 @@ def extract_visits(
         subset = subset.sort_values("event_id", inplace=False).reset_index(drop=False)
         if subset.empty:
             continue
-        visit_ids = _assign_visit_ids(subset, target_distance_threshold_dva, visit_separation_time_threshold_ms)
+        visit_ids = _assign_visit_ids(subset, target_distance_threshold_dva, visit_merging_time_threshold)
         for target_visit_col in visit_ids.columns:
             tgt_vis_ids = visit_ids[target_visit_col]
             if tgt_vis_ids.isna().all():
@@ -67,7 +67,7 @@ def extract_visits(
 def _assign_visit_ids(
         fixs_subset: pd.DataFrame,
         target_distance_threshold_dva: float,
-        visit_separation_time_threshold_ms: float,
+        visit_merging_time_threshold: float,
 ) -> pd.DataFrame:
     """
     Assigns a numerical visit ID to fixations that share the same trial and eye.
@@ -82,7 +82,7 @@ def _assign_visit_ids(
     Returns a DataFrame with the same index as `fixs_subset`, containing visit IDs for each target.
     """
     assert target_distance_threshold_dva > 0, "Target distance threshold must be positive."
-    assert visit_separation_time_threshold_ms > 0, "Visit separation time threshold must be positive."
+    assert visit_merging_time_threshold > 0, "Visit time threshold must be positive."
     trials = fixs_subset[cnfg.TRIAL_STR].unique()
     if len(trials) != 1:
         raise RuntimeError(f"Fixation subset is not from a single trial: {trials.tolist()}")
@@ -94,7 +94,7 @@ def _assign_visit_ids(
     # check temporal threshold
     time_diffs = fixs_subset["start_time"] - fixs_subset["end_time"].shift(1)
     time_diffs = time_diffs.fillna(np.inf)  # consider the 1st fixation's time-from-previous as infinity (allow visit-start)
-    is_time_separated = (time_diffs > visit_separation_time_threshold_ms).astype(bool)
+    is_time_separated = (time_diffs > visit_merging_time_threshold).astype(bool)
 
     # assign visit IDs per target
     dist_dva_suffix = f"_{cnfg.DISTANCE_STR}_dva"

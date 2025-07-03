@@ -78,7 +78,7 @@ def identification_event_start_time_figure(
         ident_data: pd.DataFrame,
         event_data: pd.DataFrame,
         event_type: Literal['fixation', 'visit'],
-        temporal_window: float = cnfg.CHUNKING_TEMPORAL_WINDOW_MS,
+        temporal_window: float = cnfg.VISIT_MERGING_TIME_THRESHOLD,
         dominant_eye: Optional[Union[DominantEyeEnum, Literal["left", "right"]]] = None,
         drop_bads: bool = True
 ) -> go.Figure:
@@ -113,7 +113,7 @@ def identification_event_distance_figure(
         event_data: pd.DataFrame,
         event_type: Literal['fixation', 'visit'],
         px2deg: float,
-        temporal_window: float = cnfg.CHUNKING_TEMPORAL_WINDOW_MS,
+        temporal_window: float = cnfg.VISIT_MERGING_TIME_THRESHOLD,
         dominant_eye: Optional[Union[DominantEyeEnum, Literal["left", "right"]]] = None,
         drop_bads: bool = True
 ) -> go.Figure:

@@ -44,7 +44,7 @@ def process_subject(
         identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum] = None,
         temporal_matching_threshold: float = cnfg.MAX_GAZE_TO_TRIGGER_TIME_DIFF,
         on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
-        visit_separation_time_threshold: float = cnfg.CHUNKING_TEMPORAL_WINDOW_MS,
+        visit_merging_time_threshold: float = cnfg.VISIT_MERGING_TIME_THRESHOLD,
         save_fixations: bool = True,
         verbose=False,
 ) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame):
@@ -61,5 +61,5 @@ def process_subject(
         subj, identification_actions, temporal_matching_threshold, on_target_threshold_dva,
         save=save_fixations, verbose=verbose
     )
-    visits = extract_visits(fixations, on_target_threshold_dva, visit_separation_time_threshold)
+    visits = extract_visits(fixations, on_target_threshold_dva, visit_merging_time_threshold)
     return targets, metadata, idents, fixations, visits
