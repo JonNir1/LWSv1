@@ -187,7 +187,7 @@ class Trial:
         for i, (cx, cy) in enumerate(coords):
             for j, (tx, ty) in enumerate(target_coords):
                 dists[i, j] = hlp.distance((cx, cy), (tx, ty), 'px',)
-        dists = pd.DataFrame(dists, columns=[f"{cnfg.TARGET_STR}_{i}" for i in range(target_coords.shape[0])])
+        dists = pd.DataFrame(dists, columns=[f"{cnfg.TARGET_STR}{i}" for i in range(target_coords.shape[0])])
         return dists
 
     def __eq__(self, other) -> bool:
