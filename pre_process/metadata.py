@@ -35,8 +35,8 @@ def extract_trial_metadata(
         trial: Trial, bad_actions: Sequence[SubjectActionTypesEnum]
 ) -> pd.Series:
     return pd.Series({
-        "trial_num": trial.trial_num,
-        "block_num": trial.block_num,
+        "trial": trial.trial_num,
+        "block": trial.block_num,
         "trial_type": trial.trial_type.name,
         "duration": trial.end_time - trial.start_time,
         "num_targets": len(trial.get_search_array().targets),
