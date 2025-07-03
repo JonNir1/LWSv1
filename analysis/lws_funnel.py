@@ -84,18 +84,6 @@ def _calc_funnel(
     return funnel
 
 
-def calc_funnel(data: pd.DataFrame) -> Dict[str, pd.DataFrame]:
-    """
-    Calculate the LWS funnel steps from the provided DataFrame.
-    The DataFrame should contain all necessary columns for the funnel calculation.
-    """
-    funnel = dict()
-    funnel['all'] = data
-    for step in FUNNEL_STEPS:
-        funnel[step] = _calc_funnel_step(funnel, step)
-    return funnel
-
-
 def _calc_funnel_step(funnel: Dict[str, pd.DataFrame], step: str) -> pd.DataFrame:
     assert cnfg.ALL_STR in funnel.keys(), "Funnel must contain the `all` step."
     if step not in FUNNEL_STEPS:
