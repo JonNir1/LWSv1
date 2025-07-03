@@ -58,6 +58,7 @@ def extract_behavior(
         )
         .rename(columns={"level_0": cnfg.TRIAL_STR})
         .sort_values(by=[cnfg.TRIAL_STR, cnfg.TARGET_STR])
+        .reset_index(drop=True)
     )
     return behaviors
 
