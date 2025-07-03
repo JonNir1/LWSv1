@@ -20,7 +20,7 @@ _DEFAULT_IDENTIFICATION_ACTIONS = [
 ]
 
 
-def parse_subject(
+def read_subject(
         subject_id: int,
         exp_name: str = cnfg.EXPERIMENT_NAME,
         session: int = 1,
@@ -43,7 +43,7 @@ def process_subject(
         subj: Subject,
         identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum] = None,
         temporal_matching_threshold: float = cnfg.MAX_GAZE_TO_TRIGGER_TIME_DIFF,
-        false_alarm_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
+        on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
         visit_separation_time_threshold: float = cnfg.CHUNKING_TEMPORAL_WINDOW_MS,
         save_fixations: bool = True,
         verbose=False,
@@ -55,11 +55,11 @@ def process_subject(
     targets = extract_targets(subj)
     metadata = extract_metadata(subj, bad_actions=bad_actions)
     idents = extract_behavior(
-        subj, identification_actions, temporal_matching_threshold, false_alarm_threshold_dva, verbose=False
+        subj, identification_actions, temporal_matching_threshold, on_target_threshold_dva, verbose=False
     )
     fixations = extract_fixations(
-        subj, identification_actions, temporal_matching_threshold, false_alarm_threshold_dva,
+        subj, identification_actions, temporal_matching_threshold, on_target_threshold_dva,
         save=save_fixations, verbose=verbose
     )
-    visits = extract_visits(fixations, false_alarm_threshold_dva, visit_separation_time_threshold)
+    visits = extract_visits(fixations, on_target_threshold_dva, visit_separation_time_threshold)
     return targets, metadata, idents, fixations, visits
