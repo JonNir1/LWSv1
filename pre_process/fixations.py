@@ -65,10 +65,10 @@ def extract_fixations(
     try:
         fixations = pd.read_pickle(path)
         if verbose:
-            print(f"Fixations DataFrame loaded.")
+            print(f"Subject {subject.id}'s fixations DataFrame loaded.")
     except FileNotFoundError:
         if verbose:
-            print(f"Fixations DataFrame not found. Extracting...")
+            print(f"Fixations DataFrame not found for subject {subject.id}. Extracting...")
         trial_fixations = {
             trial.trial_num: extract_trial_fixations(
                 trial,
