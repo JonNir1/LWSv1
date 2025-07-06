@@ -18,7 +18,7 @@ def create_funnel_figure(data: pd.DataFrame, funnel_type: Literal["fixations", "
             go.Funnel(
                 name=f"Subject {subj_id}", legendgroup=f"Subject {subj_id}",
                 y=subj_funnel["step"], x=subj_funnel["size"],
-                textinfo="label+value+percent initial",
+                textinfo="value+percent initial",
                 marker=dict(color=px.colors.qualitative.Pastel[int(subj_id)]),
                 connector=dict(visible=False),
             )
