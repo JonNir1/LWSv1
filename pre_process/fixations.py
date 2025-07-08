@@ -12,7 +12,7 @@ import helpers as hlp
 from data_models.Subject import Subject
 from data_models.Trial import Trial
 from data_models.SearchArray import SearchArray
-from data_models.LWSEnums import SubjectActionTypesEnum, TargetIdentificationTypeEnum
+from data_models.LWSEnums import SubjectActionTypesEnum
 from pre_process.behavior import extract_trial_behavior
 
 _FIXATION_LABEL = peyes.parse_label(cnfg.FIXATION_STR)
@@ -28,7 +28,7 @@ def extract_fixations(
         subject: Subject,
         identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
         temporal_matching_threshold: float,
-        false_alarm_threshold_dva: float,
+        on_target_threshold_dva: float,
         save: bool = True,
         verbose: bool = False,
 ) -> pd.DataFrame:
@@ -38,7 +38,7 @@ def extract_fixations(
     :param subject: Subject object
     :param identification_actions: action(s) that indicate the subject has identified a target.
     :param temporal_matching_threshold: float; temporal threshold (in ms) for matching gaze samples to identification actions.
-    :param false_alarm_threshold_dva: float; spatial threshold (in DVA) for classifying a target identification as a false alarm or a hit.
+    :param on_target_threshold_dva: float; spatial threshold (in DVA) for classifying a target identification as a false alarm or a hit.
     :param save: bool; if True, saves the fixations DataFrame to a pickle file in the subject's output directory.
     :param verbose: bool; if True, displays a progress bar for the extraction process and prints messages about the process.
 
@@ -74,7 +74,7 @@ def extract_fixations(
                 trial,
                 identification_actions=identification_actions,
                 temporal_matching_threshold=temporal_matching_threshold,
-                false_alarm_threshold_dva=false_alarm_threshold_dva,
+                on_target_threshold_dva=on_target_threshold_dva,
             )
             for trial in tqdm(subject.get_trials(), desc=f"Extracting Fixations", disable=not verbose)
         }
@@ -94,15 +94,16 @@ def extract_trial_fixations(
         trial: Trial,
         identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
         temporal_matching_threshold: float,
-        false_alarm_threshold_dva: float,
+        on_target_threshold_dva: float,
 ) -> pd.DataFrame:
     fix_features = _extract_fixation_features(trial)
     dists = _calc_target_distances(fix_features, trial.get_targets(), trial.px2deg)
-    closest_target = _find_closest_target(dists)
+    closest_target = _find_fix_closest_target(dists)
     curr_identified = _currently_identified_target(
         fix_features,
-        extract_trial_behavior(trial, identification_actions, temporal_matching_threshold, false_alarm_threshold_dva),
-        trial.trial_num
+        extract_trial_behavior(trial, identification_actions, temporal_matching_threshold),
+        trial.trial_num,
+        on_target_threshold_dva
     )
     fixs_to_strip = _num_fixations_to_strip(fix_features)
     fixations = pd.concat([fix_features, dists, closest_target, curr_identified, fixs_to_strip], axis=1)
@@ -158,7 +159,7 @@ def _calc_target_distances(
     return distances
 
 
-def _find_closest_target(distances: pd.DataFrame) -> pd.Series:
+def _find_fix_closest_target(distances: pd.DataFrame) -> pd.Series:
     """ Find the closest target for each fixation in the trial """
     suffix = f"_{cnfg.DISTANCE_STR}_dva"
     dist_cols = [col for col in distances.columns if col.endswith(suffix)]
@@ -178,18 +179,21 @@ def _find_closest_target(distances: pd.DataFrame) -> pd.Series:
 
 
 def _currently_identified_target(
-        fix_features: pd.DataFrame, behavior: pd.DataFrame, trial_num: int,
+        fix_features: pd.DataFrame, behavior: pd.DataFrame, trial_num: int, on_target_threshold_dva: float
 ) -> pd.Series:
     """ For each fixation, identify the target that was identified (hit) during that fixation, if any. """
-    # identify which target was identified during each fixation (if any)
-    hits_misses = behavior.loc[behavior["ident_type"] != TargetIdentificationTypeEnum.FALSE_ALARM]  # all targets in the trial
-    tgt_times = hits_misses[cnfg.TIME_STR].to_numpy()                                       # shape: (num_targets,)
-    is_start_before = fix_features[cnfg.START_TIME_STR].to_numpy() <= tgt_times[:, None]    # shape (num_targets, num_fixations)
-    is_end_after = fix_features[cnfg.END_TIME_STR].to_numpy() >= tgt_times[:, None]         # shape (num_targets, num_fixations)
+    assert np.isfinite(on_target_threshold_dva) and on_target_threshold_dva > 0, \
+        f"On-target threshold must be a finite positive number, got {on_target_threshold_dva}."
+
+    # identify which target (if any) was identified during each fixation
+    identified_targets = behavior[behavior[f"{cnfg.DISTANCE_STR}_dva"] <= on_target_threshold_dva]
+    ident_times = identified_targets[cnfg.TIME_STR].to_numpy()                              # shape: (num_hits,)
+    is_start_before = fix_features[cnfg.START_TIME_STR].to_numpy() <= ident_times[:, None]  # shape (num_hits, num_fixations)
+    is_end_after = fix_features[cnfg.END_TIME_STR].to_numpy() >= ident_times[:, None]       # shape (num_hits, num_fixations)
     is_currently_identifying = is_start_before & is_end_after
-    is_currently_identifying = pd.DataFrame(
-        is_currently_identifying, index=hits_misses[cnfg.TARGET_STR].to_list(), columns=fix_features.index,
-    ).T                                                                                     # shape (num_fixations, num_targets)
+    is_currently_identifying = pd.DataFrame(                                                # shape (num_fixations, num_hits)
+        is_currently_identifying, index=identified_targets[cnfg.TARGET_STR].to_list(), columns=fix_features.index,
+    ).T
 
     # check for multiple targets identified during the same fixation - should not happen
     simultaneous_identifications = is_currently_identifying[is_currently_identifying.sum(axis=1) > 1]

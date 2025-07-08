@@ -42,13 +42,6 @@ class SubjectActionTypesEnum(IntEnum):
     MARK_AND_REJECT = 4
 
 
-class TargetIdentificationTypeEnum(StrEnum):
-    UNKNOWN = 'unknown'
-    HIT = 'hit'
-    MISS = 'miss'
-    FALSE_ALARM = 'false_alarm'
-
-
 class TargetVisitTypeEnum(StrEnum):
     OTHER = 'other'
     BEFORE = 'before'

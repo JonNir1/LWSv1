@@ -58,7 +58,7 @@ def process_subject(
     targets = extract_targets(subj)
     metadata = extract_metadata(subj, bad_actions=bad_actions)
     idents = extract_behavior(
-        subj, identification_actions, temporal_matching_threshold, on_target_threshold_dva, verbose=False
+        subj, identification_actions, temporal_matching_threshold, verbose=False
     )
 
     fixations = extract_fixations(

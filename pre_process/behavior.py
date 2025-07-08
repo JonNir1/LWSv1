@@ -1,4 +1,3 @@
-import warnings
 from typing import Union, Sequence
 
 import numpy as np
@@ -9,14 +8,13 @@ import config as cnfg
 import helpers as hlp
 from data_models.Subject import Subject
 from data_models.Trial import Trial
-from data_models.LWSEnums import SubjectActionTypesEnum, TargetIdentificationTypeEnum
+from data_models.LWSEnums import SubjectActionTypesEnum
 
 
 def extract_behavior(
         subject: Subject,
         identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
         temporal_matching_threshold: float,
-        false_alarm_threshold_dva: float,
         verbose: bool = False,
 ) -> pd.DataFrame:
     """
@@ -25,13 +23,11 @@ def extract_behavior(
     :param subject: Subject object
     :param identification_actions: action(s) that indicate the subject has identified a target.
     :param temporal_matching_threshold: temporal threshold (in ms) for matching gaze samples to identification actions.
-    :param false_alarm_threshold_dva: spatial threshold (in DVA) for classifying a target identification as a false alarm or a hit.
     :param verbose: if True, displays a progress bar for the extraction process.
 
     :return: a DataFrame containing the target identification behavior for each trial, with the following columns:
     - trial: int; the trial number
     - target: str; the name of the closest target to the subject's gaze at the time of identification
-    - ident_type: TargetIdentificationTypeEnum; the type of identification (HIT, MISS, or FALSE_ALARM)
     - time: float; the time of the identification action in ms (relative to trial onset)
     - distance_px: float; the distance between the subject's gaze and the closest target, in pixels
     - distance_dva: float; the distance between the subject's gaze and the closest target, in DVA
@@ -43,7 +39,6 @@ def extract_behavior(
             trial,
             identification_actions=identification_actions,
             temporal_matching_threshold=temporal_matching_threshold,
-            false_alarm_threshold_dva=false_alarm_threshold_dva,
         )
         for trial in tqdm(subject.get_trials(), desc=f"Target Identifications", disable=not verbose)
     }
@@ -67,7 +62,6 @@ def extract_trial_behavior(
         trial: Trial,
         identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
         temporal_matching_threshold: float,
-        false_alarm_threshold_dva: float,
 ):
     ident_times = _extract_identification_times(trial, identification_actions)
     ident_gaze = _extract_gaze_on_identification(
@@ -80,24 +74,11 @@ def extract_trial_behavior(
         ident_gaze[[col for col in ident_gaze.columns if col.startswith("left")]],
         ident_gaze[[col for col in ident_gaze.columns if col.startswith("right")]]
     ], axis=1)
-    idents = _classify_behavior(idents, trial.get_targets(), false_alarm_threshold_dva)
-    idents = _clean_fa_data(idents)
+    idents = _classify_behavior(idents, trial.get_targets())
 
     # reorder columns
-    ordered_cols = [cnfg.TARGET_STR, "ident_type"]
-    ordered_cols += [col for col in idents.columns if col not in ordered_cols]
+    ordered_cols = [cnfg.TARGET_STR] + [col for col in idents.columns if col != cnfg.TARGET_STR]
     idents = idents[ordered_cols]
-
-    # warn if a target was identified multiple times
-    non_fa_targets = idents.loc[idents["ident_type"] != TargetIdentificationTypeEnum.FALSE_ALARM, cnfg.TARGET_STR]
-    non_fa_target_counts = non_fa_targets.value_counts()
-    if (non_fa_target_counts > 1).any():
-        # TODO: consider resolving this in code rather than manually?
-        multi_detected = non_fa_target_counts[non_fa_target_counts > 1].index.tolist()
-        warnings.warn(
-            f"Multiple identifications for targets {multi_detected} in trial {trial.trial_num}.",
-            RuntimeWarning,
-        )
     return idents
 
 
@@ -160,23 +141,12 @@ def _find_closest_target(identification_gaze: pd.DataFrame, px2deg: float,) -> p
     return dists
 
 
-def _classify_behavior(
-        identifications: pd.DataFrame, targets: pd.DataFrame, fa_threshold_dva: float,
-) -> pd.DataFrame:
-    assert fa_threshold_dva > 0, "False alarm threshold must be greater than 0."
-    identifications["ident_type"] = identifications[f"{cnfg.DISTANCE_STR}_dva"].map(
-        lambda dist: TargetIdentificationTypeEnum.FALSE_ALARM if dist > fa_threshold_dva else TargetIdentificationTypeEnum.HIT
-    )
-
-    # classify unidentified targets as misses
+def _classify_behavior(identifications: pd.DataFrame, targets: pd.DataFrame) -> pd.DataFrame:
+    # find missed targets
     all_targets = targets.index
-    hit_targets = identifications.loc[
-        identifications[f"{cnfg.DISTANCE_STR}_dva"] <= fa_threshold_dva, cnfg.TARGET_STR
-    ].unique()
-    missed_targets = all_targets[np.isin(all_targets, hit_targets, invert=True)]
+    missed_targets = all_targets[np.isin(all_targets, identifications[cnfg.TARGET_STR].unique(), invert=True)]
     misses = pd.DataFrame(index=range(len(missed_targets)))
     misses[cnfg.TARGET_STR] = missed_targets
-    misses["ident_type"] = TargetIdentificationTypeEnum.MISS
     misses[[cnfg.TIME_STR, f"{cnfg.DISTANCE_STR}_px", f"{cnfg.DISTANCE_STR}_dva"]] = np.inf  # set unidentified times & dists to inf
 
     # append misses to the identifications DataFrame
@@ -184,13 +154,3 @@ def _classify_behavior(
         identifications = pd.concat([identifications, misses], axis=0)
     identifications = identifications.reset_index(drop=True, inplace=False)
     return identifications
-
-
-def _clean_fa_data(idents_with_fa: pd.DataFrame) -> pd.DataFrame:
-    """ Set false-alarm targets and target-distances to NaN """
-    is_fa = idents_with_fa["ident_type"] == TargetIdentificationTypeEnum.FALSE_ALARM
-    cols_to_clean = [cnfg.TARGET_STR] + [col for col in idents_with_fa.columns if cnfg.DISTANCE_STR in col]
-    cleaned_idents = idents_with_fa.copy()
-    cleaned_idents.loc[is_fa, cols_to_clean] = np.nan
-    return cleaned_idents
-
