@@ -84,7 +84,6 @@ def extract_trial_fixations(trial: Trial,) -> pd.DataFrame:
     return fixations
 
 
-
 def _extract_fixation_features(trial: Trial) -> pd.DataFrame:
     """
     Extract the trial's fixation features to a DataFrame containing the following columns:
@@ -100,7 +99,7 @@ def _extract_fixation_features(trial: Trial) -> pd.DataFrame:
     """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
-        features = trial.get_eye_movements()
+        features = trial.get_raw_eye_movements()
     features = features[features[cnfg.LABEL_STR] == _FIXATION_LABEL]
     features["to_trial_end"] = trial.end_time - features[cnfg.END_TIME_STR]
     centers = pd.DataFrame(features["center_pixel"].to_list(), index=features.index, columns=[cnfg.X, cnfg.Y])
