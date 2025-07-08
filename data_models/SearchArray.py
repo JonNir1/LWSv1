@@ -7,7 +7,7 @@ import numpy.typing as npt_
 from pymatreader import read_mat
 
 import config as cnfg
-import io_helpers as hlp
+import helpers as hlp
 from data_models.LWSEnums import SearchArrayTypeEnum, ImageCategoryEnum
 
 

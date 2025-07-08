@@ -2,63 +2,14 @@ from typing import Union, Sequence
 
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 
 import config as cnfg
 import helpers as hlp
-from data_models.Subject import Subject
 from data_models.Trial import Trial
 from data_models.LWSEnums import SubjectActionTypesEnum
 
 
-def extract_behavior(
-        subject: Subject,
-        identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
-        temporal_matching_threshold: float,
-        verbose: bool = False,
-) -> pd.DataFrame:
-    """
-    Extracts the target identification behavior of a subject across all trials.
-
-    :param subject: Subject object
-    :param identification_actions: action(s) that indicate the subject has identified a target.
-    :param temporal_matching_threshold: temporal threshold (in ms) for matching gaze samples to identification actions.
-    :param verbose: if True, displays a progress bar for the extraction process.
-
-    :return: a DataFrame containing the target identification behavior for each trial, with the following columns:
-    - trial: int; the trial number
-    - target: str; the name of the closest target to the subject's gaze at the time of identification
-    - time: float; the time of the identification action in ms (relative to trial onset)
-    - distance_px: float; the distance between the subject's gaze and the closest target, in pixels
-    - distance_dva: float; the distance between the subject's gaze and the closest target, in DVA
-    - left_x, left_y, right_x, right_y: float; the x and y coordinates of the subject's left and right eye gaze at the time of identification
-    - left_pupil, right_pupil: float; the pupil size of the subject's left and right eye at the time of identification
-    """
-    trial_behaviors = {
-        trial.trial_num: extract_trial_behavior(
-            trial,
-            identification_actions=identification_actions,
-            temporal_matching_threshold=temporal_matching_threshold,
-        )
-        for trial in tqdm(subject.get_trials(), desc=f"Target Identifications", disable=not verbose)
-    }
-    behaviors = pd.concat(trial_behaviors.values(), axis=0, keys=trial_behaviors.keys())
-    behaviors = (
-        behaviors
-        .reset_index(drop=False)
-        .drop(
-            columns=["target_sub_path", "level_1", "left_label", "right_label",],
-            inplace=False,
-            errors='ignore'
-        )
-        .rename(columns={"level_0": cnfg.TRIAL_STR})
-        .sort_values(by=[cnfg.TRIAL_STR, cnfg.TARGET_STR])
-        .reset_index(drop=True)
-    )
-    return behaviors
-
-
-def extract_trial_behavior(
+def extract_trial_identifications(
         trial: Trial,
         identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
         temporal_matching_threshold: float,
@@ -74,7 +25,7 @@ def extract_trial_behavior(
         ident_gaze[[col for col in ident_gaze.columns if col.startswith("left")]],
         ident_gaze[[col for col in ident_gaze.columns if col.startswith("right")]]
     ], axis=1)
-    idents = _classify_behavior(idents, trial.get_targets())
+    idents = _append_missed_targets(idents, trial.get_targets())
 
     # reorder columns
     ordered_cols = [cnfg.TARGET_STR] + [col for col in idents.columns if col != cnfg.TARGET_STR]
@@ -96,11 +47,8 @@ def _extract_identification_times(
         .reset_index(drop=True)
         .rename(cnfg.TIME_STR)
     )
-    # identification_times = actions.loc[np.isin(actions[cnfg.ACTION_STR], identification_actions)]
-    # identification_times = identification_times.reset_index(drop=True)
     to_trial_end = (trial.end_time - identification_times).rename("to_trial_end")
     identification_times = pd.concat([identification_times, to_trial_end], axis=1)
-    # return identification_times[cnfg.TIME_STR]
     return identification_times
 
 
@@ -141,7 +89,7 @@ def _find_closest_target(identification_gaze: pd.DataFrame, px2deg: float,) -> p
     return dists
 
 
-def _classify_behavior(identifications: pd.DataFrame, targets: pd.DataFrame) -> pd.DataFrame:
+def _append_missed_targets(identifications: pd.DataFrame, targets: pd.DataFrame) -> pd.DataFrame:
     # find missed targets
     all_targets = targets.index
     missed_targets = all_targets[np.isin(all_targets, identifications[cnfg.TARGET_STR].unique(), invert=True)]

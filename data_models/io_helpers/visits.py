@@ -5,7 +5,7 @@ from tqdm import tqdm
 import config as cnfg
 
 
-def extract_visits(
+def convert_fixations_to_visits(
         all_fixations: pd.DataFrame,
         target_distance_threshold_dva: float,
         visit_merging_time_threshold: float,

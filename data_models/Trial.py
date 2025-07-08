@@ -1,24 +1,16 @@
 from __future__ import annotations
 import os
-from typing import Tuple
+import warnings
+from typing import Tuple, Sequence
 
 import numpy as np
 import pandas as pd
 import peyes
 
 import config as cnfg
-import io_helpers as hlp
+import helpers as hlp
 from data_models.SearchArray import SearchArray
 from data_models.LWSEnums import SearchArrayTypeEnum, SubjectActionTypesEnum, DominantEyeEnum
-from data_models.io_helpers.eye_movements import detect_eye_movements
-
-_FIXATION_LABEL = peyes.parse_label(cnfg.FIXATION_STR)
-_REDUNDANT_FIXATION_FEATURES = [
-    'label', 'distance', 'velocity', 'amplitude', 'azimuth', 'dispersion', 'area', 'is_outlier'
-]
-_BAD_SUBJECT_ACTIONS = [
-    SubjectActionTypesEnum.MARK_ONLY, SubjectActionTypesEnum.ATTEMPTED_MARK, SubjectActionTypesEnum.MARK_AND_REJECT
-]
 
 
 def _extract_singleton_column(df: pd.DataFrame, col_name: str):
@@ -116,7 +108,17 @@ class Trial:
         target_df = target_df.rename(columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False)
         return target_df
 
-    def get_eye_movements(self) -> pd.DataFrame:
+    def get_metadata(self, bad_actions: Sequence[SubjectActionTypesEnum]) -> pd.Series:
+        return pd.Series({
+            "trial": self.trial_num,
+            "block": self.block_num,
+            "trial_type": self.trial_type.name,
+            "duration": self.end_time - self.start_time,
+            "num_targets": len(self.get_search_array().targets),
+            f"bad_actions": bool(np.isin(self.get_actions()[cnfg.ACTION_STR], bad_actions).any()),
+        })
+
+    def get_raw_eye_movements(self) -> pd.DataFrame:
         """ Returns a DataFrame summarizing the eye movements detected during the trial. """
         left = peyes.summarize_events(self._left_events)
         right = peyes.summarize_events(self._right_events)
@@ -125,6 +127,14 @@ class Trial:
             keys=[cnfg.LEFT_STR, cnfg.RIGHT_STR], names=[cnfg.EYE_STR, cnfg.EVENT_STR], axis=0
         )
         return df
+
+    def process_fixations(self) -> pd.DataFrame:
+        from data_models.io_helpers.eye_movements import process_trial_fixations
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            features = self.get_raw_eye_movements()
+        fixations = process_trial_fixations(features, self.get_targets(), self.end_time, self.px2deg)
+        return fixations
 
     def _create_search_array(self) -> SearchArray:
         search_array_type = SearchArrayTypeEnum[_extract_singleton_column(self._gaze, cnfg.CONDITION_STR).upper()]
@@ -138,6 +148,7 @@ class Trial:
         return search_array
 
     def _detect_eye_movements(self) -> Tuple[pd.DataFrame, pd.Series, pd.Series]:
+        from data_models.io_helpers.eye_movements import detect_eye_movements
         left_labels, left_events = detect_eye_movements(
             self._gaze,
             DominantEyeEnum.LEFT,

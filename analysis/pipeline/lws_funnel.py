@@ -1,4 +1,4 @@
-from typing import Literal, List, Dict
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -6,7 +6,7 @@ import pandas as pd
 import config as cnfg
 
 LWS_FUNNEL_STEPS = [
-    "all", "valid_trial", "not_outlier", "on_target", "before_identification", "fixs_to_strip", "not_end_with_trial"
+    "all", "valid_trial", "not_outlier", "on_target", "before_identification", "fixs_to_strip", "not_end_with_trial", "is_lws"
 ]
 
 
@@ -101,6 +101,8 @@ def _lws_funnel(
             step_res = data["num_fixs_to_strip"] > fixs_to_strip_threshold
         elif step == "not_end_with_trial":
             step_res = data["to_trial_end"] >= time_from_trial_end_threshold
+        elif step == "is_lws":
+            step_res = pd.Series(np.array([results[s] for s in funnel_steps if s != "is_lws"]).all(axis=0))
         else:
             raise ValueError(f"Unknown funnel step: {step}.")
         step_res.name = step
