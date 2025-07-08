@@ -7,10 +7,10 @@ import pandas as pd
 import peyes
 
 import config as cnfg
-import helpers as hlp
+import io_helpers as hlp
 from data_models.SearchArray import SearchArray
 from data_models.LWSEnums import SearchArrayTypeEnum, SubjectActionTypesEnum, DominantEyeEnum
-from parse.eye_movements import detect_eye_movements
+from data_models.io_helpers.eye_movements import detect_eye_movements
 
 _FIXATION_LABEL = peyes.parse_label(cnfg.FIXATION_STR)
 _REDUNDANT_FIXATION_FEATURES = [
