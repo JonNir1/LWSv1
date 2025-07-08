@@ -61,10 +61,7 @@ def process_subject(
         subj, identification_actions, temporal_matching_threshold, verbose=False
     )
 
-    fixations = extract_fixations(
-        subj, identification_actions, temporal_matching_threshold, on_target_threshold_dva,
-        save=save_fixations, verbose=verbose
-    )
+    fixations = extract_fixations(subj, save=save_fixations, verbose=verbose)
     lws_fixation_funnel = fixation_funnel(
         fixations, metadata, idents, on_target_threshold_dva, fixs_to_strip_threshold, time_to_trial_end_threshold
     )

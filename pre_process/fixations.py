@@ -1,6 +1,5 @@
 import os
 import warnings
-from typing import Union, Sequence
 
 import numpy as np
 import pandas as pd
@@ -12,8 +11,6 @@ import helpers as hlp
 from data_models.Subject import Subject
 from data_models.Trial import Trial
 from data_models.SearchArray import SearchArray
-from data_models.LWSEnums import SubjectActionTypesEnum
-from pre_process.behavior import extract_trial_behavior
 
 _FIXATION_LABEL = peyes.parse_label(cnfg.FIXATION_STR)
 _REDUNDANT_FIXATION_FEATURES = [
@@ -26,9 +23,6 @@ _REDUNDANT_FIXATION_FEATURES = [
 
 def extract_fixations(
         subject: Subject,
-        identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
-        temporal_matching_threshold: float,
-        on_target_threshold_dva: float,
         save: bool = True,
         verbose: bool = False,
 ) -> pd.DataFrame:
@@ -36,9 +30,6 @@ def extract_fixations(
     Extracts the fixations of a subject across all trials and returns them as a DataFrame.
 
     :param subject: Subject object
-    :param identification_actions: action(s) that indicate the subject has identified a target.
-    :param temporal_matching_threshold: float; temporal threshold (in ms) for matching gaze samples to identification actions.
-    :param on_target_threshold_dva: float; spatial threshold (in DVA) for classifying a target identification as a false alarm or a hit.
     :param save: bool; if True, saves the fixations DataFrame to a pickle file in the subject's output directory.
     :param verbose: bool; if True, displays a progress bar for the extraction process and prints messages about the process.
 
@@ -54,9 +45,8 @@ def extract_fixations(
     - y: float; y coordinates of the fixation center in pixels
     - outlier_reasons: List[str]; reasons for the fixation to be an outlier
     - target: str; the name of the closest target to the fixation center at the time of the fixation
-    - distance_px: float; the distance between the fixation center and the closest target, in pixels
-    - distance_dva: float; the distance between the fixation center and the closest target, in DVA
-    - curr_identified: str; the target that was identified (hit) during the fixation, if any
+    - target{i}_distance_px: float; the distance between the fixation center and target{i} in pixels (target0, target1, etc.)
+    - target{i}_distance_dva: float; the distance between the fixation center and target{i} in DVA (target0, target1, etc.)
     - num_fixs_to_strip: int; number of fixations from the current fixation until a visit in the bottom strip of the
     SearchArray. Value is 0 if he current fixation is in the bottom strip, and np.inf if there are no future fixations
     in the strip during the trial.
@@ -70,12 +60,7 @@ def extract_fixations(
         if verbose:
             print(f"Fixations DataFrame not found for subject {subject.id}. Extracting...")
         trial_fixations = {
-            trial.trial_num: extract_trial_fixations(
-                trial,
-                identification_actions=identification_actions,
-                temporal_matching_threshold=temporal_matching_threshold,
-                on_target_threshold_dva=on_target_threshold_dva,
-            )
+            trial.trial_num: extract_trial_fixations(trial)
             for trial in tqdm(subject.get_trials(), desc=f"Extracting Fixations", disable=not verbose)
         }
         fixations = pd.concat(trial_fixations.values(), axis=0, keys=trial_fixations.keys())
@@ -90,23 +75,12 @@ def extract_fixations(
     return fixations
 
 
-def extract_trial_fixations(
-        trial: Trial,
-        identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
-        temporal_matching_threshold: float,
-        on_target_threshold_dva: float,
-) -> pd.DataFrame:
+def extract_trial_fixations(trial: Trial,) -> pd.DataFrame:
     fix_features = _extract_fixation_features(trial)
     dists = _calc_target_distances(fix_features, trial.get_targets(), trial.px2deg)
-    closest_target = _find_fix_closest_target(dists)
-    curr_identified = _currently_identified_target(
-        fix_features,
-        extract_trial_behavior(trial, identification_actions, temporal_matching_threshold),
-        trial.trial_num,
-        on_target_threshold_dva
-    )
+    closest_target = _find_closest_target(dists)
     fixs_to_strip = _num_fixations_to_strip(fix_features)
-    fixations = pd.concat([fix_features, dists, closest_target, curr_identified, fixs_to_strip], axis=1)
+    fixations = pd.concat([fix_features, dists, closest_target, fixs_to_strip], axis=1)
     return fixations
 
 
@@ -159,7 +133,7 @@ def _calc_target_distances(
     return distances
 
 
-def _find_fix_closest_target(distances: pd.DataFrame) -> pd.Series:
+def _find_closest_target(distances: pd.DataFrame) -> pd.Series:
     """ Find the closest target for each fixation in the trial """
     suffix = f"_{cnfg.DISTANCE_STR}_dva"
     dist_cols = [col for col in distances.columns if col.endswith(suffix)]
@@ -178,40 +152,6 @@ def _find_fix_closest_target(distances: pd.DataFrame) -> pd.Series:
     return closest_target
 
 
-def _currently_identified_target(
-        fix_features: pd.DataFrame, behavior: pd.DataFrame, trial_num: int, on_target_threshold_dva: float
-) -> pd.Series:
-    """ For each fixation, identify the target that was identified (hit) during that fixation, if any. """
-    assert np.isfinite(on_target_threshold_dva) and on_target_threshold_dva > 0, \
-        f"On-target threshold must be a finite positive number, got {on_target_threshold_dva}."
-
-    # identify which target (if any) was identified during each fixation
-    identified_targets = behavior[behavior[f"{cnfg.DISTANCE_STR}_dva"] <= on_target_threshold_dva]
-    ident_times = identified_targets[cnfg.TIME_STR].to_numpy()                              # shape: (num_hits,)
-    is_start_before = fix_features[cnfg.START_TIME_STR].to_numpy() <= ident_times[:, None]  # shape (num_hits, num_fixations)
-    is_end_after = fix_features[cnfg.END_TIME_STR].to_numpy() >= ident_times[:, None]       # shape (num_hits, num_fixations)
-    is_currently_identifying = is_start_before & is_end_after
-    is_currently_identifying = pd.DataFrame(                                                # shape (num_fixations, num_hits)
-        is_currently_identifying, index=identified_targets[cnfg.TARGET_STR].to_list(), columns=fix_features.index,
-    ).T
-
-    # check for multiple targets identified during the same fixation - should not happen
-    simultaneous_identifications = is_currently_identifying[is_currently_identifying.sum(axis=1) > 1]
-    if not simultaneous_identifications.empty:
-        # TODO: consider resolving this in code rather than manually?
-        warnings.warn(
-            f"Multiple targets identified during the same fixation int trial {trial_num}. "
-            "This is not expected and may indicate an error in the data.",
-            RuntimeWarning,
-        )
-
-    # set the currently identified targets during identification fixations (we have at most `num_hits` such fixations)
-    identified_target = is_currently_identifying.loc[is_currently_identifying.any(axis=1)].idxmax(axis=1)   # len <= num_hits
-    curr_ident = pd.Series(None, index=fix_features.index, name="curr_identified", dtype=str)
-    curr_ident.loc[identified_target.index] = identified_target.values
-    return curr_ident
-
-
 def _num_fixations_to_strip(fix_features: pd.DataFrame) -> pd.Series:
     """ For each fixation, check how many fixations from it until a visit in the bottom strip of the SearchArray. """
     xy = fix_features[[cnfg.X, cnfg.Y]]      # shape (num_fixs, 2)
@@ -221,3 +161,40 @@ def _num_fixations_to_strip(fix_features: pd.DataFrame) -> pd.Series:
     )
     fixs_to_strip = hlp.num_to_true(is_in_strip).rename("num_fixs_to_strip")
     return fixs_to_strip
+
+
+### Removing this to postpone the HIT/FA classification out of fixation extraction
+# TODO: consider replacing with `number of fixation to/from identification`
+# def _currently_identified_target(
+#         fix_features: pd.DataFrame, behavior: pd.DataFrame, trial_num: int, on_target_threshold_dva: float
+# ) -> pd.Series:
+#     """ For each fixation, identify the target that was identified (hit) during that fixation, if any. """
+#     assert np.isfinite(on_target_threshold_dva) and on_target_threshold_dva > 0, \
+#         f"On-target threshold must be a finite positive number, got {on_target_threshold_dva}."
+#
+#     # identify which target (if any) was identified during each fixation
+#     identified_targets = behavior[behavior[f"{cnfg.DISTANCE_STR}_dva"] <= on_target_threshold_dva]
+#     ident_times = identified_targets[cnfg.TIME_STR].to_numpy()                              # shape: (num_hits,)
+#     is_start_before = fix_features[cnfg.START_TIME_STR].to_numpy() <= ident_times[:, None]  # shape (num_hits, num_fixations)
+#     is_end_after = fix_features[cnfg.END_TIME_STR].to_numpy() >= ident_times[:, None]       # shape (num_hits, num_fixations)
+#     is_currently_identifying = is_start_before & is_end_after
+#     is_currently_identifying = pd.DataFrame(                                                # shape (num_fixations, num_hits)
+#         is_currently_identifying, index=identified_targets[cnfg.TARGET_STR].to_list(), columns=fix_features.index,
+#     ).T
+#
+#     # check for multiple targets identified during the same fixation - should not happen
+#     simultaneous_identifications = is_currently_identifying[is_currently_identifying.sum(axis=1) > 1]
+#     if not simultaneous_identifications.empty:
+#         # TODO: consider resolving this in code rather than manually?
+#         warnings.warn(
+#             f"Multiple targets identified during the same fixation int trial {trial_num}. "
+#             "This is not expected and may indicate an error in the data.",
+#             RuntimeWarning,
+#         )
+#
+#     # set the currently identified targets during identification fixations (we have at most `num_hits` such fixations)
+#     identified_target = is_currently_identifying.loc[is_currently_identifying.any(axis=1)].idxmax(axis=1)   # len <= num_hits
+#     curr_ident = pd.Series(None, index=fix_features.index, name="curr_identified", dtype=str)
+#     curr_ident.loc[identified_target.index] = identified_target.values
+#     return curr_ident
+
