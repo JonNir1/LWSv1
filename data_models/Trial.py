@@ -97,7 +97,10 @@ class Trial:
 
     def get_actions(self) -> pd.DataFrame:
         """ Returns the times and actions performed by the subject during the trial. """
-        return self._triggers.loc[self._triggers[cnfg.ACTION_STR].notnull(), [cnfg.TIME_STR, cnfg.ACTION_STR]]
+        actions = self._triggers.loc[self._triggers[cnfg.ACTION_STR].notnull(), [cnfg.TIME_STR, cnfg.ACTION_STR]]
+        to_trial_end = (self.end_time - actions[cnfg.TIME_STR]).rename("to_trial_end")
+        actions = pd.concat([actions, to_trial_end], axis=1)
+        return actions
 
     def get_targets(self) -> pd.DataFrame:
         """ Extracts the trial's target information: the targets' pixel coordinates, angle, category, and image path. """
