@@ -9,7 +9,7 @@ import numpy as np
 from tqdm import tqdm
 
 import config as cnfg
-import io_helpers as hlp
+import helpers as hlp
 from data_models.io_helpers.subject_info import parse_subject_info
 from data_models.io_helpers.triggers_and_gaze import parse_triggers_and_gaze
 from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum
