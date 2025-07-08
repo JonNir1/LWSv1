@@ -171,7 +171,7 @@ def _classify_behavior(
     # classify unidentified targets as misses
     all_targets = targets.index
     hit_targets = identifications.loc[
-        identifications["ident_type"] == TargetIdentificationTypeEnum.HIT, cnfg.TARGET_STR
+        identifications[f"{cnfg.DISTANCE_STR}_dva"] <= fa_threshold_dva, cnfg.TARGET_STR
     ].unique()
     missed_targets = all_targets[np.isin(all_targets, hit_targets, invert=True)]
     misses = pd.DataFrame(index=range(len(missed_targets)))
