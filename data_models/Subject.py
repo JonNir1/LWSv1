@@ -240,6 +240,20 @@ class Subject:
         )
         return targets
 
+    def get_actions(self) -> pd.DataFrame:
+        actions = dict()
+        for trial in tqdm(self.get_trials(), desc="Extracting Actions", disable=True):
+            actions[trial.trial_num] = trial.get_actions()
+        actions = pd.concat(actions.values(), axis=0, keys=actions.keys())
+        actions = (
+            actions
+            .reset_index(drop=False)
+            .rename(columns={"level_0": cnfg.TRIAL_STR})
+            .drop(columns=["level_1"])
+        )
+        return actions
+
+
     def get_metadata(self, bad_actions: Sequence[SubjectActionTypesEnum]) -> pd.DataFrame:
         """
         Extract the subject's trial metadata into a DataFrame, containing the following columns:

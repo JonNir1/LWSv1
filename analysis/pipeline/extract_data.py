@@ -22,6 +22,7 @@ def extract_data(
         verbose=False,
 ) -> (
         pd.DataFrame,   # targets
+        pd.DataFrame,   # actions
         pd.DataFrame,   # metadata
         pd.DataFrame,   # identifications
         pd.DataFrame,   # fixations
@@ -34,6 +35,7 @@ def extract_data(
         act not in identification_actions and act != SubjectActionTypesEnum.NO_ACTION
     ]
     targets = _concat_subject_results(subjects, cnfg.TARGET_STR, verbose=verbose)
+    actions = _concat_subject_results(subjects, cnfg.ACTION_STR, verbose=verbose)
     metadata = _concat_subject_results(subjects, cnfg.METADATA_STR, bad_actions=bad_actions, verbose=verbose,)
     idents = _concat_subject_results(
         subjects,
@@ -52,12 +54,12 @@ def extract_data(
     )
     if verbose:
         print(f"Data extraction completed in {time() - start_time:.2f} seconds.")
-    return targets, metadata, idents, fixations, visits
+    return targets, actions, metadata, idents, fixations, visits
 
 
 def _concat_subject_results(
         subjects: List[Subject],
-        to_concat: Literal["target", "metadata", "identification", "fixation", "visit"],
+        to_concat: Literal["target", "action", "metadata", "identification", "fixation", "visit"],
         verbose: bool = True,
         **kwargs
 ) -> pd.DataFrame:
@@ -65,6 +67,8 @@ def _concat_subject_results(
     for subj in tqdm(subjects, desc=f"Extracting {to_concat} data", disable=not verbose):
         if to_concat == cnfg.TARGET_STR:
             subj_res = subj.get_targets()
+        elif to_concat == cnfg.ACTION_STR:
+            subj_res = subj.get_actions()
         elif to_concat == cnfg.METADATA_STR:
             bad_actions = kwargs.get("bad_actions", None)
             assert bad_actions, f"Must specify `bad_actions` for `{to_concat}` concatenation."

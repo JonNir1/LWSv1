@@ -30,6 +30,7 @@ def full_pipeline(
         verbose: bool = True,
 ) -> (
         pd.DataFrame,   # targets
+        pd.DataFrame,   # actions
         pd.DataFrame,   # metadata
         pd.DataFrame,   # identifications
         pd.DataFrame,   # fixations
@@ -38,7 +39,7 @@ def full_pipeline(
     start_time = time()
     identification_actions = identification_actions or _DEFAULT_IDENTIFICATION_ACTIONS
     subjects = preprocess_all_subjects(raw_data_path, verbose)
-    targets, metadata, idents, fixations, visits = extract_data(
+    targets, actions, metadata, idents, fixations, visits = extract_data(
         subjects,
         identification_actions=identification_actions,
         gaze_to_trigger_time_threshold=gaze_to_trigger_time_threshold,
@@ -58,5 +59,4 @@ def full_pipeline(
     visits = pd.concat([visits, lws_visit_funnel], axis=1)
     if verbose:
         print(f"Full pipeline completed in {time() - start_time:.2f} seconds.")
-    return targets, metadata, idents, fixations, visits
-
+    return targets, actions, metadata, idents, fixations, visits
