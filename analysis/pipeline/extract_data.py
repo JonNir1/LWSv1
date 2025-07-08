@@ -96,5 +96,6 @@ def _concat_subject_results(
         .reset_index(drop=False)
         .rename(columns={"level_0": cnfg.SUBJECT_STR})
         .drop(columns=["level_1"])
+        .sort_values(by=[cnfg.SUBJECT_STR, cnfg.TRIAL_STR])
     )
     return results
