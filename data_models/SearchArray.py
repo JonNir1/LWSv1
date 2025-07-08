@@ -145,12 +145,20 @@ class SearchArray:
         return self._array_type
 
     @property
+    def num_icons(self) -> int:
+        return SearchArray._NUM_ROWS * SearchArray._NUM_COLS
+
+    @property
     def targets(self) -> List[_SearchArrayImage]:
         return self._images[self._is_targets].tolist()
 
     @property
     def num_targets(self) -> int:
         return len(self.targets)
+
+    @property
+    def num_distractors(self) -> int:
+        return self.num_icons - self.num_targets
 
     @property
     def mat_path(self) -> str:

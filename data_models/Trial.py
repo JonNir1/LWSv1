@@ -115,6 +115,7 @@ class Trial:
             "trial_type": self.trial_type.name,
             "duration": self.end_time - self.start_time,
             "num_targets": len(self.get_search_array().targets),
+            "num_distractors": self.get_search_array().num_distractors,
             f"bad_actions": bool(np.isin(self.get_actions()[cnfg.ACTION_STR], bad_actions).any()),
         })
 
