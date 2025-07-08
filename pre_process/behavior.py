@@ -71,7 +71,7 @@ def extract_trial_behavior(
 ):
     ident_times = _extract_identification_times(trial, identification_actions)
     ident_gaze = _extract_gaze_on_identification(
-        trial, identification_times=ident_times, temporal_matching_threshold=temporal_matching_threshold,
+        trial, identification_times=ident_times[cnfg.TIME_STR], temporal_matching_threshold=temporal_matching_threshold,
     )
     ident_dists = _find_closest_target(identification_gaze=ident_gaze, px2deg=trial.px2deg, )
     idents = pd.concat([
@@ -104,15 +104,23 @@ def extract_trial_behavior(
 def _extract_identification_times(
         trial: Trial,
         identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
-) -> pd.Series:
-    """ Extracts the identification times from the subject's actions during the trial. """
+) -> pd.DataFrame:
+    """ Extracts the identification times and time-to-trial's-end from the subject's actions during the trial. """
     if isinstance(identification_actions, SubjectActionTypesEnum):
         identification_actions = [identification_actions]
     identification_actions = list(set(identification_actions))
     actions = trial.get_actions()
-    identification_times = actions.loc[np.isin(actions[cnfg.ACTION_STR], identification_actions)]
-    identification_times = identification_times.reset_index(drop=True)
-    return identification_times[cnfg.TIME_STR]
+    identification_times = (
+        actions.loc[actions[cnfg.ACTION_STR].isin(identification_actions), cnfg.TIME_STR]
+        .reset_index(drop=True)
+        .rename(cnfg.TIME_STR)
+    )
+    # identification_times = actions.loc[np.isin(actions[cnfg.ACTION_STR], identification_actions)]
+    # identification_times = identification_times.reset_index(drop=True)
+    to_trial_end = (trial.end_time - identification_times).rename("to_trial_end")
+    identification_times = pd.concat([identification_times, to_trial_end], axis=1)
+    # return identification_times[cnfg.TIME_STR]
+    return identification_times
 
 
 def _extract_gaze_on_identification(
