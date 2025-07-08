@@ -189,8 +189,8 @@ def _classify_behavior(
 def _clean_fa_data(idents_with_fa: pd.DataFrame) -> pd.DataFrame:
     """ Set false-alarm targets and target-distances to NaN """
     is_fa = idents_with_fa["ident_type"] == TargetIdentificationTypeEnum.FALSE_ALARM
-    cleaned_cols = [cnfg.TARGET_STR] + [col for col in idents_with_fa.columns if cnfg.DISTANCE_STR in col]
+    cols_to_clean = [cnfg.TARGET_STR] + [col for col in idents_with_fa.columns if cnfg.DISTANCE_STR in col]
     cleaned_idents = idents_with_fa.copy()
-    cleaned_idents.loc[is_fa, cleaned_cols] = np.nan
+    cleaned_idents.loc[is_fa, cols_to_clean] = np.nan
     return cleaned_idents
 
