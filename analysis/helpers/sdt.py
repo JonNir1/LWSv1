@@ -13,8 +13,7 @@ D_PRIME_CORRECTIONS = Literal["loglinear", "hautus", "macmillan", "mk", "none"]
 def calc_dprime_per_trial(
         metadata: pd.DataFrame, idents: pd.DataFrame, correction: Optional[D_PRIME_CORRECTIONS]
 ) -> pd.DataFrame:
-    # TODO: add correction to +- infinity for hit and false alarm rates
-    """ Calculate d' (d-prime) for each trial. """
+    """ Calculate d' (d-prime) for each subject-trial pair. """
     hit_counts = calc_sdt_class_per_trial(metadata, idents, "hit")["count"].rename("hits")
     fa_counts = calc_sdt_class_per_trial(metadata, idents, "false_alarm")["count"].rename("false_alarms")
     metadata_with_counts = pd.concat(
@@ -39,9 +38,9 @@ def calc_sdt_class_per_trial(
         sdt_class: Literal["hit", "miss", "false_alarm", "correct_reject"],
 ) -> pd.DataFrame:
     """
-    Calculates the rate of a specific SDT classification (hit, miss, false alarm, or correct reject) for each trial
-    based on the trial's metadata (number of targets/distractors) and the subject's identification data (performing
-    hits, misses, or false alarms).
+    Calculates the rate of a specific SDT classification (hit, miss, false alarm, or correct reject) for each pair of
+    subject-trial values, based on the trial's metadata (number of targets/distractors) and the subject's
+    identification data (performing hits, misses, or false alarms).
     Returns a DataFrame with the subject, trial category, count of the classification, and the rate of the classification.
     """
     # identify identifications from the provided SDT class
