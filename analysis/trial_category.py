@@ -1,8 +1,6 @@
 from typing import Literal, Optional
 
-import numpy as np
 import pandas as pd
-import scipy.stats as stats
 
 import config as cnfg
 from analysis.helpers.sdt import D_PRIME_CORRECTIONS
