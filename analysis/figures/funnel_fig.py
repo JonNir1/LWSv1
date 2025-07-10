@@ -5,62 +5,57 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 import config as cnfg
-from analysis.pipeline.lws_funnel import LWS_FUNNEL_STEPS
+from analysis.lws_funnel import LWS_FUNNEL_STEPS
 
 _COLOR_SCHEME = px.colors.qualitative.Dark24
 
 
 def create_funnel_figure(
-        data: pd.DataFrame, funnel_type: Literal["fixations", "visits"], show_individuals: bool = False,
+        step_sizes: pd.DataFrame, funnel_type: Literal["fixations", "visits"], show_individuals: bool = False,
 ) -> go.Figure:
-    """ Creates a funnel figure for the provided multi-subject fixations/visits data. """
-    num_colors = len(_COLOR_SCHEME)
+    """ Creates a funnel figure for the provided multi-subject LWS funnel sizes. """
+    assert "step" in step_sizes.columns, f"Data must contain `step` column."
     fig = go.Figure()
     if show_individuals:
-        for i, (subj_id, subj_data) in enumerate(data.groupby(cnfg.SUBJECT_STR)):
-            name = f"Subject {subj_id}"
-            subj_funnel_sizes = _calc_funnel_sizes(subj_data, name)
-            fig.add_trace(
-                go.Funnel(
-                    name=name, legendgroup=name,
-                    y=subj_funnel_sizes["step"], x=subj_funnel_sizes["size"],
-                    textinfo="value+percent initial",
-                    marker=dict(color=_COLOR_SCHEME[i % num_colors]),
-                    connector=dict(visible=False),
-                    showlegend=True,
-                )
+        assert cnfg.SUBJECT_STR in step_sizes.columns, f"Data must contain `{cnfg.SUBJECT_STR}` column."
+        for i, (subj_id, subj_data) in enumerate(step_sizes.groupby(cnfg.SUBJECT_STR)):
+            fig = _add_funnel_trace(
+                fig,
+                subj_data,
+                trace_name=f"Subject {subj_id}",
+                trace_color=_COLOR_SCHEME[i % len(_COLOR_SCHEME)],
             )
     else:
-        name = cnfg.ALL_STR
-        funnel_sizes = _calc_funnel_sizes(data, name)
-        fig.add_trace(
-            go.Funnel(
-                name=name, legendgroup=name,
-                y=funnel_sizes["step"], x=funnel_sizes["size"],
-                textinfo="value+percent initial",
-                marker=dict(color=_COLOR_SCHEME[0]),
-                connector=dict(visible=False),
-                showlegend=False,
-            )
+        fig = _add_funnel_trace(
+            fig,
+            step_sizes,
+            trace_name=f"{cnfg.ALL_STR.capitalize()} {funnel_type.capitalize()}s",
+            trace_color=_COLOR_SCHEME[0],
         )
     fig.update_layout(
         width=800, height=600,
         title=dict(text=f"LWS-{funnel_type.capitalize()} Funnel", font=cnfg.TITLE_FONT),
+        showlegend=show_individuals,
     )
     return fig
 
 
-def _calc_funnel_sizes(subset: pd.DataFrame, name: str) -> pd.DataFrame:
-    funnel_steps = [step for step in LWS_FUNNEL_STEPS if step in subset.columns]
-    funnel_sizes = dict()
-    for i in range(len(funnel_steps)):
-        curr_step = funnel_steps[i]
-        curr_and_prev_steps = funnel_steps[:i + 1]
-        step_size = subset[curr_and_prev_steps].all(axis=1).sum()
-        funnel_sizes[(name, curr_step)] = step_size
-    funnel_sizes = (
-        pd.Series(funnel_sizes)
+def _add_funnel_trace(
+        fig: go.Figure, trace_data: pd.DataFrame, trace_name: str, trace_color: str,
+) -> go.Figure:
+    step_sizes = (
+        trace_data
+        .groupby("step")["size"]
+        .sum()
         .reset_index(drop=False)
-        .rename(columns={"level_0": cnfg.SUBJECT_STR, "level_1": "step", 0: "size"})
+        .sort_values(by="step", key=lambda steps_series: steps_series.map(lambda step: LWS_FUNNEL_STEPS.index(step)))
     )
-    return funnel_sizes
+    fig.add_trace(go.Funnel(
+        name=trace_name, legendgroup=trace_name,
+        y=step_sizes["step"], x=step_sizes["size"],
+        textinfo="value+percent initial",
+        marker=dict(color=trace_color),
+        connector=dict(visible=False),
+        showlegend=True,
+    ))
+    return fig

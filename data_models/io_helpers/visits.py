@@ -27,7 +27,7 @@ def convert_fixations_to_visits(
     - eye: str; the eye (left or right) from which the visit fixations were recorded
     - target: str; the target name for which the visit was recorded
     - visit: int; the visit ID
-    - event_id: list; the event IDs of the visit's underlying fixations
+    - event: list; the event IDs of the visit's underlying fixations
     - start_time: float; the start time of the visit in ms (relative to trial onset)
     - end_time: float; the end time of the visit in ms (relative to trial onset)
     - duration: float; the duration of the visit in ms
@@ -45,7 +45,7 @@ def convert_fixations_to_visits(
             all_fixations.groupby(by=[cnfg.TRIAL_STR, cnfg.EYE_STR]),
             desc="Extracting Visits", disable=True,
     ):
-        subset = subset.sort_values("event_id", inplace=False).reset_index(drop=False)
+        subset = subset.sort_values(cnfg.EVENT_STR, inplace=False).reset_index(drop=False)
         if subset.empty:
             continue
         visit_ids = _assign_visit_ids(subset, target_distance_threshold_dva, visit_merging_time_threshold)
@@ -135,7 +135,7 @@ def _extract_visit_features(visit_fixs: pd.DataFrame, visit_idx: int, trial: int
         cnfg.EYE_STR: eye,
         cnfg.TARGET_STR: target,
         cnfg.VISIT_STR: int(visit_idx),
-        "event_id": sorted(visit_fixs["event_id"].values),
+        cnfg.EVENT_STR: sorted(visit_fixs[cnfg.EVENT_STR].values),
         cnfg.START_TIME_STR: visit_fixs[cnfg.START_TIME_STR].iloc[0],
         cnfg.END_TIME_STR: visit_fixs[cnfg.END_TIME_STR].iloc[-1],
         "duration": visit_fixs[cnfg.END_TIME_STR].iloc[-1] - visit_fixs[cnfg.START_TIME_STR].iloc[0],

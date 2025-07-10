@@ -8,73 +8,70 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 
 import config as cnfg
-from data_models.LWSEnums import SubjectActionTypesEnum
-from analysis.pipeline.full_pipeline import full_pipeline
+from data_models.LWSEnums import SignalDetectionCategoryEnum
 
 pio.renderers.default = "browser"
 
 
-targets, metadata, idents, fixations, visits = full_pipeline(verbose=True)
+##  Run Pipeline / Load Data
+from analysis.pipeline.full_pipeline import full_pipeline, read_saved_data
+# targets, actions, metadata, idents, fixations, visits = full_pipeline(      # uncomment to re-run
+#     on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA,
+#     visit_merging_time_threshold=cnfg.VISIT_MERGING_TIME_THRESHOLD,
+#     save=True, verbose=True
+# )
+targets, actions, metadata, idents, fixations, visits = read_saved_data()
 
 
-## LWS Funnel - fixations/visits
-from analysis.figures.funnel_fig import create_funnel_figure
-create_funnel_figure(visits, "visits", show_individuals=True).show()
-
-## trial validity: number of trials with bad actions / false alrams, by subject and trial type
-
-from analysis.trial_type import calc_bad_actions_rate, calc_sdt_class_rate, calc_dprime
-bad_actions_rate = calc_bad_actions_rate(metadata)
-hit_rate = calc_sdt_class_rate(metadata, idents, "hit", cnfg.ON_TARGET_THRESHOLD_DVA)
-fa_rate = calc_sdt_class_rate(metadata, idents, "false_alarm", cnfg.ON_TARGET_THRESHOLD_DVA)
-d_prime = calc_dprime(metadata, idents, cnfg.ON_TARGET_THRESHOLD_DVA)
 
 
-# TODO: move to its own figure file
-fig = make_subplots(
-    rows=1, cols=2, shared_xaxes=True, shared_yaxes=True,
-)
-fig.add_trace(
-    row=1, col=1,
-    trace=go.Violin(
-        x=bad_actions_rate[cnfg.TRIAL_TYPE_STR],
-        y=bad_actions_rate["mean"],
-        box_visible=False, showlegend=False,
-        points="all", pointpos=-1.8,
-        spanmode='hard',
-        name="Bad Actions Rate",
+
+idents_hit_data = (
+    idents
+    .copy()
+    .loc[
+        idents[cnfg.IDENTIFICATION_CATEGORY_STR] == SignalDetectionCategoryEnum.HIT,
+        [cnfg.SUBJECT_STR, cnfg.TRIAL_STR, cnfg.TARGET_STR, cnfg.IDENTIFICATION_CATEGORY_STR, cnfg.TIME_STR, cnfg.DISTANCE_DVA_STR]
+    ]
+    .map(lambda val: round(val, 2) if isinstance(val, float) else val)
+    .merge(
+        targets[[cnfg.SUBJECT_STR, cnfg.TRIAL_STR, cnfg.TARGET_STR, cnfg.CATEGORY_STR]],
+        on=[cnfg.SUBJECT_STR, cnfg.TRIAL_STR, cnfg.TARGET_STR],
+        how='left'
     )
 )
-fig.add_trace(
-    row=1, col=2,
-    trace=go.Violin(
-        x=d_prime[cnfg.TRIAL_TYPE_STR],
-        y=d_prime["mean"],
-        box_visible=False, showlegend=False,
-        points="all", pointpos=-1.8,
-        spanmode='hard',
-        name="d' (d-prime)",
-    )
-)
-fig.show()
 
-
-
-
-# TODO: timings
-#  - from trial start to identification
-#  - from trial start to first fixation/visit on target
-#  - from last fixation/visit on target to trial end
-#  - from last action (including bad actions) to trial end
-
-
-idents_hit_data = idents.loc[
-    idents[f"{cnfg.DISTANCE_STR}_dva"] <= cnfg.ON_TARGET_THRESHOLD_DVA,
-    [cnfg.SUBJECT_STR, cnfg.TRIAL_STR, cnfg.TIME_STR, f"{cnfg.DISTANCE_STR}_dva"]
-].copy().map(lambda val: round(val, 2))
 
 fig = make_subplots(
     rows=2, cols=3, shared_xaxes=False, shared_yaxes=False,
 )
 
+# %% ## Plot Subject-Performance Comparison by Trial Category
+from analysis.figures.performance_outliers import create_subject_comparison_figure
+create_subject_comparison_figure(metadata, idents).show()
+
+
+# %% ## Detect LWS Instances
+from analysis.lws_funnel import fixation_funnel, visit_funnel, calc_funnel_sizes
+from analysis.figures.funnel_fig import create_funnel_figure
+lws_fixation_funnel = fixation_funnel(
+    fixations, metadata, idents,
+    on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA,
+    fixs_to_strip_threshold=cnfg.FIXATIONS_TO_STRIP_THRESHOLD,
+    time_to_trial_end_threshold=cnfg.TIME_TO_TRIAL_END_THRESHOLD
+)
+lws_fixation_funnel_sizes = calc_funnel_sizes(lws_fixation_funnel)
+create_funnel_figure(lws_fixation_funnel_sizes, "fixations", show_individuals=True).show()
+del lws_fixation_funnel, lws_fixation_funnel_sizes
+
+lws_visit_funnel = visit_funnel(
+    visits, metadata, idents,
+    on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA,
+    fixs_to_strip_threshold=cnfg.FIXATIONS_TO_STRIP_THRESHOLD,
+    time_to_trial_end_threshold=cnfg.TIME_TO_TRIAL_END_THRESHOLD,
+    distance_type='min'     # can also be 'max' or 'weighted'
+)
+lws_visit_funnel_sizes = calc_funnel_sizes(lws_visit_funnel)
+create_funnel_figure(lws_visit_funnel_sizes, "visits", show_individuals=True).show()
+del lws_visit_funnel, lws_visit_funnel_sizes
 

@@ -7,7 +7,7 @@ from plotly.subplots import make_subplots
 
 import config as cnfg
 import analysis.figures.within_subject_figures.statistics as stat
-from data_models.LWSEnums import ImageCategoryEnum, SearchArrayTypeEnum, DominantEyeEnum
+from data_models.LWSEnums import ImageCategoryEnum, SearchArrayCategoryEnum, DominantEyeEnum
 
 
 def identification_rate_figure(ident_data: pd.DataFrame, drop_bads: bool = True) -> go.Figure:
@@ -50,7 +50,7 @@ def identification_distance_figure(
         ident_data: pd.DataFrame, px2deg: float, drop_bads: bool = True
 ) -> go.Figure:
     assert px2deg >= 0, f"`px2deg` must be a non-negative float, got {px2deg}."
-    dist_col = f"{cnfg.DISTANCE_STR}_px"
+    dist_col = cnfg.DISTANCE_PX_STR
     ident_data2 = ident_data.copy()
     ident_data2.loc[
         # set not-identified distances to NaN to avoid inf-points in the plot
@@ -163,7 +163,7 @@ def _create_figure(
         vertical_spacing=0.1, horizontal_spacing=0.05,
         subplot_titles=[
             cnfg.TRIAL_STR.title(),
-            cnfg.TRIAL_TYPE_STR.replace("_", " ").title(),
+            cnfg.TRIAL_CATEGORY_STR.replace("_", " ").title(),
             cnfg.TARGET_CATEGORY_STR.replace("_", " ").title(),
         ],
     )
@@ -183,7 +183,7 @@ def _create_figure(
     fig.add_trace(
         row=2, col=1,
         trace=_create_categorical_trace(
-            ident_data, cnfg.TRIAL_TYPE_STR, y_col, SearchArrayTypeEnum, scale=scale
+            ident_data, cnfg.TRIAL_CATEGORY_STR, y_col, SearchArrayCategoryEnum, scale=scale
         )
     )
     # Bottom Right: by target category (bar plot)

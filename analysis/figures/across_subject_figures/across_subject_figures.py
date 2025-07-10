@@ -47,16 +47,16 @@ def _target_identification_data(targets_df: pd.DataFrame, metadata_df: pd.DataFr
 def _calculate_rate_per_trial_type(df: pd.DataFrame) -> pd.DataFrame:
     """
     Helper function to calculate the percentage of something (e.g., identified) per trial type.
-    :param df: a 2-column DataFrame with one column being "trial_type" and the other being the value to average.
+    :param df: a 2-column DataFrame with one column being "trial_category" and the other being the value to average.
     :return: a DataFrame with the average and sem for each trial type.
     """
-    from data_models.LWSEnums import SearchArrayTypeEnum
+    from data_models.LWSEnums import SearchArrayCategoryEnum
     per_trial_type = _calculate_rate_per_nominal_col(df, _TRIAL_TYPE_STR)
     per_trial_type[_TRIAL_TYPE_STR] = per_trial_type[_TRIAL_TYPE_STR].map(
-        lambda typ: SearchArrayTypeEnum(typ).name.lower() if typ in SearchArrayTypeEnum else typ
+        lambda typ: SearchArrayCategoryEnum(typ).name.lower() if typ in SearchArrayCategoryEnum else typ
     )
     per_trial_type['color'] = per_trial_type[_TRIAL_TYPE_STR].map(
-        lambda typ: cnfg.get_discrete_color(typ if typ==cnfg.ALL_STR else SearchArrayTypeEnum[typ.upper()].value)
+        lambda typ: cnfg.get_discrete_color(typ if typ==cnfg.ALL_STR else SearchArrayCategoryEnum[typ.upper()].value)
     )
     return per_trial_type
 

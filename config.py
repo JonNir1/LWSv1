@@ -7,7 +7,6 @@ import plotly.express.colors as _colors
 
 from constants import *
 
-EXPERIMENT_NAME = "v4"      # chane to v5 when analyzing newer subjects
 STIMULI_VERSION = 1
 
 ## PATHS ##
@@ -73,8 +72,9 @@ _GENERIC_COLOR = "#808080"  # gray color for generic cases
 FONT_FAMILY, FONT_COLOR = "Calibri", "black"
 TITLE_FONT = dict(family=FONT_FAMILY, size=26, color=FONT_COLOR)
 SUBTITLE_FONT = dict(family=FONT_FAMILY, size=20, color=FONT_COLOR)
+COMMENT_FONT = dict(family=FONT_FAMILY, size=14, color=FONT_COLOR)
 AXIS_LABEL_FONT = dict(family=FONT_FAMILY, size=20, color=FONT_COLOR)
-AXIS_TICK_FONT = dict(family=FONT_FAMILY, size=18, color=FONT_COLOR)
+AXIS_TICK_FONT = dict(family=FONT_FAMILY, size=16, color=FONT_COLOR)
 AXIS_LABEL_STANDOFF = 2
 
 GRID_LINE_COLOR, GRID_LINE_WIDTH = "lightgray", 1

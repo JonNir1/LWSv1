@@ -6,17 +6,20 @@ import pandas as pd
 import config as cnfg
 import helpers as hlp
 from data_models.Trial import Trial
-from data_models.LWSEnums import SubjectActionTypesEnum
+from data_models.LWSEnums import SubjectActionCategoryEnum, SignalDetectionCategoryEnum
 
 
 def extract_trial_identifications(
         trial: Trial,
-        identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
-        temporal_matching_threshold: float,
+        identification_actions: Union[Sequence[SubjectActionCategoryEnum], SubjectActionCategoryEnum],
+        gaze_to_trigger_matching_threshold: float,
+        on_target_threshold_dva: float,
 ):
     ident_times = _extract_identification_times(trial, identification_actions)
     ident_gaze = _extract_gaze_on_identification(
-        trial, identification_times=ident_times[cnfg.TIME_STR], temporal_matching_threshold=temporal_matching_threshold,
+        trial,
+        identification_times=ident_times[cnfg.TIME_STR],
+        gaze_to_trigger_matching_threshold=gaze_to_trigger_matching_threshold
     )
     ident_dists = _find_closest_target(identification_gaze=ident_gaze, px2deg=trial.px2deg, )
     idents = pd.concat([
@@ -25,20 +28,24 @@ def extract_trial_identifications(
         ident_gaze[[col for col in ident_gaze.columns if col.startswith("left")]],
         ident_gaze[[col for col in ident_gaze.columns if col.startswith("right")]]
     ], axis=1)
+
+    # apply SDT classifications
+    idents = _classify_hits_and_false_alarms(idents, on_target_threshold_dva)
     idents = _append_missed_targets(idents, trial.get_targets())
 
     # reorder columns
-    ordered_cols = [cnfg.TARGET_STR] + [col for col in idents.columns if col != cnfg.TARGET_STR]
+    ordered_cols = [cnfg.TARGET_STR, cnfg.IDENTIFICATION_CATEGORY_STR, cnfg.TIME_STR]
+    ordered_cols += [col for col in idents.columns if not (col in ordered_cols)]
     idents = idents[ordered_cols]
     return idents
 
 
 def _extract_identification_times(
         trial: Trial,
-        identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
+        identification_actions: Union[Sequence[SubjectActionCategoryEnum], SubjectActionCategoryEnum],
 ) -> pd.DataFrame:
     """ Extracts the identification times and time-to-trial's-end from the subject's actions during the trial. """
-    if isinstance(identification_actions, SubjectActionTypesEnum):
+    if isinstance(identification_actions, SubjectActionCategoryEnum):
         identification_actions = [identification_actions]
     identification_actions = list(set(identification_actions))
     actions = trial.get_actions()
@@ -55,15 +62,15 @@ def _extract_identification_times(
 def _extract_gaze_on_identification(
         trial: Trial,
         identification_times: pd.Series,
-        temporal_matching_threshold: float,
+        gaze_to_trigger_matching_threshold: float,
 ) -> pd.DataFrame:
     """
     Finds the gaze samples that corresponds to the subject's identification actions in a trial, and returns them.
-    The gaze samples must be within `temporal_matching_threshold` ms before/after identification.
+    The gaze samples must be within `gaze_to_trigger_matching_threshold` ms before/after identification.
     """
     gaze = trial.get_gaze()
     gaze_times_for_ident_times = hlp.closest_indices(
-        gaze[cnfg.TIME_STR], identification_times, threshold=temporal_matching_threshold
+        gaze[cnfg.TIME_STR], identification_times, threshold=gaze_to_trigger_matching_threshold
     )
     gaze_on_identification = gaze.loc[gaze_times_for_ident_times]
     gaze_on_identification = gaze_on_identification.reset_index(drop=True)
@@ -82,20 +89,47 @@ def _find_closest_target(identification_gaze: pd.DataFrame, px2deg: float,) -> p
     closest_target = dists.idxmin(axis=1).rename(cnfg.TARGET_STR)
     dists_px = pd.Series(
         dists.to_numpy()[dists.index, dists.columns.get_indexer(closest_target)],
-        name=f"{cnfg.DISTANCE_STR}_px",
+        name=cnfg.DISTANCE_PX_STR,
     )
-    dists_dva = (dists_px * px2deg).rename(f"{cnfg.DISTANCE_STR}_dva")
+    dists_dva = (dists_px * px2deg).rename(cnfg.DISTANCE_DVA_STR)
     dists = pd.concat([closest_target, dists_px, dists_dva], axis=1)
     return dists
+
+
+def _classify_hits_and_false_alarms(idents: pd.DataFrame, on_target_threshold_dva: float) -> pd.DataFrame:
+    """
+    Classifies target-identifications as `hit` or `false_alarm` based on the distance from the target when subject
+    was identifying it. Also Classifies `repeated_hit` as a target that was identified multiple times.
+    Returns a copy of the original DataFrame with an additional column for the identification category.
+    """
+    assert on_target_threshold_dva > 0 and not np.isinf(on_target_threshold_dva), \
+        f"On-target threshold must be positive and finite, got {on_target_threshold_dva}."
+    if cnfg.DISTANCE_DVA_STR not in idents.columns:
+        raise KeyError(f"Column '{cnfg.DISTANCE_DVA_STR}' not found in identifications DataFrame.")
+    idents_copy = idents.copy().sort_values(by=[cnfg.TIME_STR,  cnfg.TARGET_STR])  # sort by time and target for consistency
+    # classify hits and false alarms
+    idents_copy[cnfg.IDENTIFICATION_CATEGORY_STR] = idents_copy[cnfg.DISTANCE_DVA_STR].map(
+        lambda dist: SignalDetectionCategoryEnum.HIT if dist <= on_target_threshold_dva
+        else SignalDetectionCategoryEnum.FALSE_ALARM
+    )
+    # classify repeated hits
+    is_hit = idents_copy[cnfg.IDENTIFICATION_CATEGORY_STR] == SignalDetectionCategoryEnum.HIT
+    is_repeated_hit = idents_copy.loc[is_hit, cnfg.TARGET_STR].duplicated(keep="first")
+    idents_copy.loc[is_hit & is_repeated_hit, cnfg.IDENTIFICATION_CATEGORY_STR] = SignalDetectionCategoryEnum.REPEATED_HIT
+    return idents_copy
 
 
 def _append_missed_targets(identifications: pd.DataFrame, targets: pd.DataFrame) -> pd.DataFrame:
     # find missed targets
     all_targets = targets.index
-    missed_targets = all_targets[np.isin(all_targets, identifications[cnfg.TARGET_STR].unique(), invert=True)]
+    hit_targets = identifications.loc[
+        identifications[cnfg.IDENTIFICATION_CATEGORY_STR] == SignalDetectionCategoryEnum.HIT, cnfg.TARGET_STR
+    ]
+    missed_targets = all_targets[np.isin(all_targets, hit_targets.unique(), invert=True)]
     misses = pd.DataFrame(index=range(len(missed_targets)))
     misses[cnfg.TARGET_STR] = missed_targets
-    misses[[cnfg.TIME_STR, f"{cnfg.DISTANCE_STR}_px", f"{cnfg.DISTANCE_STR}_dva"]] = np.inf  # set unidentified times & dists to inf
+    misses[cnfg.IDENTIFICATION_CATEGORY_STR] = SignalDetectionCategoryEnum.MISS
+    misses[[cnfg.TIME_STR, cnfg.DISTANCE_PX_STR, cnfg.DISTANCE_DVA_STR]] = np.inf  # set unidentified times & dists to inf
 
     # append misses to the identifications DataFrame
     if not misses.empty:

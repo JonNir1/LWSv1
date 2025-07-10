@@ -15,7 +15,7 @@ from data_models.io_helpers.subject_info import parse_subject_info
 from data_models.io_helpers.triggers_and_gaze import parse_triggers_and_gaze
 from data_models.io_helpers.target_identifications import extract_trial_identifications
 from data_models.io_helpers.visits import convert_fixations_to_visits
-from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum, SubjectActionTypesEnum
+from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum, SubjectActionCategoryEnum
 
 
 class Subject:
@@ -254,12 +254,12 @@ class Subject:
         return actions
 
 
-    def get_metadata(self, bad_actions: Sequence[SubjectActionTypesEnum]) -> pd.DataFrame:
+    def get_metadata(self, bad_actions: Sequence[SubjectActionCategoryEnum]) -> pd.DataFrame:
         """
         Extract the subject's trial metadata into a DataFrame, containing the following columns:
         - trial_num
         - block_num
-        - trial_type: COLOR/BW/NOISE
+        - trial_category: COLOR/BW/NOISE
         - duration: in ms
         - num_targets
         - bad_actions: boolean; True if any of the subject's actions during the trial are considered bad
@@ -273,14 +273,16 @@ class Subject:
 
     def get_target_identifications(
             self,
-            identification_actions: Union[Sequence[SubjectActionTypesEnum], SubjectActionTypesEnum],
+            identification_actions: Union[Sequence[SubjectActionCategoryEnum], SubjectActionCategoryEnum],
             temporal_matching_threshold: float,
+            on_target_threshold_dva: float,
             verbose: bool = False,
     ) -> pd.DataFrame:
         """
         Extracts the target identification behavior of a subject across all trials.
         :param identification_actions: action(s) that indicate the subject has identified a target.
         :param temporal_matching_threshold: temporal threshold (in ms) for matching gaze samples to identification actions.
+        :param on_target_threshold_dva: the distance in DVA from the target to consider the identification as a hit.
         :param verbose: if True, displays a progress bar for the extraction process.
 
         :return: a DataFrame containing the target identification behavior for each trial, with the following columns:
@@ -297,7 +299,8 @@ class Subject:
             trial_idents[trial.trial_num] = extract_trial_identifications(
                 trial=trial,
                 identification_actions=identification_actions,
-                temporal_matching_threshold=temporal_matching_threshold,
+                gaze_to_trigger_matching_threshold=temporal_matching_threshold,
+                on_target_threshold_dva=on_target_threshold_dva,
             )
         idents = pd.concat(trial_idents.values(), axis=0, keys=trial_idents.keys())
         idents = (
@@ -323,7 +326,7 @@ class Subject:
         :return: a DataFrame containing the fixations for each trial, with the following columns:
         - trial: int; the trial number
         - eye: str; the eye that the fixation belongs to (left or right)
-        - event_id: int; the number of the fixation among all events from the given eye during the trial
+        - event: int; the number of the fixation among all events from the given eye during the trial
         - start_time: float; time of the fixation start in ms (relative to trial onset)
         - end_time: float; time of the fixation end in ms (relative to trial onset)
         - duration: float; duration of the fixation in ms

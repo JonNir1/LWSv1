@@ -1,32 +1,28 @@
 import os
 from time import time
-from typing import List, Union, Literal
+from typing import List, Union
 
 import pandas as pd
-from tqdm import tqdm
 
 import config as cnfg
-from data_models.Subject import Subject
-from data_models.LWSEnums import SubjectActionTypesEnum
+from data_models.LWSEnums import SubjectActionCategoryEnum
 
 from analysis.pipeline.preprocess_subjects import preprocess_all_subjects
 from analysis.pipeline.extract_data import extract_data
-from analysis.pipeline.lws_funnel import fixation_funnel, visit_funnel
 
 _DEFAULT_IDENTIFICATION_ACTIONS = [
-    SubjectActionTypesEnum.MARK_AND_CONFIRM,
-    # SubjectActionTypesEnum.MARK_ONLY    # uncomment this to include marking-only actions
+    SubjectActionCategoryEnum.MARK_AND_CONFIRM,
+    # SubjectActionCategoryEnum.MARK_ONLY    # uncomment this to include marking-only actions
 ]
 
 
 def full_pipeline(
         raw_data_path: str = cnfg.RAW_DATA_PATH,
-        identification_actions: Union[List[SubjectActionTypesEnum], SubjectActionTypesEnum] = None,
+        identification_actions: Union[List[SubjectActionCategoryEnum], SubjectActionCategoryEnum] = None,
         gaze_to_trigger_time_threshold: float = cnfg.MAX_GAZE_TO_TRIGGER_TIME_DIFF,
         on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
         visit_merging_time_threshold: float = cnfg.VISIT_MERGING_TIME_THRESHOLD,
-        fixs_to_strip_threshold: int = cnfg.FIXATIONS_TO_STRIP_THRESHOLD,
-        time_to_trial_end_threshold: float = cnfg.TIME_TO_TRIAL_END_THRESHOLD,
+        save: bool = True,
         verbose: bool = True,
 ) -> (
         pd.DataFrame,   # targets
@@ -47,16 +43,51 @@ def full_pipeline(
         visit_merging_time_threshold=visit_merging_time_threshold,
         verbose=False,
     )
-
-    lws_fixation_funnel = fixation_funnel(
-        fixations, metadata, idents, on_target_threshold_dva, fixs_to_strip_threshold, time_to_trial_end_threshold
-    )
-    fixations = pd.concat([fixations, lws_fixation_funnel], axis=1)
-    lws_visit_funnel = visit_funnel(
-        visits, metadata, idents, on_target_threshold_dva, fixs_to_strip_threshold, time_to_trial_end_threshold,
-        distance_type='min',    # `min`, `max`, or `weighted` can be used here
-    )
-    visits = pd.concat([visits, lws_visit_funnel], axis=1)
+    if save:
+        if verbose:
+            print("Saving data to output path:", cnfg.OUTPUT_PATH)
+        if not os.path.exists(cnfg.OUTPUT_PATH):
+            os.makedirs(cnfg.OUTPUT_PATH)
+        targets.to_pickle(os.path.join(cnfg.OUTPUT_PATH, 'targets.pkl'))
+        actions.to_pickle(os.path.join(cnfg.OUTPUT_PATH, 'actions.pkl'))
+        metadata.to_pickle(os.path.join(cnfg.OUTPUT_PATH, 'metadata.pkl'))
+        idents.to_pickle(os.path.join(cnfg.OUTPUT_PATH, 'idents.pkl'))
+        fixations.to_pickle(os.path.join(cnfg.OUTPUT_PATH, 'fixations.pkl'))
+        visits.to_pickle(os.path.join(cnfg.OUTPUT_PATH, 'visits.pkl'))
     if verbose:
         print(f"Full pipeline completed in {time() - start_time:.2f} seconds.")
+    return targets, actions, metadata, idents, fixations, visits
+
+
+def read_saved_data(dir_path: str = cnfg.OUTPUT_PATH):
+    try:
+        targets = pd.read_pickle(os.path.join(dir_path, 'targets.pkl'))
+    except FileNotFoundError:
+        print("Targets data not found.")
+        targets = None
+    try:
+        actions = pd.read_pickle(os.path.join(dir_path, 'actions.pkl'))
+    except FileNotFoundError:
+        print("Actions data not found.")
+        actions = None
+    try:
+        metadata = pd.read_pickle(os.path.join(dir_path, 'metadata.pkl'))
+    except FileNotFoundError:
+        print("Metadata data not found.")
+        metadata = None
+    try:
+        idents = pd.read_pickle(os.path.join(dir_path, 'idents.pkl'))
+    except FileNotFoundError:
+        print("Identifications data not found.")
+        idents = None
+    try:
+        fixations = pd.read_pickle(os.path.join(dir_path, 'fixations.pkl'))
+    except FileNotFoundError:
+        print("Fixations data not found.")
+        fixations = None
+    try:
+        visits = pd.read_pickle(os.path.join(dir_path, 'visits.pkl'))
+    except FileNotFoundError:
+        print("Visits data not found.")
+        visits = None
     return targets, actions, metadata, idents, fixations, visits

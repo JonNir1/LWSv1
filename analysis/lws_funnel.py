@@ -10,13 +10,35 @@ LWS_FUNNEL_STEPS = [
 ]
 
 
+def calc_funnel_sizes(data: pd.DataFrame) -> pd.DataFrame:
+    """ Calculates the size of each LWS funnel-step for each subject and trial in the provided data. """
+    assert cnfg.SUBJECT_STR in data.columns, f"Data must contain `{cnfg.SUBJECT_STR}` column."
+    assert cnfg.TRIAL_STR in data.columns, f"Data must contain `{cnfg.TRIAL_STR}` column."
+    steps = [step for step in LWS_FUNNEL_STEPS if step in data.columns]
+    sizes = dict()
+    for (subj, trial), group in data.groupby([cnfg.SUBJECT_STR, cnfg.TRIAL_STR]):
+        for i, curr_step in enumerate(steps):
+            curr_and_prev_steps = steps[:i + 1]
+            step_size = group[curr_and_prev_steps].all(axis=1).sum()
+            sizes[(subj, trial, curr_step)] = step_size
+    sizes = (
+        pd.Series(sizes)
+        .reset_index(drop=False)
+        .rename(columns={"level_0": cnfg.SUBJECT_STR, "level_1": cnfg.TRIAL_STR, "level_2": "step", 0: "size"})
+        .sort_values(by=["step"], key=lambda steps_series: steps_series.map(lambda step: LWS_FUNNEL_STEPS.index(step)))
+        .sort_values(by=[cnfg.SUBJECT_STR, cnfg.TRIAL_STR])
+        .reset_index(drop=True)
+    )
+    return sizes
+
+
 def fixation_funnel(
         fixations: pd.DataFrame,
         metadata: pd.DataFrame,
         idents: pd.DataFrame,
         on_target_threshold_dva: float,
         fixs_to_strip_threshold: int,
-        time_from_trial_end_threshold: float
+        time_to_trial_end_threshold: float
 ) -> pd.DataFrame:
     return _lws_funnel(
         fixations,
@@ -25,7 +47,7 @@ def fixation_funnel(
         idents,
         on_target_threshold_dva,
         fixs_to_strip_threshold,
-        time_from_trial_end_threshold
+        time_to_trial_end_threshold
     )
 
 
@@ -35,7 +57,7 @@ def visit_funnel(
         idents: pd.DataFrame,
         on_target_threshold_dva: float,
         fixs_to_strip_threshold: int,
-        time_from_trial_end_threshold: float,
+        time_to_trial_end_threshold: float,
         distance_type: Literal['min', 'max', 'weighted']
 ) -> pd.DataFrame:
     distance_cols = [col for col in visits.columns if col == f"{distance_type}_{cnfg.DISTANCE_STR}_dva"]
@@ -44,7 +66,7 @@ def visit_funnel(
     if len(distance_cols) > 1:
         raise KeyError(f"Multiple distance columns found for `{distance_type}` distance type: {distance_cols}.")
     visits_copy = visits.copy()
-    visits_copy[f"{cnfg.DISTANCE_STR}_dva"] = visits_copy[distance_cols[0]]
+    visits_copy[cnfg.DISTANCE_DVA_STR] = visits_copy[distance_cols[0]]
     return _lws_funnel(
         visits_copy,
         "visits",
@@ -52,7 +74,7 @@ def visit_funnel(
         idents,
         on_target_threshold_dva,
         fixs_to_strip_threshold,
-        time_from_trial_end_threshold
+        time_to_trial_end_threshold
     )
 
 
@@ -63,14 +85,17 @@ def _lws_funnel(
         idents: pd.DataFrame,
         on_target_threshold_dva: float,
         fixs_to_strip_threshold: int,
-        time_from_trial_end_threshold: float
+        time_to_trial_end_threshold: float
 ) -> pd.DataFrame:
     assert on_target_threshold_dva > 0, f"On-target threshold must be positive, got {on_target_threshold_dva}."
-    assert time_from_trial_end_threshold >= 0, f"Minimum time from trial end must be non-negative, got {time_from_trial_end_threshold}."
+    assert time_to_trial_end_threshold >= 0, f"Minimum time to trial end must be non-negative, got {time_to_trial_end_threshold}."
+    appended_columns = [cnfg.SUBJECT_STR, cnfg.TRIAL_STR, cnfg.EYE_STR]
     if funnel_type == "fixations":
         funnel_steps = LWS_FUNNEL_STEPS
+        appended_columns += [cnfg.EVENT_STR]
     elif funnel_type == "visits":
         funnel_steps = [step for step in LWS_FUNNEL_STEPS if step != "not_outlier"]
+        appended_columns += [cnfg.VISIT_STR]
     else:
         raise ValueError(f"Unknown funnel type: {funnel_type}. Expected 'fixations' or 'visits'.")
 
@@ -91,7 +116,7 @@ def _lws_funnel(
             if funnel_type == "fixations":
                 step_res = data.apply(lambda row: row.loc[f"{row[cnfg.TARGET_STR]}_{cnfg.DISTANCE_STR}_dva"], axis=1)
             elif funnel_type == "visits":
-                step_res = data[f"{cnfg.DISTANCE_STR}_dva"] <= on_target_threshold_dva
+                step_res = data[cnfg.DISTANCE_DVA_STR] <= on_target_threshold_dva
         elif step == "before_identification":
             step_res = data.apply(
                 lambda row: row[cnfg.END_TIME_STR] <= _find_identification_time(idents, row[cnfg.TRIAL_STR], row[cnfg.TARGET_STR]),
@@ -100,7 +125,7 @@ def _lws_funnel(
         elif step == "fixs_to_strip":
             step_res = data["num_fixs_to_strip"] > fixs_to_strip_threshold
         elif step == "not_end_with_trial":
-            step_res = data["to_trial_end"] >= time_from_trial_end_threshold
+            step_res = data["to_trial_end"] >= time_to_trial_end_threshold
         elif step == "is_lws":
             step_res = pd.Series(np.array([results[s] for s in funnel_steps if s != "is_lws"]).all(axis=0))
         else:
@@ -108,6 +133,7 @@ def _lws_funnel(
         step_res.name = step
         results[step] = step_res
     funnel_df = pd.concat(results.values(), keys=results.keys(), axis=1).astype(bool)
+    funnel_df = pd.concat([data[appended_columns], funnel_df], axis=1)
     return funnel_df
 
 

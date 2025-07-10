@@ -10,7 +10,7 @@ import peyes
 import config as cnfg
 import helpers as hlp
 from data_models.SearchArray import SearchArray
-from data_models.LWSEnums import SearchArrayTypeEnum, SubjectActionTypesEnum, DominantEyeEnum
+from data_models.LWSEnums import SearchArrayCategoryEnum, SubjectActionCategoryEnum, DominantEyeEnum
 
 
 def _extract_singleton_column(df: pd.DataFrame, col_name: str):
@@ -58,8 +58,8 @@ class Trial:
         return int(_extract_singleton_column(self._gaze, cnfg.TRIAL_STR))
 
     @property
-    def trial_type(self) -> SearchArrayTypeEnum:
-        return self._search_array.array_type
+    def trial_category(self) -> SearchArrayCategoryEnum:
+        return self._search_array.array_category
 
     @property
     def px2deg(self) -> float:
@@ -97,7 +97,13 @@ class Trial:
 
     def get_actions(self) -> pd.DataFrame:
         """ Returns the times and actions performed by the subject during the trial. """
-        actions = self._triggers.loc[self._triggers[cnfg.ACTION_STR].notnull(), [cnfg.TIME_STR, cnfg.ACTION_STR]]
+        triggers = self.get_triggers()
+        actions = (
+            triggers
+            .loc[triggers[cnfg.ACTION_STR].notnull()]
+            .loc[triggers[cnfg.ACTION_STR] != SubjectActionCategoryEnum.NO_ACTION]
+            .loc[:, [cnfg.TIME_STR, cnfg.ACTION_STR]]
+        )
         to_trial_end = (self.end_time - actions[cnfg.TIME_STR]).rename("to_trial_end")
         actions = pd.concat([actions, to_trial_end], axis=1)
         return actions
@@ -111,11 +117,11 @@ class Trial:
         target_df = target_df.rename(columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False)
         return target_df
 
-    def get_metadata(self, bad_actions: Sequence[SubjectActionTypesEnum]) -> pd.Series:
+    def get_metadata(self, bad_actions: Sequence[SubjectActionCategoryEnum]) -> pd.Series:
         return pd.Series({
             "trial": self.trial_num,
             "block": self.block_num,
-            "trial_type": self.trial_type.name,
+            "trial_category": self.trial_category.name,
             "duration": self.end_time - self.start_time,
             "num_targets": len(self.get_search_array().targets),
             "num_distractors": self.get_search_array().num_distractors,
@@ -141,7 +147,7 @@ class Trial:
         return fixations
 
     def _create_search_array(self) -> SearchArray:
-        search_array_type = SearchArrayTypeEnum[_extract_singleton_column(self._gaze, cnfg.CONDITION_STR).upper()]
+        search_array_type = SearchArrayCategoryEnum[_extract_singleton_column(self._gaze, cnfg.CONDITION_STR).upper()]
         search_array_num = int(_extract_singleton_column(self._gaze, "image_num"))
         search_array = SearchArray.from_mat(os.path.join(
             cnfg.SEARCH_ARRAY_PATH,
@@ -212,11 +218,11 @@ class Trial:
             return False
         if self.block_num != other.block_num:
             return False
-        if self.trial_type != other.trial_type:
+        if self.trial_category != other.trial_category:
             return False
         if self.get_search_array() != other.get_search_array():
             return False
         return True
 
     def __repr__(self) -> str:
-        return f"Trial {self.trial_num} ({self.get_search_array().array_type.name})"
+        return f"Trial {self.trial_num} ({self.get_search_array().array_category.name})"

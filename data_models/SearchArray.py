@@ -8,7 +8,7 @@ from pymatreader import read_mat
 
 import config as cnfg
 import helpers as hlp
-from data_models.LWSEnums import SearchArrayTypeEnum, ImageCategoryEnum
+from data_models.LWSEnums import SearchArrayCategoryEnum, ImageCategoryEnum
 
 
 class _SearchArrayImage(NamedTuple):
@@ -71,7 +71,7 @@ class SearchArray:
             self,
             num: int,
             version: int,
-            array_type: SearchArrayTypeEnum,
+            array_type: SearchArrayCategoryEnum,
             images: _NDArrayImageType,
             is_targets: _NDArrayBoolType,
             grayscale: _NDArrayGrayScaleType,
@@ -100,7 +100,7 @@ class SearchArray:
         base_dir, filename = os.path.split(path)
         array_number = int(filename.split('.')[0].split('_')[-1])       # expected format: `image_111.mat`
         base_dir, array_type_name = os.path.split(base_dir)
-        array_type = SearchArrayTypeEnum[array_type_name.upper()]
+        array_type = SearchArrayCategoryEnum[array_type_name.upper()]
         base_dir, array_version_dir = os.path.split(base_dir)
         array_version = int(array_version_dir.replace("generated_stim", ""))    # expected format: `generated_stim1`
 
@@ -141,7 +141,7 @@ class SearchArray:
         return self._version
 
     @property
-    def array_type(self) -> SearchArrayTypeEnum:
+    def array_category(self) -> SearchArrayCategoryEnum:
         return self._array_type
 
     @property
@@ -182,7 +182,7 @@ class SearchArray:
 
     @staticmethod
     def _get_path(
-            arr_version: int, arr_type: SearchArrayTypeEnum, arr_num: int, file_type: str
+            arr_version: int, arr_type: SearchArrayCategoryEnum, arr_num: int, file_type: str
     ) -> str:
         return os.path.join(
             cnfg.SEARCH_ARRAY_PATH,
@@ -198,7 +198,7 @@ class SearchArray:
             return False
         if self.version != other.version:
             return False
-        if self.array_type != other.array_type:
+        if self.array_category != other.array_category:
             return False
         if self.mat_path != other.mat_path:
             return False
@@ -211,4 +211,4 @@ class SearchArray:
         return True
 
     def __repr__(self) -> str:
-        return f"SearchArray {self.image_num} ({self.array_type.name})"
+        return f"SearchArray {self.image_num} ({self.array_category.name})"

@@ -27,14 +27,14 @@ class ImageCategoryEnum(IntEnum):
     OBJECT_NATURAL = 6
 
 
-class SearchArrayTypeEnum(IntEnum):
+class SearchArrayCategoryEnum(IntEnum):
     UNKNOWN = 0
     COLOR = 1
     BW = 2
     NOISE = 3
 
 
-class SubjectActionTypesEnum(IntEnum):
+class SubjectActionCategoryEnum(IntEnum):
     NO_ACTION = 0
     MARK_AND_CONFIRM = 1
     MARK_ONLY = 2
@@ -42,8 +42,10 @@ class SubjectActionTypesEnum(IntEnum):
     MARK_AND_REJECT = 4
 
 
-class TargetVisitTypeEnum(StrEnum):
-    OTHER = 'other'
-    BEFORE = 'before'
-    MARKING = 'marking'
-    AFTER = 'after'
+class SignalDetectionCategoryEnum(StrEnum):
+    UNKNOWN = "unknown"
+    HIT = "hit"
+    MISS = "miss"
+    FALSE_ALARM = "false_alarm"
+    CORRECT_REJECT = "correct_reject"
+    REPEATED_HIT = "repeated_hit"

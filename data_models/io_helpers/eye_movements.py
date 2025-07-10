@@ -60,7 +60,7 @@ def process_trial_fixations(
 
     :return: a DataFrame containing the fixations during the trial, with the following columns:
     - eye: str; the eye that the fixation belongs to (left or right)
-    - event_id: int; the number of the fixation among all events from the given eye during the trial
+    - event: int; the number of the fixation among all events from the given eye during the trial
     - start_time: float; time of the fixation start in ms (relative to trial onset)
     - end_time: float; time of the fixation end in ms (relative to trial onset)
     - duration: float; duration of the fixation in ms
@@ -106,7 +106,6 @@ def _extract_fixation_features(trial_eye_movements: pd.DataFrame, trial_end_time
         features
         .drop(columns=_REDUNDANT_FIXATION_FEATURES, inplace=False, errors='ignore')
         .reset_index(drop=False, inplace=False)
-        .rename(columns={"event": "event_id"})
     )
     return features
 
@@ -170,7 +169,7 @@ def _num_fixations_to_strip(fix_features: pd.DataFrame) -> pd.Series:
 #         f"On-target threshold must be a finite positive number, got {on_target_threshold_dva}."
 #
 #     # identify which target (if any) was identified during each fixation
-#     identified_targets = behavior[behavior[f"{cnfg.DISTANCE_STR}_dva"] <= on_target_threshold_dva]
+#     identified_targets = behavior[behavior[cnfg.DISTANCE_DVA_STR] <= on_target_threshold_dva]
 #     ident_times = identified_targets[cnfg.TIME_STR].to_numpy()                              # shape: (num_hits,)
 #     is_start_before = fix_features[cnfg.START_TIME_STR].to_numpy() <= ident_times[:, None]  # shape (num_hits, num_fixations)
 #     is_end_after = fix_features[cnfg.END_TIME_STR].to_numpy() >= ident_times[:, None]       # shape (num_hits, num_fixations)
