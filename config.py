@@ -71,7 +71,7 @@ _GENERIC_COLOR = "#808080"  # gray color for generic cases
 
 FONT_FAMILY, FONT_COLOR = "Calibri", "black"
 TITLE_FONT = dict(family=FONT_FAMILY, size=26, color=FONT_COLOR)
-SUBTITLE_FONT = dict(family=FONT_FAMILY, size=20, color=FONT_COLOR)
+SUBTITLE_FONT = dict(family=FONT_FAMILY, size=22, color=FONT_COLOR)
 COMMENT_FONT = dict(family=FONT_FAMILY, size=14, color=FONT_COLOR)
 AXIS_LABEL_FONT = dict(family=FONT_FAMILY, size=20, color=FONT_COLOR)
 AXIS_TICK_FONT = dict(family=FONT_FAMILY, size=16, color=FONT_COLOR)
@@ -88,16 +88,17 @@ def get_discrete_color(value: Union[Literal["all"], int], loop: bool = False) ->
     """
     if isinstance(value, str) and value.lower() == ALL_STR:
         return _GENERIC_COLOR
-    if isinstance(value, int):
-        if loop:
-            value = value % len(_DISCRETE_COLORMAP)
-        assert 0 <= value < len(_DISCRETE_COLORMAP), f"Value {value} out of range for discrete colormap (0-{len(_DISCRETE_COLORMAP)-1})."
-        return _DISCRETE_COLORMAP[value]
-    if isinstance(value, float) and value == int(value):
-        return get_discrete_color(int(value), loop=loop)
-    raise TypeError(
-        f"Value must be an integer or 'all', got `{value}` of type {type(value)}."
-    )
+    try:
+        new_value = float(value)
+    except ValueError:
+        raise TypeError(f"Value must be an integer or 'all', got `{value}` of type {type(value)}.")
+    if new_value != int(new_value):
+        raise TypeError(f"Value must be an integer or 'all', got `{value}` of type {type(value)}.")
+    value = int(new_value)
+    if loop:
+        value = value % len(_DISCRETE_COLORMAP)
+    assert 0 <= value < len(_DISCRETE_COLORMAP), f"Value {value} out of range for discrete colormap (0-{len(_DISCRETE_COLORMAP)-1})."
+    return _DISCRETE_COLORMAP[value]
 
 
 ## TRIGGERS ##
