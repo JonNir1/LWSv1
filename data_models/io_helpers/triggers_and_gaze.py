@@ -54,7 +54,8 @@ def _align_triggers_and_gaze(triggers, gaze) -> (pd.DataFrame, pd.DataFrame):
 
     # add trial column
     is_trial = _is_between_triggers(
-        merged[cnfg.TRIGGER_STR], cnfg.ExperimentTriggerEnum.TRIAL_START, cnfg.ExperimentTriggerEnum.TRIAL_END
+        # NOTE: can also use cnfg.ExperimentTriggerEnum.TRIAL_START/TRIAL_END, but will contain unnecessary data
+        merged[cnfg.TRIGGER_STR], cnfg.ExperimentTriggerEnum.STIMULUS_ON, cnfg.ExperimentTriggerEnum.STIMULUS_OFF
     )
     is_trial_start = is_trial.ne(is_trial.shift()) & is_trial  # find the start of each trial
     trial_num = is_trial_start.cumsum()  # assign trial numbers
