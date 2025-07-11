@@ -7,8 +7,6 @@ import plotly.express as px
 import config as cnfg
 from analysis.lws_funnel import LWS_FUNNEL_STEPS
 
-_COLOR_SCHEME = px.colors.qualitative.Dark24
-
 
 def create_funnel_figure(
         step_sizes: pd.DataFrame, funnel_type: Literal["fixations", "visits"], show_individuals: bool = False,
@@ -23,14 +21,14 @@ def create_funnel_figure(
                 fig,
                 subj_data,
                 trace_name=f"Subject {subj_id}",
-                trace_color=_COLOR_SCHEME[i % len(_COLOR_SCHEME)],
+                trace_color=cnfg.get_discrete_color(i, loop=True),
             )
     else:
         fig = _add_funnel_trace(
             fig,
             step_sizes,
             trace_name=f"{cnfg.ALL_STR.capitalize()} {funnel_type.capitalize()}s",
-            trace_color=_COLOR_SCHEME[0],
+            trace_color=cnfg.get_discrete_color("all"),
         )
     fig.update_layout(
         width=800, height=600,
