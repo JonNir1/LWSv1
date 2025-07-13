@@ -8,3 +8,12 @@
 **TODO - Analysis Thresholds:**
 - Determine bad subjects: num bad-action trials, miss rate, FA rate, distance on hits
 - Determine on-target distance: show distance on hits for all (valid) subjects
+
+
+### FOR NEXT VERSION:
+- trigger order: `start recording` -> `trial start` -> `targets on` -> `targets off` -> `stimulus on` -> `stimulus off` -> `stop_recording` -> `trial end`
+meaning the `recording` does not properly flank the trial.
+- do not require target-marking confirmation
+- change trial categories and durations randomly, not sequentially
+- do not stop the time when the target is identified, but continue until the end of the trial
+- alternatively, continue to next trial upon first identification

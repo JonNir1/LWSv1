@@ -2,6 +2,7 @@ from typing import Literal
 
 import numpy as np
 import pandas as pd
+import scipy.stats as stats
 import plotly.graph_objects as go
 import plotly.express as px
 import plotly.io as pio
@@ -22,6 +23,57 @@ from analysis.pipeline.full_pipeline import full_pipeline, read_saved_data
 # )
 targets, actions, metadata, idents, fixations, visits = read_saved_data()
 
+
+
+
+
+start_to_ident_time_diff = (
+    abs(data[cnfg.TARGET_TIME_STR] - data[cnfg.START_TIME_STR])
+    .rename("start_to_ident_time_diff")
+    .groupby(data.index.names)
+    .min()
+)
+end_to_ident_time_diff = (
+    abs(data[cnfg.TARGET_TIME_STR] - data[cnfg.END_TIME_STR])
+    .rename("start_to_ident_time_diff")
+    .groupby(data.index.names)
+    .min()
+)
+
+
+identification_distances = idents.loc[
+    idents[cnfg.IDENTIFICATION_CATEGORY_STR] != SignalDetectionCategoryEnum.MISS, cnfg.DISTANCE_DVA_STR
+]
+distance_summary = identification_distances.describe()
+distance_percentile_of_1dva = stats.percentileofscore(identification_distances, 1.0)
+
+
+
+
+
+
+# TODO: timings
+#  - from trial start to first action (including bad actions)
+#  - from last action (including bad actions) to trial end
+#  - from trial start to first identification (hit)
+#  - from last identification (hit) to trial end
+#  - from trial start to first fixation/visit on target
+#  - from last fixation/visit on target to trial end
+
+
+fig = make_subplots(
+    rows=1, cols=2,
+)
+bad_actions_count = metadata.groupby(cnfg.SUBJECT_STR)["bad_actions"].sum().reset_index()
+
+# find which subject-trial combinations have no actions
+subjects = actions[cnfg.SUBJECT_STR].unique()
+trials = np.arange(1, 61)  # assuming trials are numbered from 1 to 60
+expected = pd.MultiIndex.from_product([subjects, trials], names=[cnfg.SUBJECT_STR, cnfg.TRIAL_STR])
+observed = actions.set_index([cnfg.SUBJECT_STR, cnfg.TRIAL_STR]).index.drop_duplicates()
+missing = expected.difference(observed).to_frame(index=False)
+missing_actions_count = missing.groupby(cnfg.SUBJECT_STR).size().rename("missing_actions").reset_index()
+del subjects, trials, expected, observed, missing
 
 
 

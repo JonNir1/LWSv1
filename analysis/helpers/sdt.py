@@ -10,6 +10,77 @@ from data_models.LWSEnums import SignalDetectionCategoryEnum
 D_PRIME_CORRECTIONS = Literal["loglinear", "hautus", "macmillan", "mk", "none"]
 
 
+def calc_sdt_metrics(
+        metadata: pd.DataFrame, idents: pd.DataFrame, dprime_correction: Optional[D_PRIME_CORRECTIONS]
+) -> pd.DataFrame:
+    hits = (
+        calc_sdt_class_per_trial(metadata, idents, "hit")
+        .loc[:, ["count", "rate"]]
+        .rename(columns={"count": "hits", "rate": "hit_rate"})
+    )
+    fas = (
+        calc_sdt_class_per_trial(metadata, idents, "false_alarm")
+        .loc[:, ["count", "rate"]]
+        .rename(columns={"count": "false_alarms", "rate": "false_alarm_rate"})
+    )
+    dprime = calc_dprime_per_trial(metadata, idents, dprime_correction)["d_prime"]
+    aprime = calc_aprime_per_trial(metadata, idents)["a_prime"]
+    f1 = calc_f1_per_trial(metadata, idents)["f1_score"]
+    metadata_with_sdt = pd.concat(
+        [
+            metadata.drop(columns=["duration", "bad_actions", "num_targets", "num_distractors"]),
+            hits, fas, dprime, aprime, f1
+        ], axis=1
+    )
+    return metadata_with_sdt
+
+
+def calc_f1_per_trial(metadata: pd.DataFrame, idents: pd.DataFrame,) -> pd.DataFrame:
+    hits = calc_sdt_class_per_trial(metadata, idents, "hit").rename(columns={
+        "count": "hits", "rate": "hit_rate"
+    })
+    fa_counts = calc_sdt_class_per_trial(metadata, idents, "false_alarm")["count"].rename("false_alarms")
+    metadata_with_counts = pd.concat(
+        [metadata.drop(columns=["duration", "bad_actions"]), hits, fa_counts], axis=1
+    )
+    precision = (
+        metadata_with_counts
+        .apply(
+            lambda row: row["hits"] / (row["hits"] + row["false_alarms"])
+            if (row["hits"] + row["false_alarms"]) > 0 else np.nan, axis=1
+        )
+        .fillna(0)  # replace NaN with 0 for precision
+        .rename("precision")    # aka PPV
+    )
+    recall = metadata_with_counts["hit_rate"].rename("recall")  # aka TPR
+    f1_scores = (
+        pd.concat([recall, precision], axis=1)
+        .apply(lambda row: 2 * (row["recall"] * row["precision"]) / (row["recall"] + row["precision"])
+               if (row["recall"] + row["precision"]) > 0 else np.nan, axis=1
+        )
+        .fillna(0)  # replace NaN with 0 for F1 scores
+        .rename("f1_score")
+    )
+    metadata_with_f1 = pd.concat([metadata_with_counts, f1_scores], axis=1)
+    return metadata_with_f1
+
+
+def calc_aprime_per_trial(metadata: pd.DataFrame, idents: pd.DataFrame) -> pd.DataFrame:
+    """ Calculate A' (A-prime) for each subject-trial pair. """
+    hit_rate = calc_sdt_class_per_trial(metadata, idents, "hit")["rate"].rename("h")
+    fa_rate = calc_sdt_class_per_trial(metadata, idents, "false_alarm")["rate"].rename("fa")
+    diff = (hit_rate - fa_rate).rename("diff")
+    sign = (np.sign(diff) + (diff == 0).astype(int)).rename("sign")  # sign of the difference, with 0 treated as +1
+    a_prime = (
+        pd.concat([hit_rate, fa_rate], axis=1)
+        .apply(lambda row: _calc_aprime(row["h"], row["fa"]), axis=1)
+        .fillna(0.5)  # replace NaN with 0.5 for A' values
+        .rename("a_prime")
+    )
+    metadata_with_aprime = pd.concat([metadata.drop(columns=["duration", "bad_actions"]), a_prime], axis=1)
+    return metadata_with_aprime
+
+
 def calc_dprime_per_trial(
         metadata: pd.DataFrame, idents: pd.DataFrame, correction: Optional[D_PRIME_CORRECTIONS]
 ) -> pd.DataFrame:
@@ -20,7 +91,7 @@ def calc_dprime_per_trial(
         [metadata.drop(columns=["duration", "bad_actions"]), hit_counts, fa_counts], axis=1
     )
     d_prime = metadata_with_counts.apply(
-        lambda row: calc_dprime(
+        lambda row: _calc_dprime(
             hits=row["hits"],
             false_alarms=row["false_alarms"],
             num_targets=row["num_targets"],
@@ -83,7 +154,7 @@ def calc_sdt_class_per_trial(
     return metadata_with_count
 
 
-def calc_dprime(
+def _calc_dprime(
         hits: int, false_alarms: int, num_targets: int, num_distractors: int, correction: Optional[D_PRIME_CORRECTIONS]
 ) -> float:
     """
@@ -131,3 +202,20 @@ def calc_dprime(
     raise ValueError(f"Unknown correction method '{correction}' for d-prime calculation.")
 
 
+def _calc_aprime(h: float, fa: float) -> float:
+    """
+    Calculate A' (A-prime) based on the hit rate (h) and false alarm rate (fa).
+    The A' metric is a non-parametric measure of sensitivity, similar to d-prime, but does not require assumptions about
+    the underlying distributions nor correction for floor/ceiling effects. See:
+    - Stanislaw, H., & Todorov, N. (1999). Calculation of signal detection theory measures. Behavior research methods,
+    instruments, & computers, 31(1), 137-149.
+    Snodgrass, J. G., & Corwin, J. (1988). Pragmatics of measuring recognition memory: applications to dementia and
+    amnesia. Journal of experimental psychology: General, 117(1), 34.
+    """
+    assert 0 <= h <= 1, f"Hit rate must be between 0 and 1, got {h}."
+    assert 0 <= fa <= 1, f"False alarm rate must be between 0 and 1, got {fa}."
+    if h == fa:                     # also covers the cases for (h == fa == 0) or (h == fa == 1)
+        return 0.5
+    diff = h - fa                   # strictly non-zero
+    sign = 1 if diff >= 0 else -1   # treat 0 as +1
+    return 0.5 + sign * (diff ** 2 + abs(diff)) / (4 * max(h, fa) - 4 * h * fa)
