@@ -1,10 +1,6 @@
-from typing import Literal
-
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-import plotly.graph_objects as go
-import plotly.express as px
 import plotly.io as pio
 from plotly.subplots import make_subplots
 
@@ -15,37 +11,19 @@ pio.renderers.default = "browser"
 
 
 ##  Run Pipeline / Load Data
-from analysis.pipeline.full_pipeline import full_pipeline, read_saved_data
+# from analysis.pipeline.full_pipeline import full_pipeline
 # targets, actions, metadata, idents, fixations, visits = full_pipeline(      # uncomment to re-run
 #     on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA,
 #     visit_merging_time_threshold=cnfg.VISIT_MERGING_TIME_THRESHOLD,
 #     save=True, verbose=True
 # )
+from analysis.pipeline.full_pipeline import read_saved_data
 targets, actions, metadata, idents, fixations, visits = read_saved_data()
 
 
 
 
 
-start_to_ident_time_diff = (
-    abs(data[cnfg.TARGET_TIME_STR] - data[cnfg.START_TIME_STR])
-    .rename("start_to_ident_time_diff")
-    .groupby(data.index.names)
-    .min()
-)
-end_to_ident_time_diff = (
-    abs(data[cnfg.TARGET_TIME_STR] - data[cnfg.END_TIME_STR])
-    .rename("start_to_ident_time_diff")
-    .groupby(data.index.names)
-    .min()
-)
-
-
-identification_distances = idents.loc[
-    idents[cnfg.IDENTIFICATION_CATEGORY_STR] != SignalDetectionCategoryEnum.MISS, cnfg.DISTANCE_DVA_STR
-]
-distance_summary = identification_distances.describe()
-distance_percentile_of_1dva = stats.percentileofscore(identification_distances, 1.0)
 
 
 
@@ -105,7 +83,7 @@ create_subject_comparison_figure(metadata, idents).show()
 
 # %% ## Detect LWS Instances
 from analysis.lws_funnel import fixation_funnel, visit_funnel, calc_funnel_sizes
-from analysis.figures.funnel_fig import create_funnel_figure
+from analysis.figures.lws.funnel_fig import create_funnel_figure
 lws_fixation_funnel = fixation_funnel(
     fixations, metadata, idents,
     on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA,
