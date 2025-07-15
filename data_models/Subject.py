@@ -10,10 +10,10 @@ import pandas as pd
 from tqdm import tqdm
 
 import config as cnfg
-from data_models.io_helpers.subject_info import parse_subject_info
-from data_models.io_helpers.triggers_and_gaze import parse_triggers_and_gaze
-from data_models.io_helpers.target_identifications import extract_trial_identifications
-from data_models.io_helpers.visits import convert_fixations_to_visits
+from data_models.helpers.subject_info import parse_subject_info
+from data_models.helpers.triggers_and_gaze import parse_triggers_and_gaze
+from data_models.helpers.target_identifications import extract_trial_identifications
+from data_models.helpers.visits import convert_fixations_to_visits
 from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum, SubjectActionCategoryEnum
 
 

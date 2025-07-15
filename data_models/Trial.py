@@ -138,7 +138,7 @@ class Trial:
         return df
 
     def process_fixations(self) -> pd.DataFrame:
-        from data_models.io_helpers.eye_movements import process_trial_fixations
+        from data_models.helpers.eye_movements import process_trial_fixations
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             features = self.get_raw_eye_movements()
@@ -157,7 +157,7 @@ class Trial:
         return search_array
 
     def _detect_eye_movements(self) -> Tuple[pd.DataFrame, pd.Series, pd.Series]:
-        from data_models.io_helpers.eye_movements import detect_eye_movements
+        from data_models.helpers.eye_movements import detect_eye_movements
         left_labels, left_events = detect_eye_movements(
             self._gaze,
             DominantEyeEnum.LEFT,
