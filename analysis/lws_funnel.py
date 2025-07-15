@@ -119,7 +119,7 @@ def _lws_funnel(
                 step_res = data[cnfg.DISTANCE_DVA_STR] <= on_target_threshold_dva
         elif step == "before_identification":
             step_res = data.apply(
-                lambda row: row[cnfg.END_TIME_STR] <= _find_identification_time(idents, row[cnfg.TRIAL_STR], row[cnfg.TARGET_STR]),
+                lambda row: row[cnfg.END_TIME_STR] < _find_identification_time(idents, row[cnfg.TRIAL_STR], row[cnfg.TARGET_STR]),
                 axis=1
             )
         elif step == "fixs_to_strip":
