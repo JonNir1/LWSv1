@@ -8,7 +8,6 @@ import pandas as pd
 import peyes
 
 import config as cnfg
-import helpers as hlp
 from data_models.SearchArray import SearchArray
 from data_models.LWSEnums import SearchArrayCategoryEnum, SubjectActionCategoryEnum, DominantEyeEnum
 
@@ -198,16 +197,11 @@ class Trial:
         :param y: 1D array of Y coordinates with shape (N,) or (N, 1) or (1, N)
         :return: a (num_coords, num_targets) DataFrame with the distances from each coordinate to each target.
         """
-        x = hlp.flatten_or_raise(x)
-        y = hlp.flatten_or_raise(y)
         if x.shape != y.shape:
             raise ValueError(f"Input arrays must have the same shape. Got {x.shape} and {y.shape}.")
-        coords = np.column_stack((x, y))                    # shape (n_coords, 2)
-        target_coords = np.array([(img.x, img.y) for img in self._search_array.targets])  # shape (n_targets, 2)
-        dists = np.empty((len(coords), len(target_coords)), dtype=float)
-        for i, (cx, cy) in enumerate(coords):
-            for j, (tx, ty) in enumerate(target_coords):
-                dists[i, j] = hlp.distance((cx, cy), (tx, ty), 'px',)
+        coords = np.column_stack((x, y))                                                            # shape (n_coords, 2)
+        target_coords = np.array([(img.x, img.y) for img in self._search_array.targets])            # shape (n_targets, 2)
+        dists = np.linalg.norm(coords[:, np.newaxis, :] - target_coords[np.newaxis, :, :], axis=2)  # shape (n_coords, n_targets)
         dists = pd.DataFrame(dists, columns=[f"{cnfg.TARGET_STR}{i}" for i in range(target_coords.shape[0])])
         return dists
 

@@ -1,5 +1,5 @@
 import os
-from typing import NamedTuple, List, Tuple
+from typing import NamedTuple, List, Tuple, Union, Sequence
 
 import numpy as np
 import pandas as pd
@@ -7,7 +7,6 @@ import numpy.typing as npt_
 from pymatreader import read_mat
 
 import config as cnfg
-import helpers as hlp
 from data_models.LWSEnums import SearchArrayCategoryEnum, ImageCategoryEnum
 
 
@@ -178,7 +177,7 @@ class SearchArray:
     @classmethod
     def is_in_bottom_strip(cls, p: Tuple[float, float]) -> bool:
         """ Check if a point is within the bottom strip rectangle, containing target exemplars. """
-        return hlp.is_in_rectangle(p[0], p[1], cls._BOTTOM_STRIP_TOP_LEFT, cls._BOTTOM_STRIP_BOTTOM_RIGHT)
+        return cls._is_in_rectangle(p[0], p[1], cls._BOTTOM_STRIP_TOP_LEFT, cls._BOTTOM_STRIP_BOTTOM_RIGHT)
 
     @staticmethod
     def _get_path(
@@ -190,6 +189,21 @@ class SearchArray:
             f"array_{arr_type.name.lower()}",
             f"image_{arr_num}.{file_type}",
         )
+
+    @staticmethod
+    def _is_in_rectangle(
+            x: Union[float, Sequence[float]],
+            y: Union[float, Sequence[float]],
+            tl: Tuple[float, float],
+            br: Tuple[float, float],
+    ) -> Union[bool, _NDArrayBoolType]:
+        x, y = np.asarray(x), np.asarray(y)
+        assert x.ndim == y.ndim and x.shape == y.shape, f"Shapes of x ({x.shape}) and y ({y.shape}) do not match."
+        left, top = tl
+        right, bottom = br
+        if x.ndim == 0 and y.ndim == 0:
+            return left <= x <= right and top <= y <= bottom
+        return (left <= x) & (x <= right) & (top <= y) & (y <= bottom)
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, SearchArray):

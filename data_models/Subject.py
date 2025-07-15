@@ -10,7 +10,6 @@ import pandas as pd
 from tqdm import tqdm
 
 import config as cnfg
-import helpers as hlp
 from data_models.io_helpers.subject_info import parse_subject_info
 from data_models.io_helpers.triggers_and_gaze import parse_triggers_and_gaze
 from data_models.io_helpers.target_identifications import extract_trial_identifications
@@ -161,9 +160,9 @@ class Subject:
         Returns the conversion factor from pixels to degrees of visual angle (DVA).
         To move from `d` pixels to DVA, use the formula: `d * self.px2deg`.
         """
-        return hlp.convert_units(
-            1, "px", "deg", cnfg.PIXEL_SIZE_MM / 10, self._screen_distance_cm
-        )
+        assert np.isfinite(self._screen_distance_cm), "Screen distance must be finite to convert pixels to degrees."
+        pixel_size_cm = cnfg.PIXEL_SIZE_MM / 10  # Convert mm to cm
+        return 2 * np.degrees(np.arctan2(pixel_size_cm / 2, self._screen_distance_cm))
 
     @property
     def out_dir(self) -> str:

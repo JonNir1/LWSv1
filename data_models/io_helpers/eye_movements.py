@@ -1,11 +1,10 @@
-from typing import Union, Tuple
+from typing import Union, Tuple, Sequence
 
 import numpy as np
 import pandas as pd
 import peyes
 
 import config as cnfg
-import helpers as hlp
 from data_models.LWSEnums import DominantEyeEnum
 from data_models.SearchArray import SearchArray
 
@@ -155,7 +154,24 @@ def _num_fixations_to_strip(fix_features: pd.DataFrame) -> pd.Series:
         map(lambda tup: SearchArray.is_in_bottom_strip((tup.x, tup.y)), xy.itertuples()),
         name="is_in_strip", dtype=bool,
     )
-    fixs_to_strip = hlp.num_to_true(is_in_strip).rename("num_fixs_to_strip")
+
+    def num_to_true(bools: Sequence[bool]) -> pd.Series:
+        """
+        Converts a boolean Series or array to a Series of floats indicating the distance to the next True value, or inf
+        if no future True exists.
+        """
+        bools = pd.Series(np.asarray(bools), dtype=bool)
+        indices = np.arange(len(bools))
+        true_indices = np.flatnonzero(bools.to_numpy())
+        next_true_idx = np.searchsorted(true_indices, indices, side='left')
+        dist_to_true = np.full(len(bools), np.inf)
+        valid = next_true_idx < len(true_indices)
+        dist_to_true[valid] = true_indices[next_true_idx[valid]] - indices[valid]
+        assert (dist_to_true >= 0).all(), "Distances should be non-negative."
+        return pd.Series(dist_to_true, index=bools.index, dtype=float)
+
+
+    fixs_to_strip = num_to_true(is_in_strip).rename("num_fixs_to_strip")
     return fixs_to_strip
 
 

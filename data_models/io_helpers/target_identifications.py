@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 
 import config as cnfg
-import helpers as hlp
 from data_models.Trial import Trial
 from data_models.LWSEnums import SubjectActionCategoryEnum, SignalDetectionCategoryEnum
 
@@ -68,8 +67,25 @@ def _extract_gaze_on_identification(
     Finds the gaze samples that corresponds to the subject's identification actions in a trial, and returns them.
     The gaze samples must be within `gaze_to_trigger_matching_threshold` ms before/after identification.
     """
+    def closest_indices(s: pd.Series, vals: pd.Series, threshold: float) -> pd.Series:
+        """ Finds indices in `s` whose values are closest to the values in `vals`, within a given threshold. """
+        assert threshold >= 0, "Threshold must be non-negative"
+        s_values = s.values
+        val_values = vals.values
+
+        # compute absolute differences between each val and all of s
+        diffs = np.abs(s_values[None, :] - val_values[:, None], dtype=float)  # shape: (len(vals), len(s))
+        diffs[diffs > threshold] = np.inf  # mask differences that exceed threshold
+        closest_idx_in_s = diffs.argmin(axis=1)  # get index (in s) of the closest value for each val
+
+        # Handle cases where all diffs were > threshold
+        no_match = np.isinf(diffs.min(axis=1))
+        result = pd.Series(s.index[closest_idx_in_s], index=vals.index)
+        result[no_match] = np.nan
+        return result
+
     gaze = trial.get_gaze()
-    gaze_times_for_ident_times = hlp.closest_indices(
+    gaze_times_for_ident_times = closest_indices(
         gaze[cnfg.TIME_STR], identification_times, threshold=gaze_to_trigger_matching_threshold
     )
     gaze_on_identification = gaze.loc[gaze_times_for_ident_times]

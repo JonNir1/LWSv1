@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, List
 
 import numpy as np
 import pandas as pd
@@ -6,7 +6,12 @@ import pandas as pd
 import config as cnfg
 
 LWS_FUNNEL_STEPS = [
+    # sequence of steps to determine if a fixation/visit is a Looking-without-Seeing (LWS) instance
     "all", "valid_trial", "not_outlier", "on_target", "before_identification", "fixs_to_strip", "not_end_with_trial", "is_lws"
+]
+TARGET_RETURN_FUNNEL_STEPS = [
+    # sequence of steps to determine if a fixation/visit is a post-identification target-return instance
+    "all", "valid_trial", "not_outlier", "on_target", "after_identification", "is_return"
 ]
 
 
@@ -78,27 +83,47 @@ def visit_funnel(
     )
 
 
-def _lws_funnel(
+def lws_funnel(
         data: pd.DataFrame,
-        funnel_type: Literal["fixations", "visits"],
         metadata: pd.DataFrame,
         idents: pd.DataFrame,
+        event_type: Literal["fixations", "visits"],
         on_target_threshold_dva: float,
         fixs_to_strip_threshold: int,
         time_to_trial_end_threshold: float
 ) -> pd.DataFrame:
     assert on_target_threshold_dva > 0, f"On-target threshold must be positive, got {on_target_threshold_dva}."
+    assert fixs_to_strip_threshold >= 0, f"Fixations to strip threshold must be non-negative, got {fixs_to_strip_threshold}."
     assert time_to_trial_end_threshold >= 0, f"Minimum time to trial end must be non-negative, got {time_to_trial_end_threshold}."
     appended_columns = [cnfg.SUBJECT_STR, cnfg.TRIAL_STR, cnfg.EYE_STR]
-    if funnel_type == "fixations":
+    if event_type == "fixations":
         funnel_steps = LWS_FUNNEL_STEPS
         appended_columns += [cnfg.EVENT_STR]
-    elif funnel_type == "visits":
+    elif event_type == "visits":
         funnel_steps = [step for step in LWS_FUNNEL_STEPS if step != "not_outlier"]
         appended_columns += [cnfg.VISIT_STR]
     else:
-        raise ValueError(f"Unknown funnel type: {funnel_type}. Expected 'fixations' or 'visits'.")
+        raise ValueError(f"Unknown event type: {event_type}. Expected 'fixations' or 'visits'.")
+    funnel_df = _calculate_funnel(
+        data, metadata, idents, funnel_steps, event_type,
+        on_target_threshold_dva=on_target_threshold_dva,
+        fixs_to_strip_threshold=fixs_to_strip_threshold,
+        time_to_trial_end_threshold=time_to_trial_end_threshold
+    )
+    funnel_df = pd.concat([data[appended_columns], funnel_df], axis=1)
+    return funnel_df
 
+
+def _calculate_funnel(
+        data: pd.DataFrame,
+        metadata: pd.DataFrame,
+        idents: pd.DataFrame,
+        funnel_steps: List[str],
+        event_type: Literal["fixations", "visits"],
+        on_target_threshold_dva: float = None,
+        fixs_to_strip_threshold: int = None,
+        time_to_trial_end_threshold: float = None,
+) -> pd.DataFrame:
     results = dict()
     for step in funnel_steps:
         if step == cnfg.ALL_STR:
@@ -108,33 +133,47 @@ def _lws_funnel(
                 lambda trial_num: not metadata.loc[metadata[cnfg.TRIAL_STR] == trial_num, f"bad_actions"].values[0]
             )
         elif step == "not_outlier":
-            if funnel_type == "fixations":
+            if event_type == "fixations":
                 step_res = data["outlier_reasons"].map(lambda val: len(val) == 0)
             else:
                 raise NotImplementedError(f"`not_outlier` step is not applicable for `visits` funnel type.")
         elif step == "on_target":
-            if funnel_type == "fixations":
-                step_res = data.apply(lambda row: row.loc[f"{row[cnfg.TARGET_STR]}_{cnfg.DISTANCE_STR}_dva"], axis=1)
-            elif funnel_type == "visits":
+            assert on_target_threshold_dva > 0, f"On-target threshold must be positive, got {on_target_threshold_dva}."
+            if event_type == "fixations":
+                step_res = data.apply(
+                    lambda row: row.loc[f"{row[cnfg.TARGET_STR]}_{cnfg.DISTANCE_STR}_dva"] <= on_target_threshold_dva,
+                    axis=1
+                )
+            elif event_type == "visits":
                 step_res = data[cnfg.DISTANCE_DVA_STR] <= on_target_threshold_dva
         elif step == "before_identification":
             step_res = data.apply(
                 lambda row: row[cnfg.END_TIME_STR] < _find_identification_time(idents, row[cnfg.TRIAL_STR], row[cnfg.TARGET_STR]),
                 axis=1
             )
+        elif step == "after_identification":
+            step_res = data.apply(
+                lambda row: row[cnfg.START_TIME_STR] > _find_identification_time(idents, row[cnfg.TRIAL_STR], row[cnfg.TARGET_STR]),
+                axis=1
+            )
         elif step == "fixs_to_strip":
+            assert fixs_to_strip_threshold >= 0, f"Fixations to strip threshold must be non-negative, got {fixs_to_strip_threshold}."
             step_res = data["num_fixs_to_strip"] > fixs_to_strip_threshold
         elif step == "not_end_with_trial":
+            assert time_to_trial_end_threshold >= 0, f"Minimum time to trial end must be non-negative, got {time_to_trial_end_threshold}."
             step_res = data["to_trial_end"] >= time_to_trial_end_threshold
-        elif step == "is_lws":
+        elif step == "is_lws" or step == "is_return":
             step_res = pd.Series(np.array([results[s] for s in funnel_steps if s != "is_lws"]).all(axis=0))
         else:
             raise ValueError(f"Unknown funnel step: {step}.")
         step_res.name = step
         results[step] = step_res
     funnel_df = pd.concat(results.values(), keys=results.keys(), axis=1).astype(bool)
-    funnel_df = pd.concat([data[appended_columns], funnel_df], axis=1)
     return funnel_df
+
+
+
+
 
 
 def _find_identification_time(idents: pd.DataFrame, trial_num: int, target: str) -> float:
