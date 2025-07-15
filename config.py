@@ -27,11 +27,11 @@ DETECTOR = peyes.create_detector(_DETECTION_ALGORITHM, MISSING_VALUE, _MIN_EVENT
 
 
 ## Analysis Parameters ##
-MAX_GAZE_TO_TRIGGER_TIME_DIFF = 5   # in ms    # Maximum allowed time difference between gaze and trigger events for them to be considered as part of the same event.
-ON_TARGET_THRESHOLD_DVA = 1.0       # threshold to determine if a gaze point / fixation is on a target, in degrees of visual angle
-VISIT_MERGING_TIME_THRESHOLD = 20   # temporal window for considering two events as part of the same chunk, in milliseconds
-TIME_TO_TRIAL_END_THRESHOLD = 250   # fixations/visits ending within this time from the trial end are not considered LWS.
-FIXATIONS_TO_STRIP_THRESHOLD = 3    # fixations/visits whose following number of fixations fall in the bottom strip are not considered LWS.
+MAX_GAZE_TO_TRIGGER_TIME_DIFF = 5       # Maximum allowed time difference between gaze and trigger events for them to be considered as part of the same event.
+ON_TARGET_THRESHOLD_DVA = 1.0           # threshold to determine if a gaze point / fixation is on a target, in degrees of visual angle
+VISIT_MERGING_TIME_THRESHOLD = 1000     # temporal window for considering two events as part of the same chunk, in milliseconds
+TIME_TO_TRIAL_END_THRESHOLD = 1000      # fixations/visits ending within this time from the trial end are considered not-LWS.
+FIXATIONS_TO_STRIP_THRESHOLD = 3        # fixations/visits whose following number of fixations fall in the bottom strip are not considered LWS.
 
 
 ## Parsing Fields ##
