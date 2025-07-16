@@ -22,13 +22,15 @@ targets, actions, metadata, idents, fixations, visits = read_saved_data()
 
 
 # %%
-# ## Detect LWS Instances
+# ## Show Funnels
 from analysis.helpers.funnels import calc_funnel_sizes
 from analysis.figures.lws.funnel_fig import create_funnel_figure
 
+_funnel_type = "target_return"      # "lws"/"target_return"
 create_funnel_figure(
-    calc_funnel_sizes(visits, "target_return"), "target_return", "visits", show_individuals=True
+    calc_funnel_sizes(visits, _funnel_type), _funnel_type, "visits", show_individuals=False
 ).show()
+del _funnel_type
 
 
 
