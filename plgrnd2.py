@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import scipy.stats as stats
 import plotly.io as pio
 from plotly.subplots import make_subplots
 
@@ -10,7 +9,8 @@ from data_models.LWSEnums import SignalDetectionCategoryEnum
 pio.renderers.default = "browser"
 
 
-##  Run Pipeline / Load Data
+# %%
+# ##  Run Pipeline / Load Data
 # from analysis.pipeline.full_pipeline import full_pipeline
 # targets, actions, metadata, idents, fixations, visits = full_pipeline(      # uncomment to re-run
 #     on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA,
@@ -21,13 +21,31 @@ from analysis.pipeline.full_pipeline import read_saved_data
 targets, actions, metadata, idents, fixations, visits = read_saved_data()
 
 
+# %%
+# ## Detect LWS Instances
+from analysis.helpers.funnels import calc_funnel_sizes
+from analysis.figures.lws.funnel_fig import create_funnel_figure
+
+create_funnel_figure(
+    calc_funnel_sizes(visits, "target_return"), "target_return", "visits", show_individuals=True
+).show()
+
+
+
+# %%
+from analysis.helpers.sdt import calc_sdt_metrics
+from analysis.figures.subject_comparisons.signal_detection import signal_detection_figure
+signal_detection_figure(calc_sdt_metrics(metadata, idents, "loglinear")).show()
+
+from analysis.figures.subject_comparisons.identifications import identifications_figure
+identifications_figure(idents, metadata).show()
 
 
 
 
 
 
-
+# %%
 
 
 # TODO: timings
@@ -53,6 +71,14 @@ missing = expected.difference(observed).to_frame(index=False)
 missing_actions_count = missing.groupby(cnfg.SUBJECT_STR).size().rename("missing_actions").reset_index()
 del subjects, trials, expected, observed, missing
 
+visits_td = dict()
+for (s, t, e, tgt), data in visits.groupby(["subject", "trial", "eye", "target"]):
+    visits_td[(s, t, e, tgt)] = (data["start_time"] - data["end_time"].shift(1)).rename("time_diff").dropna()
+visits_td = (
+    pd.concat(visits_td.values(), keys=visits_td.keys(), names=["subject", "trial", "eye", "target"])
+    .droplevel(-1)
+    .reset_index()
+)
 
 
 
@@ -79,29 +105,3 @@ fig = make_subplots(
 # %% ## Plot Subject-Performance Comparison by Trial Category
 from analysis.figures.performance_outliers import create_subject_comparison_figure
 create_subject_comparison_figure(metadata, idents).show()
-
-
-# %% ## Detect LWS Instances
-from analysis.lws_funnel import fixation_funnel, visit_funnel, calc_funnel_sizes
-from analysis.figures.lws.funnel_fig import create_funnel_figure
-lws_fixation_funnel = fixation_funnel(
-    fixations, metadata, idents,
-    on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA,
-    fixs_to_strip_threshold=cnfg.FIXATIONS_TO_STRIP_THRESHOLD,
-    time_to_trial_end_threshold=cnfg.TIME_TO_TRIAL_END_THRESHOLD
-)
-lws_fixation_funnel_sizes = calc_funnel_sizes(lws_fixation_funnel)
-create_funnel_figure(lws_fixation_funnel_sizes, "fixations", show_individuals=True).show()
-del lws_fixation_funnel, lws_fixation_funnel_sizes
-
-lws_visit_funnel = visit_funnel(
-    visits, metadata, idents,
-    on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA,
-    fixs_to_strip_threshold=cnfg.FIXATIONS_TO_STRIP_THRESHOLD,
-    time_to_trial_end_threshold=cnfg.TIME_TO_TRIAL_END_THRESHOLD,
-    distance_type='min'     # can also be 'max' or 'weighted'
-)
-lws_visit_funnel_sizes = calc_funnel_sizes(lws_visit_funnel)
-create_funnel_figure(lws_visit_funnel_sizes, "visits", show_individuals=True).show()
-del lws_visit_funnel, lws_visit_funnel_sizes
-

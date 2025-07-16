@@ -9,6 +9,7 @@ from data_models.LWSEnums import SubjectActionCategoryEnum
 
 from analysis.pipeline.preprocess_subjects import preprocess_all_subjects
 from analysis.pipeline.extract_data import extract_data
+from analysis.pipeline.funnels import append_funnels_to_fixations, append_funnels_to_visits
 
 _DEFAULT_IDENTIFICATION_ACTIONS = [
     SubjectActionCategoryEnum.MARK_AND_CONFIRM,
@@ -42,6 +43,18 @@ def full_pipeline(
         on_target_threshold_dva=on_target_threshold_dva,
         visit_merging_time_threshold=visit_merging_time_threshold,
         verbose=False,
+    )
+    fixations = append_funnels_to_fixations(
+        fixations, metadata, idents,
+        on_target_threshold_dva=on_target_threshold_dva,
+        fixs_to_strip_threshold=cnfg.FIXATIONS_TO_STRIP_THRESHOLD,
+        time_to_trial_end_threshold=cnfg.TIME_TO_TRIAL_END_THRESHOLD,
+    )
+    visits = append_funnels_to_visits(
+        visits, metadata, idents, distance_type='min',  # can also be 'max' or 'weighted'
+        on_target_threshold_dva=on_target_threshold_dva,
+        fixs_to_strip_threshold=cnfg.FIXATIONS_TO_STRIP_THRESHOLD,
+        time_to_trial_end_threshold=cnfg.TIME_TO_TRIAL_END_THRESHOLD,
     )
     if save:
         if verbose:

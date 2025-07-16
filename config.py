@@ -20,6 +20,11 @@ SEARCH_ARRAY_PATH = os.path.join(_BASE_PATH, "Stimuli")
 
 
 ## Eye Movement Detection ##
+_MIN_FIXATION_DURATION_MS = 50
+_MIN_SACCADE_DURATION_MS = 5
+peyes.set_event_configurations("fixation", _MIN_FIXATION_DURATION_MS)
+peyes.set_event_configurations("saccade", _MIN_SACCADE_DURATION_MS)
+
 _DETECTION_ALGORITHM = "Engbert"
 _MIN_EVENT_DURATION_MS = 5
 _PAD_BLINKS_MS = 0
@@ -32,6 +37,15 @@ ON_TARGET_THRESHOLD_DVA = 1.0           # threshold to determine if a gaze point
 VISIT_MERGING_TIME_THRESHOLD = 1000     # temporal window for considering two events as part of the same chunk, in milliseconds
 TIME_TO_TRIAL_END_THRESHOLD = 1000      # fixations/visits ending within this time from the trial end are considered not-LWS.
 FIXATIONS_TO_STRIP_THRESHOLD = 3        # fixations/visits whose following number of fixations fall in the bottom strip are not considered LWS.
+
+LWS_FUNNEL_STEPS = [
+    # sequence of steps to determine if a fixation/visit is a Looking-without-Seeing (LWS) instance
+    "all", "valid_trial", "not_outlier", "on_target", "before_identification", "fixs_to_strip", "not_end_with_trial", "is_lws"
+]
+TARGET_RETURN_FUNNEL_STEPS = [
+    # sequence of steps to determine if a fixation/visit is a post-identification target-return instance
+    "all", "valid_trial", "not_outlier", "on_target", "after_identification", "is_return"
+]
 
 
 ## Parsing Fields ##
