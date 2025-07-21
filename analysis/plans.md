@@ -1,12 +1,13 @@
 ### Determining Outliers (exclusion criteria):
 **For Subjects:**
-- target detection: hit-rate/d' too low
-- bad-action count: too high / too frequent
-- no-action count: too high / too frequent
-- LWS-visit count/rate: too low (no LWS visits --> no data to analyze)
-- repeated-visit count/rate: too low (no repeated visits --> no data to analyze) - maybe not needed?
+- ([V]) bad-action count: too high / too frequent
+- ([]) low coverage of gaze-data: too low (no gaze data --> no data to analyze)
+- ([]) target detection: hit-rate/d' too low
+- ([]) LWS-visit count/rate: too low (no LWS visits --> no data to analyze)
+- ([]) repeated-visit count/rate: too low (no repeated visits --> no data to analyze) - maybe not needed?
 
 **For Specific Trials:** (within subject)
+- gaze data below X% of the trial time
 - late-to-action trials
 - bad ET recordings: too many missing samples, too many blinks low fixation count/rate
 - LWS-visit count/rate: extremely high/low
