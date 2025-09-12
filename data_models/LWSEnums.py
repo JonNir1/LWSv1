@@ -1,5 +1,5 @@
-from enum import Enum, IntEnum, StrEnum
-import config as cnfg
+from enum import IntEnum, StrEnum
+from constants import RIGHT_STR, LEFT_STR
 
 
 class SexEnum(StrEnum):
@@ -9,13 +9,13 @@ class SexEnum(StrEnum):
 
 
 class DominantHandEnum(StrEnum):
-    RIGHT = cnfg.RIGHT_STR
-    LEFT = cnfg.LEFT_STR
+    RIGHT = RIGHT_STR
+    LEFT = LEFT_STR
 
 
 class DominantEyeEnum(StrEnum):
-    RIGHT = cnfg.RIGHT_STR
-    LEFT = cnfg.LEFT_STR
+    RIGHT = RIGHT_STR
+    LEFT = LEFT_STR
 
 
 class ImageCategoryEnum(IntEnum):
