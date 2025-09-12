@@ -66,7 +66,7 @@ def _concat_subject_results(
         elif to_concat == cnfg.ACTION_STR:
             subj_res = subj.get_actions()
         elif to_concat == cnfg.METADATA_STR:
-            bad_actions = kwargs.get("bad_actions", None)
+            bad_actions = kwargs.get("bad_actions", [])
             assert bad_actions, f"Must specify `bad_actions` for `{to_concat}` concatenation."
             subj_res = subj.get_metadata(bad_actions)
         elif to_concat == cnfg.IDENTIFICATION_STR:
