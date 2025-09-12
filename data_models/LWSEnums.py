@@ -1,6 +1,7 @@
 from enum import Enum, IntEnum, StrEnum
 import config as cnfg
 
+
 class SexEnum(StrEnum):
     MALE = 'male'
     FEMALE = 'female'
