@@ -11,13 +11,13 @@ pio.renderers.default = "browser"
 
 # %%
 # ##  Run Pipeline / Load Data
-from analysis.pipeline.full_pipeline import full_pipeline
-targets, actions, metadata, idents, fixations, visits = full_pipeline(      # uncomment to re-run
-    on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA,
-    visit_merging_time_threshold=cnfg.VISIT_MERGING_TIME_THRESHOLD,
-    save=True, verbose=True
-)
-from analysis.pipeline.full_pipeline import read_saved_data
+# from analysis.pipeline.full_pipeline import full_pipeline
+# targets, actions, metadata, idents, fixations, visits = full_pipeline(      # uncomment to re-run
+#     on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA,
+#     visit_merging_time_threshold=cnfg.VISIT_MERGING_TIME_THRESHOLD,
+#     save=True, verbose=True
+# )
+# from analysis.pipeline.full_pipeline import read_saved_data
 targets, actions, metadata, idents, fixations, visits = read_saved_data()
 
 
