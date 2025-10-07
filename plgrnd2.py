@@ -17,7 +17,7 @@ pio.renderers.default = "browser"
 #     visit_merging_time_threshold=cnfg.VISIT_MERGING_TIME_THRESHOLD,
 #     save=True, verbose=True
 # )
-# from analysis.pipeline.full_pipeline import read_saved_data
+from analysis.pipeline.full_pipeline import read_saved_data
 targets, actions, metadata, idents, fixations, visits = read_saved_data()
 
 
