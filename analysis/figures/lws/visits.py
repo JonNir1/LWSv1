@@ -18,16 +18,16 @@ def _visits_figure(
     column_mapping = {
         "Start-Time (ms)" : cnfg.START_TIME_STR,
         "Duration (ms)" : "duration",
-        "Num Fixations" : cnfg.NUM_FIXATIONS_STR,
+        "Num Fixations" : "num_fixations",
     }
     fig = make_subplots(
         rows=2, cols=len(column_mapping), column_titles=column_mapping,
         shared_yaxes=False, shared_xaxes=True,
         vertical_spacing=0.08, horizontal_spacing=0.02,
     )
-    for c, (col_title, col_name) in enumerate(column_titles.values()):
+    for c, (col_title, col_name) in enumerate(column_mapping.values()):
         col_name = cnfg.TIME_STR if c == 0 else cnfg.DISTANCE_DVA_STR
-        all_data = data[[cnfg.SUBJECT_STR, cnfg.TRIAL_STR, cnfg.TRIAL_CATEGORY_STR, col_name]]
+        all_data = visits[[cnfg.SUBJECT_STR, cnfg.TRIAL_STR, cnfg.TRIAL_CATEGORY_STR, col_name]]
 
         # top row: all data points
         texts = all_data.apply(

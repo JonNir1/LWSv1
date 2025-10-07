@@ -1,10 +1,9 @@
 ### Determining Outliers (exclusion criteria):
-**For Subjects:**
-- ([V]) bad-action count: too high / too frequent
-- ([]) low coverage of gaze-data: too low (no gaze data --> no data to analyze)
-- ([]) target detection: hit-rate/d' too low
-- ([]) LWS-visit count/rate: too low (no LWS visits --> no data to analyze)
-- ([]) repeated-visit count/rate: too low (no repeated visits --> no data to analyze) - maybe not needed?
+**Bad Trial if:**
+- trial has 0 actions
+- trial has 1 or more BAD actions (subject hit the wrong key)
+- gaze data below X% of the trial samples
+- trial has very few fixations (below Xth percentile of fixation count distribution)
 
 **For Specific Trials:** (within subject)
 - gaze data below X% of the trial time
@@ -12,12 +11,19 @@
 - bad ET recordings: too many missing samples, too many blinks low fixation count/rate
 - LWS-visit count/rate: extremely high/low
 
+**For Subjects:**
+- ([V]) bad-action count: too high / too frequent
+- ([]) low coverage of gaze-data: too low (no gaze data --> no data to analyze)
+- ([]) target detection: hit-rate/d' too low
+- ([]) LWS-visit count/rate: too low (no LWS visits --> no data to analyze)
+- ([]) repeated-visit count/rate: too low (no repeated visits --> no data to analyze) - maybe not needed?
+
 
 ### Planned Analyses:
 **General:**
 - calc variability within & between subjects for LWS visits and repeated visits
 - power analysis for LWS counts + repeated counts
-- check Carmel's data: how many reps required to successfully decode a SEEN target. multiply this number by the number of LWS visits to get the number of LWS visits, to get valid decoding in LWS instances.
+- check Carmel's data: how many reps required to successfully decode a SEEN target. multiply this number by the number of LWS visits to get the number of LWS visits required to get valid decoding in LWS instances.
 
 **Trial Category / Target Category:**
 - differences in hit-rate/d'

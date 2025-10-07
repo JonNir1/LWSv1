@@ -10,10 +10,10 @@ import pandas as pd
 from tqdm import tqdm
 
 import config as cnfg
-from data_models.helpers.subject_info import parse_subject_info
-from data_models.helpers.triggers_and_gaze import parse_triggers_and_gaze
-from data_models.helpers.target_identifications import extract_trial_identifications
-from data_models.helpers.visits import convert_fixations_to_visits
+from data_models.parse.subject_info import parse_subject_info
+from data_models.parse.triggers_and_gaze import parse_triggers_and_gaze
+from data_models.preprocess.target_identifications import extract_trial_identifications
+from data_models.preprocess.visits import convert_fixations_to_visits
 from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum, SubjectActionCategoryEnum
 
 
@@ -254,15 +254,7 @@ class Subject:
 
 
     def get_metadata(self, bad_actions: Sequence[SubjectActionCategoryEnum]) -> pd.DataFrame:
-        """
-        Extract the subject's trial metadata into a DataFrame, containing the following columns:
-        - trial_num
-        - block_num
-        - trial_category: COLOR/BW/NOISE
-        - duration: in ms
-        - num_targets
-        - bad_actions: boolean; True if any of the subject's actions during the trial are considered bad
-        """
+        """ Extract all trials' metadata into a DataFrame """
         metadata = dict()
         for trial in tqdm(self.get_trials(), desc="Trial Metadata", disable=True):
             metadata[trial.trial_num] = trial.get_metadata(bad_actions)

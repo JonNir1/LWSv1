@@ -57,10 +57,6 @@ class Trial:
         return int(_extract_singleton_column(self._gaze, cnfg.TRIAL_STR))
 
     @property
-    def trial_category(self) -> SearchArrayCategoryEnum:
-        return self._search_array.array_category
-
-    @property
     def px2deg(self) -> float:
         """
         Returns the conversion factor from pixels to degrees of visual angle (DVA).
@@ -80,23 +76,42 @@ class Trial:
         triggers_max_time = self._triggers[cnfg.TIME_STR].max()
         return np.nanmax([gaze_max_time, triggers_max_time])
 
-    @staticmethod
-    def is_in_bottom_strip(p: Tuple[float, float]) -> bool:
-        """ Check if a point is within the bottom strip rectangle, containing target exemplars. """
-        return SearchArray.is_in_bottom_strip(p)
+    @property
+    def duration(self) -> float:
+        return self.end_time - self.start_time
 
-    def get_search_array(self) -> SearchArray:
-        return self._search_array
+    @property
+    def trial_category(self) -> SearchArrayCategoryEnum:
+        return self._search_array.array_category
 
-    def get_triggers(self) -> pd.DataFrame:
-        return self._triggers
+    @property
+    def num_targets(self):
+        return len(self._search_array.targets)
+
+    @property
+    def num_distractors(self):
+        return self._search_array.num_distractors
+
+    @property
+    def gaze_coverage(self) -> float:
+        """ returns the percent of samples with valid gaze data (not NaN) for the dominant eye. """
+        if self._subject.eye == DominantEyeEnum.LEFT:
+            return self._calculate_gaze_coverage(DominantEyeEnum.LEFT)
+        elif self._subject.eye == DominantEyeEnum.RIGHT:
+            return self._calculate_gaze_coverage(DominantEyeEnum.RIGHT)
+        else:
+            raise NotImplementedError
+
+    @property
+    def num_actions(self) -> int:
+        return len(self.get_actions())
 
     def get_gaze(self) -> pd.DataFrame:
         return self._gaze
 
     def get_actions(self) -> pd.DataFrame:
         """ Returns the times and actions performed by the subject during the trial. """
-        triggers = self.get_triggers()
+        triggers = self._triggers
         actions = (
             triggers
             .loc[triggers[cnfg.ACTION_STR].notnull()]
@@ -109,8 +124,7 @@ class Trial:
 
     def get_targets(self) -> pd.DataFrame:
         """ Extracts the trial's target information: the targets' pixel coordinates, angle, category, and image path. """
-        array = self.get_search_array()
-        target_images = array.targets
+        target_images = self._search_array.targets
         target_df = pd.DataFrame(target_images, index=[f"{cnfg.TARGET_STR}{i}" for i in range(len(target_images))])
         target_df[cnfg.CATEGORY_STR] = [img.category for img in target_images]
         target_df = target_df.rename(columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False)
@@ -121,11 +135,12 @@ class Trial:
             "trial": self.trial_num,
             "block": self.block_num,
             "trial_category": self.trial_category.name,
-            "duration": self.end_time - self.start_time,
-            "num_targets": len(self.get_search_array().targets),
-            "num_distractors": self.get_search_array().num_distractors,
-            "no_actions": bool(self.get_actions().empty),
+            "duration": self.duration,
+            "num_targets": self.num_targets,
+            "num_distractors": self.num_distractors,
+            "num_actions": self.num_actions,
             "bad_actions": bool(np.isin(self.get_actions()[cnfg.ACTION_STR], bad_actions).any()),
+            "gaze_coverage": self.gaze_coverage,
         })
 
     def get_raw_eye_movements(self) -> pd.DataFrame:
@@ -134,12 +149,13 @@ class Trial:
         right = peyes.summarize_events(self._right_events)
         df = pd.concat(
             [left, right],
-            keys=[cnfg.LEFT_STR, cnfg.RIGHT_STR], names=[cnfg.EYE_STR, cnfg.EVENT_STR], axis=0
+            keys=[cnfg.LEFT_STR, cnfg.RIGHT_STR],
+            names=[cnfg.EYE_STR, cnfg.EVENT_STR], axis=0
         )
         return df
 
     def process_fixations(self) -> pd.DataFrame:
-        from data_models.helpers.eye_movements import process_trial_fixations
+        from data_models.preprocess.fixations import process_trial_fixations
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             features = self.get_raw_eye_movements()
@@ -158,21 +174,19 @@ class Trial:
         return search_array
 
     def _detect_eye_movements(self) -> Tuple[pd.DataFrame, pd.Series, pd.Series]:
-        from data_models.helpers.eye_movements import detect_eye_movements
+        from data_models.parse.eye_movements import detect_eye_movements
         left_labels, left_events = detect_eye_movements(
             self._gaze,
             DominantEyeEnum.LEFT,
             self._subject.screen_distance_cm,
-            cnfg.DETECTOR,
-            cnfg.PIXEL_SIZE_MM / 10,
+            pixel_size_cm=cnfg.PIXEL_SIZE_MM / 10,
             only_labels=False
         )
         right_labels, right_events = detect_eye_movements(
             self._gaze,
             DominantEyeEnum.RIGHT,
             self._subject.screen_distance_cm,
-            cnfg.DETECTOR,
-            cnfg.PIXEL_SIZE_MM / 10,
+            pixel_size_cm=cnfg.PIXEL_SIZE_MM / 10,
             only_labels=False
         )
         labels = pd.concat([left_labels, right_labels], axis=1)
@@ -206,6 +220,17 @@ class Trial:
         dists = pd.DataFrame(dists, columns=[f"{cnfg.TARGET_STR}{i}" for i in range(target_coords.shape[0])])
         return dists
 
+    def _calculate_gaze_coverage(self, eye: DominantEyeEnum) -> float:
+        """ Calculates the percent of samples with valid gaze data (not NaN) for the specified eye. """
+        if len(self._gaze) <= 0:
+            return np.nan
+        x_str = cnfg.LEFT_X_STR if eye == DominantEyeEnum.LEFT else cnfg.RIGHT_X_STR
+        y_str = cnfg.LEFT_Y_STR if eye == DominantEyeEnum.LEFT else cnfg.RIGHT_Y_STR
+        valid_samples = self._gaze[x_str].notna() & self._gaze[y_str].notna()
+        if len(self._gaze) > 0:
+            return valid_samples.sum() / len(self._gaze) * 100
+        return np.nan
+
     def __eq__(self, other) -> bool:
         if not isinstance(other, Trial):
             return False
@@ -213,11 +238,21 @@ class Trial:
             return False
         if self.block_num != other.block_num:
             return False
+        if self.px2deg != other.px2deg:
+            return False
+        if self.start_time != other.start_time or self.end_time != other.end_time:
+            return False
+        if self.num_targets != other.num_targets:
+            return False
+        if self.num_distractors != other.num_distractors:
+            return False
         if self.trial_category != other.trial_category:
             return False
-        if self.get_search_array() != other.get_search_array():
+        if self._search_array.version != other._search_array.version:
+            return False
+        if self._search_array.image_num != other._search_array.image_num:
             return False
         return True
 
     def __repr__(self) -> str:
-        return f"Trial {self.trial_num} ({self.get_search_array().array_category.name})"
+        return f"Trial {self.trial_num} ({self.trial_category.name})"
