@@ -139,7 +139,7 @@ class Trial:
             "num_targets": self.num_targets,
             "num_distractors": self.num_distractors,
             "num_actions": self.num_actions,
-            "bad_actions": bool(np.isin(self.get_actions()[cnfg.ACTION_STR], bad_actions).any()),
+            "bad_actions": bool(np.isin(self.get_actions()[cnfg.ACTION_STR], bad_actions).any()),   # TODO: remove this
             "gaze_coverage": self.gaze_coverage,
         })
 
