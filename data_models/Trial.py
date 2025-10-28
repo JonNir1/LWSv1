@@ -228,7 +228,7 @@ class Trial:
         y_str = cnfg.LEFT_Y_STR if eye == DominantEyeEnum.LEFT else cnfg.RIGHT_Y_STR
         valid_samples = self._gaze[x_str].notna() & self._gaze[y_str].notna()
         if len(self._gaze) > 0:
-            return valid_samples.sum() / len(self._gaze) * 100
+            return round(100 * valid_samples.sum() / len(self._gaze), 3)
         return np.nan
 
     def __eq__(self, other) -> bool:
