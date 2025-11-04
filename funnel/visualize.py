@@ -9,7 +9,7 @@ import config as cnfg
 def create_funnel_figure(
         step_sizes: pd.DataFrame,
         funnel_type: Literal["lws", "target_return"],
-        event_type: Literal["fixations", "visits"],
+        event_type: Literal["fixation", "visit"],
         show_individuals: bool = False,
 ) -> go.Figure:
     """ Creates a funnel figure for the provided multi-subject funnel sizes. """
