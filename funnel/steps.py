@@ -78,15 +78,22 @@ def instance_on_target(
     if on_target_threshold_dva <= 0:
         raise ValueError(f"Parameter `on-target` threshold must be positive, got {on_target_threshold_dva}.")
     if event_type == "fixation":
-        is_on_target = event_data.apply(
-            lambda row: any(row[dist_col] <= on_target_threshold_dva for dist_col in row.index if
-                            dist_col.startswith("target") and dist_col.endswith("distance_dva")),
-            axis=1
-        )
+        dist_columns = [
+            # target0_distance_dva, target1_distance_dva, ...
+            col for col in event_data.columns if col.startswith("target") and col.endswith("distance_dva")
+        ]
     elif event_type == "visit":
-        is_on_target = event_data["distance_dva"] <= on_target_threshold_dva
+        dist_columns = [
+            # min_distance_dva, max_distance_dva, weighted_distance_dva
+            # TODO: we use `any()` which is equivalent to specifying `min_distance_dva`; should this be explicit?
+            col for col in event_data.columns if col.endswith("distance_dva")
+        ]
     else:
         raise ValueError(f"Unknown event type: {event_type}. Expected 'fixation' or 'visit'.")
+    is_on_target = event_data.apply(
+        lambda row: any(row[dist_col] <= on_target_threshold_dva for dist_col in dist_columns),
+        axis=1
+    )
     is_on_target = is_on_target.rename(f"on_target")
     return is_on_target
 

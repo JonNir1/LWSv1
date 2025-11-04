@@ -66,9 +66,10 @@ def calculate_funnel_sizes(funnel_data: pd.DataFrame) -> pd.DataFrame:
     assert "subject" in funnel_data.index.names, f"Funnel Data must contain index level `subject`."
     assert "trial" in funnel_data.index.names, f"Funnel Data must contain index level `trial`."
     assert "eye" in funnel_data.index.names, f"Funnel Data must contain index level `eye`."
+    assert "target" in funnel_data.index.names, f"Funnel Data must contain index level `target`."
     steps = list(funnel_data.columns)
     sizes = dict()
-    for (subj, trial, eye), group in funnel_data.groupby(["subject", "trial", "eye"]):
+    for (subj, trial, eye, target), group in funnel_data.groupby(["subject", "trial", "eye", "target"]):
         for i, curr_step in enumerate(steps):
             curr_and_prev_steps = steps[:i + 1]
             step_size = group[curr_and_prev_steps].all(axis=1).sum()
