@@ -1,6 +1,7 @@
 from typing import List, Literal, Union
 
 import pandas as pd
+from tqdm import tqdm
 
 from data_models.LWSEnums import SubjectActionCategoryEnum
 import funnel.steps as stp
@@ -16,15 +17,15 @@ def run_funnel(
         bad_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]],
         on_target_threshold_dva: float,
         time_to_trial_end_threshold: float,
-        exemplar_visit_threshold: int
+        exemplar_visit_threshold: int,
+        verbose: bool = False,
 ) -> pd.DataFrame:
     """ Runs the provided funnel-step functions on the event data and appends the results as new columns. """
     if event_type not in ["fixation", "visit"]:
         raise ValueError(f"Unknown event type: {event_type}. Expected 'fixation' or 'visit'.")
-
-    funnel_data = event_data.copy()
+    appended_columns = ["subject", "trial", "eye", "target"] + ["event" if event_type == "fixation" else "visit"]
     results = dict()
-    for step in steps:
+    for step in tqdm(steps, desc=f"{event_type.capitalize()} Funnel Steps", disable=not verbose):
         if step == "all":
             results[step] = stp.all_pass(event_data)
         elif step == "trial_gaze_coverage":
@@ -51,7 +52,6 @@ def run_funnel(
         else:
             raise ValueError(f"Unknown funnel step: {step}")
     funnel_df = pd.concat(results.values(), keys=results.keys(), axis=1).astype(bool)
-    appended_columns = ["subject", "trial", "eye", "target", event_type]
     final_df = (
         pd.concat([event_data[appended_columns], funnel_df], axis=1)
         .sort_values(appended_columns)

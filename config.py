@@ -53,7 +53,7 @@ LWS_FUNNEL_STEPS = _ANY_FUNNEL_STEPS + [
 ]
 TARGET_RETURN_FUNNEL_STEPS = _ANY_FUNNEL_STEPS + [
     # additional steps to determine if a valid & on-target fixation/visit is a target-return instance
-    "instance_after_identification", "is_return"
+    "instance_after_identification", "is_target_return"
 ]
 
 

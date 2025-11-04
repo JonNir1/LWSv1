@@ -26,6 +26,7 @@ def target_return_funnel(
         event_type: Literal["fixation", "visit"],
         bad_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]] = cnfg.BAD_ACTIONS,
         on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
+        verbose: bool = False,
 ) -> pd.DataFrame:
     """ Run the Target-Return funnel analysis on the provided events' data. """
     funnel_results = run_funnel(
@@ -36,6 +37,7 @@ def target_return_funnel(
         event_type=event_type,
         bad_actions=bad_actions,
         on_target_threshold_dva=on_target_threshold_dva,
+        verbose=verbose,
         steps=_FUNNEL_STEPS,
         time_to_trial_end_threshold=0,      # not used in target-return funnel
         exemplar_visit_threshold=0,         # not used in target-return funnel

@@ -30,6 +30,7 @@ def lws_funnel(
         on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
         time_to_trial_end_threshold: float = cnfg.TIME_TO_TRIAL_END_THRESHOLD,
         exemplar_visit_threshold: int = cnfg.FIXATIONS_TO_STRIP_THRESHOLD,
+        verbose: bool = False,
 ) -> pd.DataFrame:
     """ Run the LWS funnel analysis on the provided events' data. """
     funnel_results = run_funnel(
@@ -42,6 +43,7 @@ def lws_funnel(
         on_target_threshold_dva=on_target_threshold_dva,
         time_to_trial_end_threshold=time_to_trial_end_threshold,
         exemplar_visit_threshold=exemplar_visit_threshold,
+        verbose=verbose,
         steps=_FUNNEL_STEPS,
     )
     funnel_results["is_lws"] = funnel_results.apply(lambda row: row.all(), axis=1)

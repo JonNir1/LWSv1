@@ -79,7 +79,8 @@ def instance_on_target(
         raise ValueError(f"Parameter `on-target` threshold must be positive, got {on_target_threshold_dva}.")
     if event_type == "fixation":
         is_on_target = event_data.apply(
-            lambda row: row.loc["target_distance_dva"] <= on_target_threshold_dva,
+            lambda row: any(row[dist_col] <= on_target_threshold_dva for dist_col in row.index if
+                            dist_col.startswith("target") and dist_col.endswith("distance_dva")),
             axis=1
         )
     elif event_type == "visit":
