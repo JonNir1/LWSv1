@@ -142,6 +142,7 @@ class Trial:
             "bad_actions": bool(np.isin(self.get_actions()[cnfg.ACTION_STR], bad_actions).any()),   # TODO: remove this
             "gaze_coverage": self.gaze_coverage,
             "px2deg": self.px2deg,
+            "dominant_eye": self._subject.eye.name,
         })
 
     def get_raw_eye_movements(self) -> pd.DataFrame:
