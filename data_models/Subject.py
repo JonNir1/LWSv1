@@ -258,8 +258,12 @@ class Subject:
         metadata = dict()
         for trial in tqdm(self.get_trials(), desc="Trial Metadata", disable=True):
             metadata[trial.trial_num] = trial.get_metadata(bad_actions)
-        res = pd.concat(metadata.values(), keys=metadata.keys(), axis=1).T
-        res = res.reset_index(drop=True)
+        res = pd.concat(metadata.values(), keys=metadata.keys(), axis=1).T.reset_index(drop=True)
+        # add subject-level info
+        res["px2deg"] = self.px2deg
+        res["sex"] = self.sex
+        res["hand"] = self.hand
+        res["dominant_eye"] = self.eye
         return res
 
     def get_target_identifications(
