@@ -1,8 +1,15 @@
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import plotly.io as pio
 
 import config as cnfg
 
 pio.renderers.default = "browser"
+
+# TODO: only from HOME:
+cnfg.OUTPUT_PATH = r'C:\Users\nirjo\Desktop\LWS\Results'
+
 
 # %%
 # ##  Run Pipeline / Load Data
@@ -22,26 +29,63 @@ targets, actions, metadata, idents, fixations, visits = read_saved_data(cnfg.OUT
 
 
 # %%
-# ## Calculate & Show Funnels
-from funnel.lws_funnel import lws_funnel
-from funnel.helpers import calculate_funnel_sizes
-from funnel.visualize import create_funnel_figure
+from analysis.funnel.prepare import prepare_funnel
+from analysis.funnel.prepare import get_funnel_steps
+from analysis.funnel.proportion import calculate_funnel_sizes, calculate_proportions
 
-funnel_results = lws_funnel(
-    event_data=visits,
-    metadata=metadata,
-    actions=actions,
-    idents=idents,
+initial_step = "instance_on_target"
+
+funnel_data = prepare_funnel(
+    data_dir=cnfg.OUTPUT_PATH,
+    funnel_type="lws",
     event_type="visit",
+    verbose=True,
 )
 
-funnel_sizes = calculate_funnel_sizes(funnel_results)
-create_funnel_figure(
-    funnel_sizes[funnel_sizes["eye"] == "right"], "lws", "visits", show_individuals=False
-).show()
+sizes = calculate_funnel_sizes(funnel_data, get_funnel_steps("lws"), verbose=True)
+
+prop_by_trial = calculate_proportions(
+    sizes,
+    nominator="final",
+    denominator=initial_step,
+    aggregate_by="trial_category",
+    per_subject=True,
+)
+
+prop_by_target = calculate_proportions(
+    sizes,
+    nominator="final",
+    denominator=initial_step,
+    aggregate_by="target_category",
+    per_subject=True,
+)
 
 
 # %%
+from analysis.funnel.visualizations.step_size import step_sizes_figure
+
+step_sizes_figure(
+    funnel_data, initial_step, "final", "LWS Visits Funnel", show_individuals=True
+).show()
+
+# %%
+from analysis.funnel.visualizations.category_comparison import category_comparison_figure
+
+fig = category_comparison_figure(
+    prop_by_trial,
+    categ_col="trial_category",
+    title="LWS Visit Funnel Proportions by Trial Category",
+    show_distributions=True,
+    show_individuals=True,
+)
+
+
+# %%
+
+# TODO: compare LWS/target-return proportions across trial types & target types
+
+# TODO: pipeline hyperparameter tuning for eye tracking hyperparameters
+
 
 # TODO: timings
 #  - from trial start to first action (including bad actions)
