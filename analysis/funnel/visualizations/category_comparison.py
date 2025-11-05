@@ -66,7 +66,7 @@ def _add_distribution_traces(
 ) -> go.Figure:
     assert categ_col in data.columns
     data_copy = data.copy()
-    data_copy[categ_col] = data_copy[categ_col].map(str.upper)      # normalize categories as uppercase
+    data_copy[categ_col] = data_copy[categ_col].map(lambda cat: str(cat).upper())   # categories as uppercase
     for cat in data_copy[categ_col].unique():
         cat_data = data_copy[data_copy[categ_col] == cat]
         col = 1 if cat != "ALL" else 2
@@ -98,7 +98,7 @@ def _add_individual_traces(
     assert categ_col in data.columns
     assert "subject" in data.columns
     data_copy = data.copy()
-    data_copy[categ_col] = data_copy[categ_col].map(str.upper)      # normalize categories as uppercase
+    data_copy[categ_col] = data_copy[categ_col].map(lambda cat: str(cat).upper())   # categories as uppercase
     for i, subj in enumerate(data_copy["subject"].unique()):
         subj_name = f"Subject {subj}"
         subj_color = cnfg.get_discrete_color(i, loop=True)
