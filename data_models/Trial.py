@@ -126,7 +126,7 @@ class Trial:
         """ Extracts the trial's target information: the targets' pixel coordinates, angle, category, and image path. """
         target_images = self._search_array.targets
         target_df = pd.DataFrame(target_images, index=[f"{cnfg.TARGET_STR}{i}" for i in range(len(target_images))])
-        target_df[cnfg.CATEGORY_STR] = [img.category for img in target_images]
+        target_df[cnfg.CATEGORY_STR] = [img.category.name for img in target_images]
         target_df = target_df.rename(columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False)
         return target_df
 
