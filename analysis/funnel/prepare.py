@@ -117,6 +117,11 @@ def _append_metadata_and_filter_by_eye(
             how="left"
         )
         .rename(columns={"category": "target_category", "angle": "target_angle"})
+        .astype({
+            "trial_category": "category",
+            "target_category": "category",
+            "target_angle": "float64",
+        })
     )
     event_data = (  # filter out irrelevant-eye data
         event_data
