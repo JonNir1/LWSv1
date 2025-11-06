@@ -16,6 +16,20 @@ pio.renderers.default = "browser"
 cnfg.OUTPUT_PATH = r'C:\Users\nirjo\Desktop\LWS\Results'
 
 
+# TODO (Nov 06): write notebook with
+#   funnel visualization - total event count -> valid & on-target count -> LWS count
+#   BAMBI model fitting for LWS (or Target-Return) funnel proportions
+#       - use `valid & on-target` as initial step
+#       - include trial_category, target_category and interaction as predictors (fixed effects)
+#       - include subject as random effect (intercept + slopes)
+#       - check if model converges for per-subject trial_category/target_category slopes (random effects)
+#         if not, try only random intercepts
+#       - check model convergence (`ess_bulk`, `r_hat`) and visualize trace plots of MCMC chains
+#       - visualize posterior distributions of fixed effects + intercept
+#       - conclude if there are main effects of trial_category/target_category and if there is interaction effect
+#   Repeat analysis using a frequentist approach with R-lme4 - to compare results & conclusions
+
+
 # %%
 # ##  Run Pipeline / Load Data
 # from preprocess.pipeline import full_pipeline
