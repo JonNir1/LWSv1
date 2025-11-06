@@ -1,6 +1,11 @@
+import time
+
+import numpy as np
 import pandas as pd
+import bambi as bmb
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import matplotlib.pyplot as plt
 import plotly.io as pio
 
 import config as cnfg
@@ -30,8 +35,6 @@ targets, actions, metadata, idents, fixations, visits = read_saved_data(cnfg.OUT
 
 # %%
 from analysis.funnel.prepare import prepare_funnel
-from analysis.funnel.prepare import get_funnel_steps
-from analysis.funnel.proportion import calculate_funnel_sizes, calculate_proportions
 
 initial_step = "instance_on_target"
 
@@ -41,6 +44,11 @@ funnel_data = prepare_funnel(
     event_type="visit",
     verbose=True,
 )
+
+
+# %%
+from analysis.funnel.prepare import get_funnel_steps
+from analysis.funnel.proportion import calculate_funnel_sizes, calculate_proportions
 
 sizes = calculate_funnel_sizes(funnel_data, get_funnel_steps("lws"), verbose=True)
 
@@ -78,6 +86,42 @@ fig = category_comparison_figure(
     show_distributions=True,
     show_individuals=True,
 )
+
+
+# %%
+# Fit `bambi` model
+import arviz as az
+
+# take only the subset of events where preliminary steps were passed (e.g. trial validity, outlier check, etc.)
+funnel_subset = funnel_data[funnel_data[initial_step]]
+
+# build the model:
+
+start = time.time()
+
+model_formula = "final ~ trial_category * target_category + (1 + trial_category + target_category | subject)"
+model = bmb.Model(model_formula, funnel_subset, family="bernoulli")
+idata = model.fit(
+    draws=2000, tune=1000, chains=4, cores=2, target_accept=0.9, progressbar=True
+)
+
+z = az.summary(idata, var_names=["Intercept", "trial_category", "target_category"])
+
+elapsed = time.time() - start
+print(f"Model fitting completed in {elapsed // 3600}:{(elapsed % 3600) // 60}:{elapsed % 60:.2f} (hh:mm:ss)")
+
+## model diagnostics
+axes = az.plot_trace(idata, var_names=["Intercept", "trial_category", "target_category"])
+fig = axes.ravel()[0].figure
+fig.show()
+
+## model posterior visualization
+axes = az.plot_posterior(
+    idata,
+    var_names=["Intercept", "trial_category", "target_category"],
+)
+fig = axes.ravel()[0].figure
+fig.show()
 
 
 # %%
