@@ -139,6 +139,37 @@ fig.show()
 
 
 # %%
+# deeper look into false alarms - what was the FAed target?
+
+from helpers.sdt import calc_sdt_class_per_trial
+
+has_hit_fa = (
+    metadata
+    .assign(
+        has_hit=calc_sdt_class_per_trial(metadata, idents, "hit")["count"] > 0,
+        has_fa=calc_sdt_class_per_trial(metadata, idents, "false_alarm")["count"] > 0,
+    )
+)
+trials_hit_fa = has_hit_fa.loc[has_hit_fa["has_hit"] & has_hit_fa["has_fa"], ["subject", "trial", "trial_category"]]
+idents_hit_fa = (
+    idents
+    .merge(
+        trials_hit_fa,
+        on=["subject", "trial"],
+        how="inner",
+    )
+    .merge(
+        targets[["subject", "trial", "target", "category"]],
+        on=["subject", "trial", "target"],
+        how="left",
+    )
+)
+
+
+
+
+
+# %%
 
 # TODO: compare LWS/target-return proportions across trial types & target types
 
