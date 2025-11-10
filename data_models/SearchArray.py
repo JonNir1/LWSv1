@@ -52,7 +52,7 @@ class _SearchArrayImage(NamedTuple):
 
 _NDArrayImageType = npt_.NDArray[_SearchArrayImage]
 _NDArrayBoolType = npt_.NDArray[np.bool_]
-_NDArrayGrayScaleType = npt_.NDArray[np.float_]
+_NDArrayGrayScaleType = npt_.NDArray[np.float64 | np.float32 | np.float16]
 
 
 class SearchArray:
