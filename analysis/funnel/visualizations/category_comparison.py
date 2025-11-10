@@ -28,8 +28,10 @@ def category_comparison_figure(
             fig,
             data,
             categ_col,
-            opacity=kwargs.get("distribution_opacity", _DEFAULT_DISTRIBUTION_OPACITY),
-            has_individuals=show_individuals,
+            opacity=kwargs.get("distribution_opacity", _DEFAULT_DISTRIBUTION_OPACITY) if show_individuals else 1.0,
+            show_box=kwargs.get("show_box", not show_individuals),
+            show_mean=kwargs.get("show_mean", not show_individuals),
+            show_legend=not show_individuals,
         )
     if show_individuals:
         if "subject" not in data.columns:
@@ -48,7 +50,7 @@ def category_comparison_figure(
         width=kwargs.get("width", 800), height=kwargs.get("height", 600),
         title=dict(text=kwargs.get("title", default_title_text), font=cnfg.TITLE_FONT),
         yaxis=dict(
-            range=(0, min(100, 100 * max(data["mean"] + 0.5 * data["sem"]))),
+            range=(-5, min(100, 100 * max(data["mean"] + 0.5 * data["sem"]))),
             title=dict(text="Proportion (%)", font=cnfg.AXIS_LABEL_FONT),
         ),
         xaxis=dict(title=dict(text="Category", font=cnfg.AXIS_LABEL_FONT),),
@@ -62,7 +64,9 @@ def _add_distribution_traces(
         data: pd.DataFrame,
         categ_col: str,
         opacity: float,
-        has_individuals: bool,
+        show_box: bool,
+        show_mean: bool,
+        show_legend: bool,
 ) -> go.Figure:
     assert categ_col in data.columns
     data_copy = data.copy()
@@ -77,10 +81,10 @@ def _add_distribution_traces(
                 marker=dict(color="gray", line=dict(color="black", width=1)),
                 name=cat,
                 spanmode="hard",
-                opacity=opacity if has_individuals else 1.0,
-                box=dict(visible=not has_individuals,),
-                meanline=dict(visible=not has_individuals),
-                showlegend=not has_individuals,
+                opacity=opacity,
+                box=dict(visible=show_box,),
+                meanline=dict(visible=show_mean),
+                showlegend=show_legend,
             )
         )
     return fig
@@ -107,15 +111,18 @@ def _add_individual_traces(
         for is_per_category in [True, False]:
             if is_per_category:
                 subset_data = subj_data[subj_data[categ_col] != "ALL"]
+                show_err = show_error
             else:
                 subset_data = subj_data[subj_data[categ_col] == "ALL"]
+                show_err = True     # always show error for "ALL" category
             fig.add_trace(
                 row=1, col=1 if is_per_category else 2, trace=go.Scatter(
                     x=subset_data[categ_col],
                     y=100 * subset_data["mean"],
                     error_y=dict(
-                        type="data", array=100 * subset_data["sem"], visible=show_error,
+                        type="data", array=100 * subset_data["sem"],
                         color=f"rgba{subj_color + (1,)}", thickness=1.5, width=3,
+                        visible=show_err,
                     ),
                     name=subj_name, legendgroup=subj_name, showlegend=is_per_category,
                     marker=dict(size=marker_size, color=f"rgba{subj_color + (1,)}"),
