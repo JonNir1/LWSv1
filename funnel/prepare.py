@@ -86,6 +86,8 @@ def _append_metadata_and_filter_by_eye(
         )
         .rename(columns={"category": "target_category", "angle": "target_angle"})
         .astype({
+            "subject": "category",
+            "trial": "int64",
             "trial_category": "category",
             "target_category": "category",
             "target_angle": "float64",
