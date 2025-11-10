@@ -5,9 +5,30 @@ from tqdm import tqdm
 
 import config as cnfg
 from pipeline.read_data import read_saved_data
-from data_models.LWSEnums import SubjectActionCategoryEnum
+from data_models.LWSEnums import SubjectActionCategoryEnum, SearchArrayCategoryEnum, ImageCategoryEnum
 
 import funnel.steps as stp
+
+
+def calculate_funnel_sizes(
+        funnel_data: pd.DataFrame, steps: List[str], verbose: bool = False
+) -> pd.DataFrame:
+    GROUPBY_COLUMNS = ["subject", "trial", "target"]
+    missing_columns = [col for col in GROUPBY_COLUMNS if col not in funnel_data.columns]
+    if missing_columns:
+        raise ValueError(f"Funnel Data is missing required columns: {missing_columns}.")
+    missing_steps = [step for step in steps if step not in funnel_data.columns]
+    if missing_steps:
+        raise ValueError(f"Funnel Data is missing required funnel steps: {missing_steps}.")
+    metadata_columns = [col for col in funnel_data.columns if col not in steps]
+    sizes = []
+    for _, group in tqdm(funnel_data.groupby(GROUPBY_COLUMNS), disable=not verbose, desc="Calculating Funnel Sizes"):
+        metadata = group[metadata_columns].iloc[0]
+        counts = group[steps].sum(axis=0)
+        sizes.append(pd.concat([metadata, counts]))
+    sizes = pd.concat(sizes, axis=1).T
+    sizes = _coerce_column_types(sizes)
+    return sizes
 
 
 def prepare_funnel(
@@ -42,6 +63,7 @@ def prepare_funnel(
     targets, actions, metadata, idents, fixations, visits = read_saved_data(data_dir)
     event_data = fixations if event_type == "fixation" else visits
     event_data = _append_metadata_and_filter_by_eye(event_data, targets, metadata)
+    event_data = _coerce_column_types(event_data)
     if funnel_type == "lws":
         funnel_steps = cnfg.LWS_FUNNEL_STEPS
         time_to_trial_end_threshold = funnel_kwargs.get("time_to_trial_end_threshold", cnfg.TIME_TO_TRIAL_END_THRESHOLD)
@@ -85,13 +107,6 @@ def _append_metadata_and_filter_by_eye(
             how="left"
         )
         .rename(columns={"category": "target_category", "angle": "target_angle"})
-        .astype({
-            "subject": "category",
-            "trial": "int64",
-            "trial_category": "category",
-            "target_category": "category",
-            "target_angle": "float64",
-        })
     )
     event_data = (  # filter out irrelevant-eye data
         event_data
@@ -99,6 +114,28 @@ def _append_metadata_and_filter_by_eye(
         .drop(columns=["eye", "dominant_eye"])
     )
     return event_data
+
+
+def _coerce_column_types(data: pd.DataFrame) -> pd.DataFrame:
+    base_types = {
+        "subject": "category", "trial": "int64", "target": "category", "target_angle": "float64",
+    }
+    data = data.astype({col: typ for col, typ in base_types.items() if col in data.columns})
+    if "trial_category" in data.columns:
+        data["trial_category"] = pd.Categorical.from_codes(
+            # insure the category order for trial_category
+            data["trial_category"].map(lambda val: SearchArrayCategoryEnum[val]),
+            categories=[cat.name for cat in SearchArrayCategoryEnum],
+            ordered=True,
+        )
+    if "target_category" in data.columns:
+        data["target_category"] = pd.Categorical.from_codes(
+            # insure the category order for target_category
+            data["target_category"].map(lambda val: ImageCategoryEnum[val]),
+            categories=[cat.name for cat in ImageCategoryEnum],
+            ordered=True,
+        )
+    return data
 
 
 def _run_funnel_steps(

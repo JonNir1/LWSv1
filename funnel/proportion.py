@@ -2,27 +2,6 @@ from typing import Literal, Union, List
 
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
-
-
-def calculate_funnel_sizes(
-        funnel_data: pd.DataFrame, steps: List[str], verbose: bool = False
-) -> pd.DataFrame:
-    GROUPBY_COLUMNS = ["subject", "trial", "target"]
-    missing_columns = [col for col in GROUPBY_COLUMNS if col not in funnel_data.columns]
-    if missing_columns:
-        raise ValueError(f"Funnel Data is missing required columns: {missing_columns}.")
-    missing_steps = [step for step in steps if step not in funnel_data.columns]
-    if missing_steps:
-        raise ValueError(f"Funnel Data is missing required funnel steps: {missing_steps}.")
-    metadata_columns = [col for col in funnel_data.columns if col not in steps]
-    sizes = []
-    for _, group in tqdm(funnel_data.groupby(GROUPBY_COLUMNS), disable=not verbose, desc="Calculating Funnel Sizes"):
-        metadata = group[metadata_columns].iloc[0]
-        counts = group[steps].sum(axis=0)
-        sizes.append(pd.concat([metadata, counts]))
-    sizes = pd.concat(sizes, axis=1).T
-    return sizes
 
 
 def calculate_proportions(
@@ -61,6 +40,7 @@ def _aggregate_and_sort(proportions: pd.DataFrame, by: Union[str, List[str]]) ->
     if isinstance(by, str):
         by = [by]
     has_subject = "subject" in by
+    # calculated aggregates across all category levels
     overall = proportions.groupby("subject", as_index=False) if has_subject else proportions
     overall = overall.agg(
         n_trials=("proportion", "count"),
@@ -69,13 +49,27 @@ def _aggregate_and_sort(proportions: pd.DataFrame, by: Union[str, List[str]]) ->
         std=("proportion", "std"),
     )
     overall = overall if has_subject else overall.T
-    overall[[col for col in by if col != "subject"]] = "all"
-    aggregated = proportions.groupby(by, as_index=False).agg(
-        n_trials=("proportion", "count"),
-        median=("proportion", "median"),
-        mean=("proportion", "mean"),
-        std=("proportion", "std"),
+    # calculated aggregates per category level
+    aggregated = (
+        proportions
+        .groupby(by)
+        .agg(
+            n_trials=("proportion", "count"),
+            median=("proportion", "median"),
+            mean=("proportion", "mean"),
+            std=("proportion", "std"),
+        )
+        .drop(index="UNKNOWN", level=1, errors="ignore")  # drop UNKNOWN category if exists
+        .reset_index(drop=False)
     )
+    # concatenate overall and per-category aggregates
+    for col in by:
+        if col == "subject":
+            continue
+        aggregated[col] = aggregated[col].cat.add_categories("all")
+        overall[col] = pd.Categorical(
+            ["all"] * len(overall), categories=aggregated[col].cat.categories.tolist(), ordered=True
+        )
     result = (
         pd.concat([overall, aggregated], ignore_index=True)
         .assign(sem=lambda df: df["std"] / np.sqrt(df["n_trials"]))
