@@ -4,42 +4,10 @@ import pandas as pd
 from tqdm import tqdm
 
 import config as cnfg
-from preprocess.read_data import read_saved_data
+from pipeline.read_data import read_saved_data
 from data_models.LWSEnums import SubjectActionCategoryEnum
 
-import analysis.funnel.steps as stp
-
-
-_FUNNEL_START_STEPS = [
-    # sequence of steps to determine if a fixation/visit is valid (valid trial, valid fixation) and on-target
-    "all",
-    "trial_gaze_coverage",
-    "trial_no_bad_action",
-    "trial_no_false_alarm",
-    "instance_not_outlier",
-    "instance_on_target",
-]
-_LWS_FUNNEL_STEPS = _FUNNEL_START_STEPS + [
-    # additional steps to determine if a valid & on-target fixation/visit is a Looking-without-Seeing (LWS) instance
-    "instance_before_identification",
-    "instance_not_close_to_trial_end",
-    "not_before_exemplar_visit",  # fixations/visits that precede exemplar section (bottom-strip) visits are not LWS
-    "final"
-]
-_TARGET_RETURN_FUNNEL_STEPS = _FUNNEL_START_STEPS + [
-    # additional steps to determine if a valid & on-target fixation/visit is a target-return instance
-    "instance_after_identification",
-    "final"
-]
-
-
-def get_funnel_steps(funnel_type: Literal["lws", "target_return"]) -> List[str]:
-    """ Returns the ordered list of funnel steps for the specified funnel type. """
-    funnel_type = funnel_type.lower()
-    if funnel_type not in ["lws", "target_return"]:
-        raise NotImplementedError(f"Unknown `funnel_type`: {funnel_type}.")
-    return _LWS_FUNNEL_STEPS if funnel_type == "lws" else _TARGET_RETURN_FUNNEL_STEPS
-
+import funnel.steps as stp
 
 
 def prepare_funnel(
@@ -75,11 +43,11 @@ def prepare_funnel(
     event_data = fixations if event_type == "fixation" else visits
     event_data = _append_metadata_and_filter_by_eye(event_data, targets, metadata)
     if funnel_type == "lws":
-        funnel_steps = _LWS_FUNNEL_STEPS
+        funnel_steps = cnfg.LWS_FUNNEL_STEPS
         time_to_trial_end_threshold = funnel_kwargs.get("time_to_trial_end_threshold", cnfg.TIME_TO_TRIAL_END_THRESHOLD)
         exemplar_visit_threshold = funnel_kwargs.get("exemplar_visit_threshold", cnfg.FIXATIONS_TO_STRIP_THRESHOLD)
     else:   # funnel_type == "target_return"
-        funnel_steps = _TARGET_RETURN_FUNNEL_STEPS
+        funnel_steps = cnfg.TARGET_RETURN_FUNNEL_STEPS
         time_to_trial_end_threshold = 0     # not used in target-return funnel
         exemplar_visit_threshold = 0        # not used in target-return funnel
     funnel_step_results = _run_funnel_steps(
@@ -159,6 +127,8 @@ def _run_funnel_steps(
             results[step] = stp.all_pass(event_data)
         elif step == "trial_gaze_coverage":
             results[step] = stp.trial_gaze_coverage(event_data, metadata)
+        elif step == "trial_has_actions":
+            results[step] = stp.trial_has_actions(event_data, actions)
         elif step == "trial_no_bad_action":
             results[step] = stp.trial_no_bad_action(event_data, actions, bad_actions)
         elif step == "trial_no_false_alarm":

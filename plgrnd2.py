@@ -1,11 +1,6 @@
 import time
 
-import numpy as np
-import pandas as pd
 import bambi as bmb
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import matplotlib.pyplot as plt
 import plotly.io as pio
 
 import config as cnfg
@@ -32,8 +27,8 @@ cnfg.OUTPUT_PATH = r'C:\Users\nirjo\Desktop\LWS\Results'
 
 # %%
 # ##  Run Pipeline / Load Data
-# from preprocess.pipeline import full_pipeline
-# targets, actions, metadata, idents, fixations, visits = full_pipeline(
+# from pipeline.run_pipeline import run_pipeline
+# targets, actions, metadata, idents, fixations, visits = run_pipeline(
 #     # raw_data_path=cnfg.RAW_DATA_PATH,
 #     # identification_actions=cnfg.IDENTIFICATION_ACTIONS,
 #     # on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA,
@@ -43,12 +38,12 @@ cnfg.OUTPUT_PATH = r'C:\Users\nirjo\Desktop\LWS\Results'
 #     verbose=True
 # )
 
-from preprocess.read_data import read_saved_data
+from pipeline.read_data import read_saved_data
 targets, actions, metadata, idents, fixations, visits = read_saved_data(cnfg.OUTPUT_PATH)
 
 
 # %%
-from analysis.funnel.prepare import prepare_funnel
+from funnel.prepare import prepare_funnel
 
 initial_step = "instance_on_target"
 
@@ -61,10 +56,9 @@ funnel_data = prepare_funnel(
 
 
 # %%
-from analysis.funnel.prepare import get_funnel_steps
-from analysis.funnel.proportion import calculate_funnel_sizes, calculate_proportions
+from funnel.proportion import calculate_funnel_sizes, calculate_proportions
 
-sizes = calculate_funnel_sizes(funnel_data, get_funnel_steps("lws"), verbose=True)
+sizes = calculate_funnel_sizes(funnel_data, cnfg.LWS_FUNNEL_STEPS, verbose=True)
 
 prop_by_trial = calculate_proportions(
     sizes,
@@ -84,14 +78,14 @@ prop_by_target = calculate_proportions(
 
 
 # %%
-from analysis.funnel.visualizations.step_size import step_sizes_figure
+from funnel.visualizations.step_size import step_sizes_figure
 
 step_sizes_figure(
     funnel_data, initial_step, "final", "LWS Visits Funnel", show_individuals=True
 ).show()
 
 # %%
-from analysis.funnel.visualizations.category_comparison import category_comparison_figure
+from funnel.visualizations.category_comparison import category_comparison_figure
 
 fig = category_comparison_figure(
     prop_by_trial,

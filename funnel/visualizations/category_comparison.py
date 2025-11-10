@@ -85,6 +85,7 @@ def _add_distribution_traces(
                 box=dict(visible=show_box,),
                 meanline=dict(visible=show_mean),
                 showlegend=show_legend,
+                points=False,
             )
         )
     return fig

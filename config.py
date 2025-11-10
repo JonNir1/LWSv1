@@ -39,21 +39,26 @@ TIME_TO_TRIAL_END_THRESHOLD = 1000      # fixations/visits ending within this ti
 FIXATIONS_TO_STRIP_THRESHOLD = 3        # fixations/visits whose following number of fixations fall in the bottom strip are not considered LWS.
 
 _ANY_FUNNEL_STEPS = [
-    # sequence of steps to determine if a fixation/visit is valid and on-target
+    # sequence of steps to determine if a fixation/visit is valid (valid trial, valid fixation) and on-target
     "all",
-    "trial_gaze_coverage", "trial_no_bad_action", "trial_no_false_alarm",
-    "instance_on_target", "instance_not_outlier",
+    "trial_gaze_coverage",
+    # "trial_has_actions",    # uncomment to exclude trials with no subject-actions
+    "trial_no_bad_action",
+    "trial_no_false_alarm",
+    "instance_not_outlier",
+    "instance_on_target",
 ]
 LWS_FUNNEL_STEPS = _ANY_FUNNEL_STEPS + [
     # additional steps to determine if a valid & on-target fixation/visit is a Looking-without-Seeing (LWS) instance
     "instance_before_identification",
     "instance_not_close_to_trial_end",
-    "not_before_exemplar_visit",    # fixations/visits that precede exemplar section (bottom-strip) visits are not LWS
-    "is_lws"
+    "not_before_exemplar_visit",  # fixations/visits that precede exemplar section (bottom-strip) visits are not LWS
+    "final"
 ]
 TARGET_RETURN_FUNNEL_STEPS = _ANY_FUNNEL_STEPS + [
     # additional steps to determine if a valid & on-target fixation/visit is a target-return instance
-    "instance_after_identification", "is_target_return"
+    "instance_after_identification",
+    "final"
 ]
 
 

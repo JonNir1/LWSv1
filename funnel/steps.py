@@ -32,6 +32,25 @@ def trial_gaze_coverage(
     return has_gaze_coverage
 
 
+def trial_has_actions(
+        event_data: pd.DataFrame,
+        actions: pd.DataFrame,
+) -> pd.Series:
+    trials_with_actions = list(
+        actions
+        .loc[actions["action"] != SubjectActionCategoryEnum.NO_ACTION, ["subject", "trial"]]
+        .copy()
+        .drop_duplicates()
+        .itertuples(index=False)
+    )
+    has_actions = event_data.apply(
+        lambda row: (row["subject"], row["trial"]) in trials_with_actions,
+        axis=1,
+    )
+    has_actions = has_actions.rename("trial_has_actions")
+    return has_actions
+
+
 def trial_no_bad_action(
         event_data: pd.DataFrame,
         actions: pd.DataFrame,

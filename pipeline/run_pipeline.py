@@ -7,11 +7,11 @@ import pandas as pd
 import config as cnfg
 from data_models.LWSEnums import SubjectActionCategoryEnum
 
-from preprocess.parse_raw_data import parse_all_subjects
-from preprocess.build_dataframes import build_dataframes
+from pipeline.parse_raw_data import parse_all_subjects
+from pipeline.build_dataframes import build_dataframes
 
 
-def full_pipeline(
+def run_pipeline(
         raw_data_path: str = cnfg.RAW_DATA_PATH,
         identification_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]] = cnfg.IDENTIFICATION_ACTIONS,
         gaze_to_trigger_time_threshold: float = cnfg.MAX_GAZE_TO_TRIGGER_TIME_DIFF,
