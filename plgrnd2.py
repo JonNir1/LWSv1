@@ -135,22 +135,20 @@ fig.show()
 # %%
 # deeper look into false alarms - what was the FAed target?
 
-from helpers.sdt import calc_sdt_class_per_trial
-
-has_hit_fa = (
-    metadata
-    .assign(
-        has_hit=calc_sdt_class_per_trial(metadata, idents, "hit")["count"] > 0,
-        has_fa=calc_sdt_class_per_trial(metadata, idents, "false_alarm")["count"] > 0,
-    )
-)
-trials_hit_fa = has_hit_fa.loc[has_hit_fa["has_hit"] & has_hit_fa["has_fa"], ["subject", "trial", "trial_category"]]
-idents_hit_fa = (
+trials_with_fa = list(
     idents
+    .loc[idents["identification_category"] == "false_alarm", ["subject", "trial"]]
+    .drop_duplicates()
+    .itertuples(index=False, name=None)
+)
+idents_with_fa = (
+    idents
+    .copy()
+    .assign(trial_has_fa=lambda df: df.set_index(["subject", "trial"]).index.isin(trials_with_fa), axis=1)
     .merge(
-        trials_hit_fa,
+        metadata[["subject", "trial", "trial_category"]],
         on=["subject", "trial"],
-        how="inner",
+        how="left",
     )
     .merge(
         targets[["subject", "trial", "target", "category"]],
