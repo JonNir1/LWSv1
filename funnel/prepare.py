@@ -79,6 +79,7 @@ def prepare_funnel(
         actions=actions,
         event_type=event_type,
         funnel_steps=funnel_steps,
+        min_gaze_coverage=funnel_kwargs.get("min_gaze_coverage", cnfg.GAZE_COVERAGE_PERCENT_THRESHOLD),
         bad_actions=funnel_kwargs.get("bad_actions", cnfg.BAD_ACTIONS),
         on_target_threshold_dva=funnel_kwargs.get("on_target_threshold_dva", cnfg.ON_TARGET_THRESHOLD_DVA),
         time_to_trial_end_threshold=time_to_trial_end_threshold,
@@ -128,6 +129,7 @@ def _coerce_column_types(data: pd.DataFrame) -> pd.DataFrame:
             categories=[cat.name for cat in SearchArrayCategoryEnum],
             ordered=True,
         )
+        data["trial_category"] = data["trial_category"].cat.remove_unused_categories()
     if "target_category" in data.columns:
         data["target_category"] = pd.Categorical.from_codes(
             # insure the category order for target_category
@@ -135,6 +137,7 @@ def _coerce_column_types(data: pd.DataFrame) -> pd.DataFrame:
             categories=[cat.name for cat in ImageCategoryEnum],
             ordered=True,
         )
+        data["target_category"] = data["target_category"].cat.remove_unused_categories()
     return data
 
 
@@ -145,6 +148,7 @@ def _run_funnel_steps(
         actions: pd.DataFrame,
         event_type: Literal["fixation", "visit"],
         funnel_steps: List[str],
+        min_gaze_coverage: Union[int, float],
         bad_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]],
         on_target_threshold_dva: float,
         time_to_trial_end_threshold: float,
@@ -165,11 +169,11 @@ def _run_funnel_steps(
         if step == "all":
             results[step] = stp.all_pass(event_data)
         elif step == "trial_gaze_coverage":
-            results[step] = stp.trial_gaze_coverage(event_data, metadata)
+            results[step] = stp.trial_gaze_coverage(event_data, metadata, min_gaze_coverage)
         elif step == "trial_has_actions":
-            results[step] = stp.trial_has_actions(event_data, actions)
+            results[step] = stp.trial_has_actions(event_data, actions, metadata)
         elif step == "trial_no_bad_action":
-            results[step] = stp.trial_no_bad_action(event_data, actions, bad_actions)
+            results[step] = stp.trial_no_bad_action(event_data, actions, metadata, bad_actions)
         elif step == "trial_no_false_alarm":
             results[step] = stp.trial_no_false_alarm(event_data, metadata, idents)
         elif "on_target" in step:

@@ -28,7 +28,10 @@ def calc_sdt_metrics(
     f1 = calc_f1_per_trial(metadata, idents)["f1_score"]
     metadata_with_sdt = pd.concat(
         [
-            metadata.drop(columns=["duration", "bad_actions", "num_targets", "num_distractors"]),
+            metadata.drop(columns=[
+                "duration", "bad_actions", "num_targets", "num_distractors", "gaze_coverage",
+                "px2deg", "sex", "hand", "dominant_eye"
+            ]),
             hits, fas, dprime, aprime, f1
         ], axis=1
     )
@@ -70,7 +73,6 @@ def calc_aprime_per_trial(metadata: pd.DataFrame, idents: pd.DataFrame) -> pd.Da
     hit_rate = calc_sdt_class_per_trial(metadata, idents, "hit")["rate"].rename("h")
     fa_rate = calc_sdt_class_per_trial(metadata, idents, "false_alarm")["rate"].rename("fa")
     diff = (hit_rate - fa_rate).rename("diff")
-    sign = (np.sign(diff) + (diff == 0).astype(int)).rename("sign")  # sign of the difference, with 0 treated as +1
     a_prime = (
         pd.concat([hit_rate, fa_rate], axis=1)
         .apply(lambda row: _calc_aprime(row["h"], row["fa"]), axis=1)

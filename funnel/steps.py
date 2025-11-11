@@ -1,10 +1,9 @@
 from typing import Union, List, Literal
 
-import numpy as np
 import pandas as pd
 
+import helpers.trial_exclusion as excl
 from data_models.LWSEnums import SubjectActionCategoryEnum
-from helpers.sdt import calc_sdt_class_per_trial
 
 
 def all_pass(event_data: pd.DataFrame) -> pd.Series:
@@ -15,37 +14,26 @@ def all_pass(event_data: pd.DataFrame) -> pd.Series:
 def trial_gaze_coverage(
         event_data: pd.DataFrame,
         metadata: pd.DataFrame,
-        min_percent: Union[int, float] = 80,
+        min_percent: Union[int, float],
 ) -> pd.Series:
-    if isinstance(min_percent, float) and min_percent <= 1.0:
-        min_percent *= 100
-    if not (0 < min_percent <= 100):
-        raise ValueError("min_percent must be between 0 and 100.")
-    gaze_coverage_percent = event_data.apply(
-        lambda row: metadata.loc[
-            (metadata["subject"] == row["subject"]) & (metadata["trial"] == row["trial"]),
-            "gaze_coverage",
-        ].values[0],
-        axis=1,
+    """ Funnel-step that passes events from trials with sufficient gaze coverage. """
+    trial_has_coverage = excl.has_gaze_coverage(metadata, min_percent)  # boolean Series indexed by (subject, trial)
+    has_gaze_coverage = event_data.apply(
+        lambda row: trial_has_coverage.loc[(row["subject"], row["trial"])], axis=1,
     )
-    has_gaze_coverage = (gaze_coverage_percent > min_percent).rename("trial_gaze_coverage")
+    has_gaze_coverage.rename("trial_gaze_coverage")
     return has_gaze_coverage
 
 
 def trial_has_actions(
         event_data: pd.DataFrame,
         actions: pd.DataFrame,
+        metadata: pd.DataFrame,
 ) -> pd.Series:
-    trials_with_actions = list(
-        actions
-        .loc[actions["action"] != SubjectActionCategoryEnum.NO_ACTION, ["subject", "trial"]]
-        .copy()
-        .drop_duplicates()
-        .itertuples(index=False)
-    )
+    """ Funnel-step that passes events from trials where the subject performed any actions. """
+    trials_with_actions = excl.has_actions(actions, metadata)  # boolean Series indexed by (subject, trial)
     has_actions = event_data.apply(
-        lambda row: (row["subject"], row["trial"]) in trials_with_actions,
-        axis=1,
+        lambda row: trials_with_actions.loc[(row["subject"], row["trial"])], axis=1,
     )
     has_actions = has_actions.rename("trial_has_actions")
     return has_actions
@@ -54,37 +42,27 @@ def trial_has_actions(
 def trial_no_bad_action(
         event_data: pd.DataFrame,
         actions: pd.DataFrame,
+        metadata: pd.DataFrame,
         bad_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]],
 ) -> pd.Series:
     """ Funnel-step that passes events from trials where the subject performed no "bad" actions. """
-    if isinstance(bad_actions, SubjectActionCategoryEnum):
-        bad_actions = [bad_actions]
-    bad_action_trials = list(
-        actions.loc[np.isin(actions["action"], bad_actions), ["subject", "trial"]]
-        .drop_duplicates()
-        .itertuples(index=False)
+    trial_no_bad_actions = excl.no_bad_actions(   # boolean Series indexed by (subject, trial)
+        actions, metadata, bad_actions
     )
-    has_bad_actions = event_data.apply(
-        lambda row: (row["subject"], row["trial"]) in bad_action_trials,
-        axis=1,
+    has_no_bad_actions = event_data.apply(
+        lambda row: trial_no_bad_actions.loc[(row["subject"], row["trial"])], axis=1,
     )
-    has_no_bad_actions = ~has_bad_actions
-    has_no_bad_actions.rename("trial_no_bad_action")
+    has_no_bad_actions = has_no_bad_actions.rename("trial_no_bad_action")
     return has_no_bad_actions
 
 
 def trial_no_false_alarm(event_data: pd.DataFrame, metadata: pd.DataFrame, idents: pd.DataFrame,) -> pd.Series:
     """ Funnel-step that passes events from trials where the subject made no false alarm identifications. """
-    false_alarms = calc_sdt_class_per_trial(metadata, idents, "false_alarm")
-    has_false_alarms = event_data.apply(
-        lambda row: false_alarms.loc[
-            (false_alarms["subject"] == row["subject"]) & (false_alarms["trial"] == row["trial"]),
-            "count",
-        ].values[0] > 0,
-        axis=1,
+    trial_no_false_alarms = excl.no_false_alarms(idents, metadata)  # boolean Series indexed by (subject, trial)
+    no_false_alarms = event_data.apply(
+        lambda row: trial_no_false_alarms.loc[(row["subject"], row["trial"])], axis=1,
     )
-    no_false_alarms = ~has_false_alarms
-    no_false_alarms.rename("trial_no_false_alarm")
+    no_false_alarms = no_false_alarms.rename("trial_no_false_alarm")
     return no_false_alarms
 
 
