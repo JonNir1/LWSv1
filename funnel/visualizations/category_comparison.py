@@ -22,7 +22,11 @@ def category_comparison_figure(
         raise ValueError(f"`data` must contain `{categ_col}` column for category comparison.")
     if not show_distributions and not show_individuals:
         raise ValueError("At least one of `show_distributions` or `show_individuals` must be True.")
-    fig = make_subplots(rows=1, cols=2, shared_yaxes=True, column_widths=[0.7, 0.3],)
+    fig = make_subplots(
+        rows=1, cols=2,
+        shared_yaxes=True, column_widths=[0.8, 0.2],
+        vertical_spacing=0.075, horizontal_spacing=0.025,
+    )
     if show_distributions:
         fig = _add_distribution_traces(
             fig,
