@@ -7,13 +7,6 @@ import config as cnfg
 
 pio.renderers.default = "browser"
 
-# TODO: only from HOME:
-cnfg.OUTPUT_PATH = r'C:\Users\nirjo\Desktop\LWS\Results'
-
-
-# TODO (Nov 11): write notebook with
-#   Repeat BAMBI analysis using a frequentist approach with R-lme4 - to compare results & conclusions
-
 
 # %%
 # ##  Run Pipeline / Load Data

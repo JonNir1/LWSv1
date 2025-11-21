@@ -12,6 +12,9 @@ STIMULI_VERSION = 1
 _BASE_PATH = r"S:\Lab-Shared\Experiments\LWS\Tobii Demo"
 RAW_DATA_PATH = os.path.join(_BASE_PATH, "RawData")
 OUTPUT_PATH = os.path.join(_BASE_PATH, "Results")
+
+OUTPUT_PATH = r'C:\Users\nirjo\Desktop\HCNL\LWS\Results'    # TODO: remove me!
+
 SUBJECT_OUTPUT_PATH = os.path.join(OUTPUT_PATH, f"{SUBJECT_STR}s")
 
 IMAGE_DIR_PATH = r"S:\Lab-Shared\Experiments\N170 free scan\ClutteredObjects_scan\Origional_Objects_Pics\organized"
