@@ -5,7 +5,7 @@ import pandas as pd
 
 import config as cnfg
 from data_models.LWSEnums import SubjectActionCategoryEnum
-from helpers.sdt import calc_sdt_class_per_trial
+from analysis.helpers.sdt import calc_sdt_class_per_trial
 
 
 def check_exclusion_criteria(

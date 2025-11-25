@@ -3,8 +3,8 @@ from typing import Literal, Optional
 import pandas as pd
 
 import config as cnfg
-from helpers.sdt import D_PRIME_CORRECTIONS
-from helpers.sdt import calc_dprime_per_trial, calc_sdt_class_per_trial
+from analysis.helpers.sdt import D_PRIME_CORRECTIONS
+from analysis.helpers.sdt import calc_dprime_per_trial, calc_sdt_class_per_trial
 
 
 def calc_bad_actions_rate(metadata: pd.DataFrame) -> pd.DataFrame:
