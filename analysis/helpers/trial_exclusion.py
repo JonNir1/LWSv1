@@ -34,6 +34,7 @@ def check_exclusion_criteria(
 
 
 def has_gaze_coverage(metadata: pd.DataFrame, min_percent: int | float) -> pd.Series:
+    """ Check if each trial has sufficient gaze coverage based on the provided minimum percentage threshold. """
     if min_percent <= 1.0:
         min_percent *= 100
     if not (0 < min_percent <= 100):
@@ -48,6 +49,7 @@ def has_gaze_coverage(metadata: pd.DataFrame, min_percent: int | float) -> pd.Se
 
 
 def has_actions(actions: pd.DataFrame, metadata: pd.DataFrame) -> pd.Series:
+    """ Check if each trial has any actions (excluding NO_ACTION) recorded in the actions DataFrame. """
     trials_with_actions = list(
         actions
         .loc[actions["action"] != SubjectActionCategoryEnum.NO_ACTION, ["subject", "trial"]]
@@ -72,6 +74,9 @@ def no_bad_actions(
         metadata: pd.DataFrame,
         bad_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]],
 ) -> pd.Series:
+    """
+    Check if each trial has no bad actions (as defined in the bad_actions parameter) recorded in the actions DataFrame.
+    """
     if isinstance(bad_actions, SubjectActionCategoryEnum):
         bad_actions = [bad_actions]
     bad_action_trials = list(
@@ -95,6 +100,9 @@ def no_false_alarms(
         idents: pd.DataFrame,
         metadata: pd.DataFrame,
 ) -> pd.Series:
+    """
+    Check if each trial has no false alarms recorded in the idents DataFrame.
+    """
     false_alarms = calc_sdt_class_per_trial(metadata, idents, "false_alarm")
     trial_no_false_alarms = (
         false_alarms
