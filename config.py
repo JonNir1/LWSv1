@@ -47,7 +47,7 @@ _ANY_FUNNEL_STEPS = [
     "trial_gaze_coverage",
     # "trial_has_actions",    # uncomment to exclude trials with no subject-actions
     "trial_no_bad_action",
-    "trial_no_false_alarm",
+    "trial_no_miss_with_false_alarm",
     "instance_not_outlier",
     "instance_on_target",
 ]

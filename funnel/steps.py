@@ -56,14 +56,16 @@ def trial_no_bad_action(
     return has_no_bad_actions
 
 
-def trial_no_false_alarm(event_data: pd.DataFrame, metadata: pd.DataFrame, idents: pd.DataFrame,) -> pd.Series:
+def trial_no_miss_with_false_alarm(
+        event_data: pd.DataFrame, metadata: pd.DataFrame, idents: pd.DataFrame,
+) -> pd.Series:
     """ Funnel-step that passes events from trials where the subject made no false alarm identifications. """
-    trial_no_false_alarms = excl.no_false_alarms(idents, metadata)  # boolean Series indexed by (subject, trial)
-    no_false_alarms = event_data.apply(
-        lambda row: trial_no_false_alarms.loc[(row["subject"], row["trial"])], axis=1,
+    trial_no_miss_w_fa = excl.no_misses_with_false_alarms(idents, metadata)  # boolean Series indexed by (subject, trial)
+    no_miss_with_fa = event_data.apply(
+        lambda row: trial_no_miss_w_fa.loc[(row["subject"], row["trial"])], axis=1,
     )
-    no_false_alarms = no_false_alarms.rename("trial_no_false_alarm")
-    return no_false_alarms
+    no_miss_with_fa = no_miss_with_fa.rename("trial_no_miss_with_fa")
+    return no_miss_with_fa
 
 
 def instance_on_target(

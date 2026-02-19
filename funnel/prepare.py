@@ -174,8 +174,8 @@ def _run_funnel_steps(
             results[step] = stp.trial_has_actions(event_data, actions, metadata)
         elif step == "trial_no_bad_action":
             results[step] = stp.trial_no_bad_action(event_data, actions, metadata, bad_actions)
-        elif step == "trial_no_false_alarm":
-            results[step] = stp.trial_no_false_alarm(event_data, metadata, idents)
+        elif step == "trial_no_miss_with_false_alarm":
+            results[step] = stp.trial_no_miss_with_false_alarm(event_data, metadata, idents)
         elif "on_target" in step:
             results[step] = stp.instance_on_target(event_data, on_target_threshold_dva, event_type)
         elif "not_outlier" in step:

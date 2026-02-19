@@ -1,6 +1,9 @@
 import time
 
+import numpy as np
+import pandas as pd
 import bambi as bmb
+
 import plotly.io as pio
 
 import config as cnfg
