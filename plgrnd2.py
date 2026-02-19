@@ -9,7 +9,7 @@ pio.renderers.default = "browser"
 
 
 # %%
-# ##  Run Pipeline / Load Data
+# ##  Run Pipeline
 # from pipeline.run_pipeline import run_pipeline
 # targets, actions, metadata, idents, fixations, visits = run_pipeline(
 #     # raw_data_path=cnfg.RAW_DATA_PATH,
@@ -21,7 +21,12 @@ pio.renderers.default = "browser"
 #     verbose=True
 # )
 
+
+# %%
+# ##  Load Data
+
 from pipeline.read_data import read_saved_data
+
 targets, actions, metadata, idents, fixations, visits = read_saved_data(cnfg.OUTPUT_PATH)
 
 
