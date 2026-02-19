@@ -1,7 +1,5 @@
 import time
 
-import numpy as np
-import pandas as pd
 import bambi as bmb
 
 import plotly.io as pio
@@ -28,9 +26,22 @@ pio.renderers.default = "browser"
 # %%
 # ##  Load Data
 
-from pipeline.read_data import read_saved_data
+from analysis.helpers.read_data import read_data
 
-targets, actions, metadata, idents, fixations, visits = read_saved_data(cnfg.OUTPUT_PATH)
+targets, actions, metadata, idents, fixations, visits = read_data(cnfg.OUTPUT_PATH)
+
+
+# %%
+from analysis.helpers.trial_inclusion import check_trial_inclusion_criteria
+
+trial_funnel = check_trial_inclusion_criteria(
+    metadata, fixations, actions, idents,
+    min_gaze_coverage=cnfg.GAZE_COVERAGE_PERCENT_THRESHOLD,
+    min_fixation_rate=0.5,
+    bad_actions=cnfg.BAD_ACTIONS,
+    require_actions=False,
+    as_funnel=True,
+)
 
 
 # %%

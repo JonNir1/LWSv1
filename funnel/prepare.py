@@ -4,7 +4,7 @@ import pandas as pd
 from tqdm import tqdm
 
 import config as cnfg
-from pipeline.read_data import read_saved_data
+from analysis.helpers.read_data import read_data
 from data_models.LWSEnums import SubjectActionCategoryEnum, SearchArrayCategoryEnum, ImageCategoryEnum
 
 import funnel.steps as stp
@@ -60,7 +60,7 @@ def prepare_funnel(
         raise ValueError(f"Invalid `event_type`: {event_type}. Must be 'fixation' or 'visit'.")
     if funnel_type not in ["lws", "target_return"]:
         raise NotImplementedError(f"Unknown `funnel_type`: {funnel_type}.")
-    targets, actions, metadata, idents, fixations, visits = read_saved_data(data_dir)
+    targets, actions, metadata, idents, fixations, visits = read_data(data_dir)
     event_data = fixations if event_type == "fixation" else visits
     event_data = _append_metadata_and_filter_by_eye(event_data, targets, metadata)
     event_data = _coerce_column_types(event_data)

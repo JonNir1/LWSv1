@@ -3,34 +3,87 @@ from typing import List, Union
 import numpy as np
 import pandas as pd
 
-import config as cnfg
+from config import MILLISECONDS_IN_SECOND
 from data_models.LWSEnums import SubjectActionCategoryEnum
+from analysis.helpers.funnel import convert_criteria_to_funnel
 from analysis.helpers.sdt import calc_sdt_class_per_trial
 
 
-def check_inclusion_criteria(
+TRIAL_INCLUSION_STEPS = [
+    # sequence of steps to determine if a trial is valid and included for further analysis
+    "all",
+    "gaze_coverage",
+    "fixation_rate",
+    # "has_actions",    # uncomment to exclude trials with no subject-actions
+    "no_bad_action",
+    "no_miss_with_false_alarm",
+]
+
+
+def check_trial_inclusion_criteria(
         metadata: pd.DataFrame,
+        fixations: pd.DataFrame,
         actions: pd.DataFrame,
         idents: pd.DataFrame,
-        min_percent: int | float = cnfg.GAZE_COVERAGE_PERCENT_THRESHOLD,
-        bad_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]] = cnfg.BAD_ACTIONS,
-        require_actions: bool = False,
+        min_gaze_coverage: int | float,
+        min_fixation_rate: float,
+        bad_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]],
+        require_actions: bool,
+        as_funnel: bool,
 ) -> pd.DataFrame:
-    has_coverage = has_gaze_coverage(metadata, min_percent)
-    no_bad_acts = no_bad_actions(actions, metadata, bad_actions)
-    no_miss_w_fas = no_misses_with_false_alarms(idents, metadata)
-    components = [has_coverage, no_bad_acts, no_miss_w_fas]
-    if require_actions:
-        has_acts = has_actions(actions, metadata)
-        components.append(has_acts)
-    criteria_df = (
-        pd.concat(components, axis=1)
+    """
+    Check trial inclusion criteria based on the specified steps in TRIAL_INCLUSION_STEPS.
+    If `as_funnel` is True, converts the resulting criteria DataFrame into a funnel format where each step's column
+    indicates whether the trial passed all criteria up to and including that step.
+
+     - metadata: DataFrame containing trial metadata, including gaze coverage and duration.
+     - fixations: DataFrame containing fixation data, used to calculate fixation rate.
+     - actions: DataFrame containing subject actions, used to check for presence of actions and bad actions.
+     - idents: DataFrame containing identification data, used to check for misses with false alarms.
+     - min_gaze_coverage: Minimum percentage of trial time that gaze data must cover for a trial to be included.
+     - min_fixation_rate: Minimum fixation rate (fixations per second) for a trial to be included.
+     - bad_actions: SubjectActionCategoryEnum or list of enums indicating which actions are considered "bad" for exclusion.
+     - require_actions: If True, trials with no subject-actions will be excluded; if False, they will be included.
+     - as_funnel: If True, converts the resulting criteria DataFrame into a funnel format.
+
+    Returns a DataFrame indexed by (subject, trial), with boolean columns for each inclusion step and a final
+    "is_included" column indicating overall inclusion status.
+    """
+    ordered_components = []
+    for step in TRIAL_INCLUSION_STEPS:
+        if step == "all":
+            all_trials = all_pass(metadata)
+            ordered_components.append(all_trials)
+        elif step == "gaze_coverage":
+            has_coverage = has_gaze_coverage(metadata, min_gaze_coverage)
+            ordered_components.append(has_coverage)
+        elif step == "fixation_rate":
+            has_high_rate = has_high_fixation_rate(fixations, metadata, min_fixation_rate)
+            ordered_components.append(has_high_rate)
+        elif step == "has_actions" and require_actions:
+            has_acts = has_actions(actions, metadata)
+            ordered_components.append(has_acts)
+        elif step == "no_bad_action":
+            no_bad_acts = no_bad_actions(actions, metadata, bad_actions)
+            ordered_components.append(no_bad_acts)
+        elif step == "no_miss_with_false_alarm":
+            no_miss_w_fas = no_misses_with_false_alarms(idents, metadata)
+            ordered_components.append(no_miss_w_fas)
+        else:
+            raise NotImplementedError(f"Unknown trial inclusion step: {step}")
+    inclusion_df = (
+        pd.concat(ordered_components, axis=1)
         .assign(is_included=lambda df: df.all(axis=1))
-        .reset_index(drop=False)
-        .sort_values(["subject", "trial"])
-        .reset_index(drop=True)
+        .sort_index(level=["subject", "trial"])
     )
-    return criteria_df
+    if as_funnel:
+        inclusion_df = convert_criteria_to_funnel(inclusion_df)
+    return inclusion_df
+
+
+def all_pass(metadata: pd.DataFrame) -> pd.Series:
+    """ Dummy inclusion criterion that all trials pass. """
+    return pd.Series(True, index=metadata.set_index(["subject", "trial"]).index, name="all")
 
 
 def has_gaze_coverage(metadata: pd.DataFrame, min_percent: int | float) -> pd.Series:
@@ -46,6 +99,16 @@ def has_gaze_coverage(metadata: pd.DataFrame, min_percent: int | float) -> pd.Se
     )
     has_coverage = (gaze_coverage_percent > min_percent).rename("has_gaze_coverage")
     return has_coverage
+
+
+def has_high_fixation_rate(fixations: pd.DataFrame, metadata: pd.DataFrame, min_rate: float) -> pd.Series:
+    """ Check if each trial has a high enough fixation rate based on the provided minimum rate threshold. """
+    assert min_rate >= 0.0, "min_rate must be non-negative."
+    fix_count = fixations.groupby(["subject", "trial", "eye"]).size().rename("n_fixations")
+    fix_count = fix_count.groupby(["subject", "trial"]).max()   # take the max fixation count across both eyes for each trial
+    trial_duration_sec = metadata.set_index(["subject", "trial"])["duration"] / MILLISECONDS_IN_SECOND
+    has_high_rate = ((fix_count / trial_duration_sec) > min_rate).rename("has_high_fixation_rate")
+    return has_high_rate
 
 
 def has_actions(actions: pd.DataFrame, metadata: pd.DataFrame) -> pd.Series:
