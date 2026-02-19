@@ -33,8 +33,6 @@ BAD_ACTIONS = [
 ]
 
 ON_TARGET_THRESHOLD_DVA = 1.75          # threshold to determine if a gaze/fixation is on-target
-MAX_GAZE_TO_TRIGGER_TIME_DIFF = 5       # Maximum allowed time difference between gaze and trigger events for them to be considered as part of the same event.
-VISIT_MERGING_TIME_THRESHOLD = 1000     # temporal window for considering two events as part of the same visit, in milliseconds
 
 ### Funnel Analysis Parameters ###
 GAZE_COVERAGE_PERCENT_THRESHOLD = 80    # minimum percent of trial time that gaze data must cover to be included in analysis

@@ -10,13 +10,16 @@ from data_models.LWSEnums import SubjectActionCategoryEnum
 from pipeline.parse_raw_data import parse_all_subjects
 from pipeline.build_dataframes import build_dataframes
 
+MAX_GAZE_TO_TRIGGER_TIME_DIFF = 5       # max ms between gaze and trigger events for them to be considered the same event
+VISIT_MERGING_TIME_THRESHOLD = 1000     # max ms between two visits for them to be merged into one visit (to account for brief looks away from the target)
+
 
 def run_pipeline(
         raw_data_path: str = cnfg.RAW_DATA_PATH,
         identification_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]] = cnfg.IDENTIFICATION_ACTIONS,
-        gaze_to_trigger_time_threshold: float = cnfg.MAX_GAZE_TO_TRIGGER_TIME_DIFF,
+        gaze_to_trigger_time_threshold: float = MAX_GAZE_TO_TRIGGER_TIME_DIFF,
         on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
-        visit_merging_time_threshold: float = cnfg.VISIT_MERGING_TIME_THRESHOLD,
+        visit_merging_time_threshold: float = VISIT_MERGING_TIME_THRESHOLD,
         save: bool = True,
         verbose: bool = True,
 ) -> (
