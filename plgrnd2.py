@@ -81,14 +81,14 @@ prop_by_target = calculate_proportions(
 
 
 # %%
-from funnel.visualizations.step_size import step_sizes_figure
+from analysis.visualizations.funnel.step_size import step_sizes_figure
 
 step_sizes_figure(
     funnel_data, initial_step, "final", "LWS Visits Funnel", show_individuals=True
 ).show()
 
 # %%
-from funnel.visualizations.category_comparison import category_comparison_figure
+from analysis.visualizations.funnel.category_comparison import category_comparison_figure
 
 fig = category_comparison_figure(
     prop_by_trial,
