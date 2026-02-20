@@ -23,6 +23,7 @@ SEARCH_ARRAY_PATH = os.path.join(_BASE_PATH, "Stimuli")
 
 ## Analysis Parameters ##
 ### Pre-Processing Pipeline Parameters ###
+ON_TARGET_THRESHOLD_DVA = 1.75          # threshold to determine if a gaze/fixation is on-target
 IDENTIFICATION_ACTIONS = [     # list of subject-actions indicating target identification
     SubjectActionCategoryEnum.MARK_AND_CONFIRM,
     # SubjectActionCategoryEnum.MARK_ONLY    # uncomment this to include marking-only actions
@@ -31,8 +32,6 @@ BAD_ACTIONS = [
     act for act in SubjectActionCategoryEnum if
     act != SubjectActionCategoryEnum.NO_ACTION and act not in IDENTIFICATION_ACTIONS
 ]
-
-ON_TARGET_THRESHOLD_DVA = 1.75          # threshold to determine if a gaze/fixation is on-target
 
 ### Funnel Analysis Parameters ###
 GAZE_COVERAGE_PERCENT_THRESHOLD = 80    # minimum percent of trial time that gaze data must cover to be included in analysis
