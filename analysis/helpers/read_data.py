@@ -43,14 +43,9 @@ def read_data(dir_path: str, drop_bad_eye: bool = True):
 
 
 def _drop_bad_eye(events: pd.DataFrame, metadata: pd.DataFrame) -> pd.DataFrame:
-    events = (
-        events
-        .copy()  # avoid modifying original data
-        .merge(  # append dominant eye from metadata
-            metadata[["subject", "trial", "dominant_eye"]],
-            on=["subject", "trial"],
-            how="left"
-        )
-    )
+    """ Drop events from the non-dominant eye based on the dominant eye information in the metadata. """
+    events = events.copy()  # avoid modifying original data
+    dominant_eye = metadata.set_index(["subject", "trial"])["dominant_eye"]
+    events["dominant_eye"] = events.set_index(["subject", "trial"]).index.map(dominant_eye)
     events = events.loc[events["eye"] == events["dominant_eye"]].drop(columns=["dominant_eye"])
     return events
