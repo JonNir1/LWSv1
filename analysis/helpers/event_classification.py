@@ -58,7 +58,11 @@ def check_lws_criteria(
             ordered_components.append(not_before_exemplar_visit)
         else:
             raise NotImplementedError(f"Unknown LWS criterion step: {step}")
-    lws_criterion_df = pd.concat(ordered_components, axis=1).assign(is_lws=lambda df: df.all(axis=1))
+    lws_criterion_df = (
+        pd.concat(ordered_components, axis=1)
+        .assign(is_lws=lambda df: df.all(axis=1))
+        .astype(bool)
+    )
     lws_criterion_df.index = event_data.index  # ensure the index matches the original event data
     if as_funnel:
         lws_criterion_df = convert_criteria_to_funnel(lws_criterion_df)

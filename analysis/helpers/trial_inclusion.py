@@ -75,6 +75,7 @@ def check_trial_inclusion_criteria(
         pd.concat(ordered_components, axis=1)
         .assign(is_included=lambda df: df.all(axis=1))
         .sort_index(level=["subject", "trial"])
+        .astype(bool)
     )
     if as_funnel:
         inclusion_df = convert_criteria_to_funnel(inclusion_df)
