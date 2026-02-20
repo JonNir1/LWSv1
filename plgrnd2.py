@@ -1,6 +1,7 @@
 import time
 
 import bambi as bmb
+import pandas as pd
 
 import plotly.io as pio
 
@@ -28,19 +29,49 @@ pio.renderers.default = "browser"
 
 from analysis.helpers.read_data import read_data
 
-targets, actions, metadata, idents, fixations, visits = read_data(cnfg.OUTPUT_PATH)
+loaded_data = read_data(cnfg.OUTPUT_PATH, drop_bad_eye=True, drop_outliers=True)
+targets = loaded_data.targets
+actions = loaded_data.actions
+metadata = loaded_data.metadata
+idents = loaded_data.identifications
+fixations = loaded_data.fixations
+visits = loaded_data.visits
+del loaded_data    # free up memory by deleting the loaded_data object
 
 
 # %%
-from analysis.helpers.trial_inclusion import check_trial_inclusion_criteria
+from analysis.helpers.funnels import build_trial_inclusion_funnel, build_event_classification_funnel, calculate_funnel_step_sizes
+from analysis.helpers.funnel_config import TRIAL_INCLUSION_CRITERIA, IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA
 
-trial_funnel = check_trial_inclusion_criteria(
-    metadata, fixations, actions, idents,
-    min_gaze_coverage=cnfg.GAZE_COVERAGE_PERCENT_THRESHOLD,
-    min_fixation_rate=0.5,
-    bad_actions=cnfg.BAD_ACTIONS,
-    require_actions=False,
-    as_funnel=True,
+trial_funnel = build_trial_inclusion_funnel(
+    cnfg.OUTPUT_PATH
+)
+trial_funnel_sizes = calculate_funnel_step_sizes(
+    trial_funnel,
+    ["subject", "trial"],
+    TRIAL_INCLUSION_CRITERIA + ["is_valid_trial"]
+)
+
+is_lws_funnel = build_event_classification_funnel(
+    cnfg.OUTPUT_PATH,
+    event_type="visit",
+    funnel_type="lws",
+)
+lws_sizes = calculate_funnel_step_sizes(
+    is_lws_funnel,
+    ["subject", "trial", "trial_category", "target_category"],
+    IS_LWS_CRITERIA + ["is_lws"]
+)
+
+is_tr_funnel = build_event_classification_funnel(
+    cnfg.OUTPUT_PATH,
+    event_type="visit",
+    funnel_type="target_return",
+)
+tr_funnel_sizes = calculate_funnel_step_sizes(
+    is_tr_funnel,
+    ["subject", "trial", "trial_category", "target_category"],
+    IS_TARGET_RETURN_CRITERIA + ["is_target_return"]
 )
 
 
