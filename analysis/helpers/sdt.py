@@ -129,7 +129,7 @@ def calc_sdt_class_per_trial(
     count = (
         idents
         .loc[selector]
-        .groupby([cnfg.SUBJECT_STR, cnfg.TRIAL_STR])
+        .groupby([cnfg.SUBJECT_STR, cnfg.TRIAL_STR], observed=True)
         .size()
         .rename("count")
     )
