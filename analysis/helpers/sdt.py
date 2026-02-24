@@ -116,7 +116,7 @@ def calc_sdt_class_per_trial(
     identification data (performing hits, misses, or false alarms).
     Returns a DataFrame with the subject, trial category, count of the classification, and the rate of the classification.
     """
-    # identify identifications from the provided SDT class
+    # classify identifications from the provided SDT class
     if sdt_class == "correct_reject":
         # for CRs we calculate the FA count and subtract it from the number of distractors
         selector = SignalDetectionCategoryEnum.FALSE_ALARM
