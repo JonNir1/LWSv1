@@ -20,10 +20,10 @@ class DominantEyeEnum(StrEnum):
 
 class ImageCategoryEnum(IntEnum):
     UNKNOWN = 0
-    ANIMAL_OTHER = 1
-    HUMAN_OTHER = 2
-    ANIMAL_FACE = 3
-    HUMAN_FACE = 4
+    ANIMAL_FACE = 1
+    ANIMAL_OTHER = 2
+    HUMAN_FACE = 3
+    HUMAN_OTHER = 4
     OBJECT_HANDMADE = 5
     OBJECT_NATURAL = 6
 
