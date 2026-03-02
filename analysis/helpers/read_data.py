@@ -54,6 +54,16 @@ def read_data(
     )
 
 
+def parse_as_categorical(series: pd.Series, enum_cls, ordered: bool) -> pd.Categorical:
+    mapped = series.map(lambda val: val if val == "all" else enum_cls[val].name)
+    cat = pd.Categorical(
+        mapped,
+        categories=[e.name for e in enum_cls] + ["all"],
+        ordered=ordered,
+    )
+    return cat.remove_unused_categories()
+
+
 def _load(dir_path: str, name: str, missing: Literal["warn", "ignore", "raise"]) -> Optional[pd.DataFrame]:
     """
     Attempts to load a DataFrame from a pickle file in the specified directory.
