@@ -31,7 +31,7 @@ def step_sizes_figure(
     )
     fig = go.Figure()
     if show_individuals:
-        for i, (subj_id, subj_data) in enumerate(sizes_long.groupby("subject")):
+        for i, (subj_id, subj_data) in enumerate(sizes_long.groupby("subject", observed=True)):
             fig = _add_funnel_trace(
                 fig,
                 subj_data,
