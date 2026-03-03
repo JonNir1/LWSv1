@@ -7,7 +7,7 @@ import config as cnfg
 from analysis.helpers.read_data import read_data
 from data_models.LWSEnums import SubjectActionCategoryEnum, SearchArrayCategoryEnum, ImageCategoryEnum
 
-import funnel.steps as stp
+import funnel__TODO_DELETE_THIS.steps as stp
 
 
 def calculate_funnel_sizes(
@@ -19,7 +19,7 @@ def calculate_funnel_sizes(
         raise ValueError(f"Funnel Data is missing required columns: {missing_columns}.")
     missing_steps = [step for step in steps if step not in funnel_data.columns]
     if missing_steps:
-        raise ValueError(f"Funnel Data is missing required funnel steps: {missing_steps}.")
+        raise ValueError(f"Funnel Data is missing required funnel__TODO_DELETE_THIS steps: {missing_steps}.")
     metadata_columns = [col for col in funnel_data.columns if col not in steps]
     sizes = []
     for _, group in tqdm(funnel_data.groupby(GROUPBY_COLUMNS), disable=not verbose, desc="Calculating Funnel Sizes"):
@@ -39,21 +39,21 @@ def prepare_funnel(
         **funnel_kwargs,
 ) -> pd.DataFrame:
     """
-    Prepares the funnel results by:
+    Prepares the funnel__TODO_DELETE_THIS results by:
     1) Reading saved data from the specified directory.
     2) Appending metadata to the event data (fixations or visits).
-    3) Running the specified funnel analysis (LWS or Target-Return) on the event data.
+    3) Running the specified funnel__TODO_DELETE_THIS analysis (LWS or Target-Return) on the event data.
 
     :param data_dir: Directory containing the saved data files.
     :param event_type: Type of event to analyze ("fixation" or "visit").
-    :param funnel_type: Type of funnel analysis to perform ("lws" or "target_return").
+    :param funnel_type: Type of funnel__TODO_DELETE_THIS analysis to perform ("lws" or "target_return").
     :param verbose: Whether to display progress bars during processing.
 
     :keyword bad_actions: list of subject actions considered as 'bad', resulting in excluding the trial from analysis.
     :keyword on_target_threshold_dva: threshold (in degrees of visual angle) to determine if an event is on-target.
-    :keyword time_to_trial_end_threshold: (only for LWS funnel) threshold (in milliseconds) to determine if an event
+    :keyword time_to_trial_end_threshold: (only for LWS funnel__TODO_DELETE_THIS) threshold (in milliseconds) to determine if an event
     is too close to trial end.
-    :keyword exemplar_visit_threshold: (only for LWS funnel) number of subsequent visits to the exemplar section
+    :keyword exemplar_visit_threshold: (only for LWS funnel__TODO_DELETE_THIS) number of subsequent visits to the exemplar section
     (bottom strip) to consider when determining LWS status.
     """
     if event_type not in ["fixation", "visit"]:
@@ -77,8 +77,8 @@ def prepare_funnel(
         exemplar_visit_threshold = funnel_kwargs.get("exemplar_visit_threshold", cnfg.FIXATIONS_TO_STRIP_THRESHOLD)
     else:   # funnel_type == "target_return"
         funnel_steps = cnfg.TARGET_RETURN_FUNNEL_STEPS
-        time_to_trial_end_threshold = 0     # not used in target-return funnel
-        exemplar_visit_threshold = 0        # not used in target-return funnel
+        time_to_trial_end_threshold = 0     # not used in target-return funnel__TODO_DELETE_THIS
+        exemplar_visit_threshold = 0        # not used in target-return funnel__TODO_DELETE_THIS
     funnel_step_results = _run_funnel_steps(
         event_data=event_data,
         metadata=metadata,
@@ -162,7 +162,7 @@ def _run_funnel_steps(
         exemplar_visit_threshold: int,
         verbose: bool = False,
 ) -> pd.DataFrame:
-    """ Runs the provided funnel-step functions on the data and returns a DataFrame with the a column per step. """
+    """ Runs the provided funnel__TODO_DELETE_THIS-step functions on the data and returns a DataFrame with the a column per step. """
     if event_type not in ["fixation", "visit"]:
         raise ValueError(f"Unknown event type: {event_type}. Expected 'fixation' or 'visit'.")
     appended_columns = ["subject", "trial", "target", "trial_category", "target_category", "target_angle"] + [
@@ -199,7 +199,7 @@ def _run_funnel_steps(
             # calculated after all steps are run
             continue
         else:
-            raise ValueError(f"Unknown funnel step: {step}")
+            raise ValueError(f"Unknown funnel__TODO_DELETE_THIS step: {step}")
     funnel_df = (
         pd.concat(results.values(), keys=results.keys(), axis=1)
         .assign(final=lambda df: df.all(axis=1))
@@ -214,7 +214,7 @@ def _run_funnel_steps(
 
 
 def _apply_funnel(step_results: pd.DataFrame, funnel_steps: List[str], verbose: bool = False) -> pd.DataFrame:
-    """ For each step in the funnel, check if it and all previous steps are True. """
+    """ For each step in the funnel__TODO_DELETE_THIS, check if it and all previous steps are True. """
     if "subject" not in step_results.columns:
         raise ValueError(f"`step_results` DataFrame must contain `subject` column.")
     if "trial" not in step_results.columns:
@@ -223,7 +223,7 @@ def _apply_funnel(step_results: pd.DataFrame, funnel_steps: List[str], verbose: 
         raise ValueError(f"`step_results` DataFrame must contain `target` column.")
     missing_steps = [step for step in funnel_steps if step not in step_results.columns]
     if missing_steps:
-        raise ValueError(f"`step_results` is missing required funnel step columns: {missing_steps}.")
+        raise ValueError(f"`step_results` is missing required funnel__TODO_DELETE_THIS step columns: {missing_steps}.")
     results = dict()
     for (subj, trl, tgt), group in tqdm(
             step_results.groupby(["subject", "trial", "target"]), desc="Applying Funnel", disable=not verbose
@@ -235,7 +235,7 @@ def _apply_funnel(step_results: pd.DataFrame, funnel_steps: List[str], verbose: 
         results[(subj, trl, tgt)] = group_copy
     results = (
         pd.concat(results, ignore_index=True)
-        .loc[   # reorder columns: first non-funnel columns, then funnel columns ordered by their step order
+        .loc[   # reorder columns: first non-funnel__TODO_DELETE_THIS columns, then funnel__TODO_DELETE_THIS columns ordered by their step order
             :, [col for col in step_results.columns if col not in funnel_steps] +
                [col for col in step_results.columns if col in funnel_steps]
         ]

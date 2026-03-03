@@ -7,7 +7,7 @@ from data_models.LWSEnums import SubjectActionCategoryEnum
 
 
 def all_pass(event_data: pd.DataFrame) -> pd.Series:
-    """ Dummy funnel-step that all events pass through. """
+    """ Dummy funnel__TODO_DELETE_THIS-step that all events pass through. """
     return pd.Series(True, index=event_data.index, dtype=bool, name="all")
 
 
