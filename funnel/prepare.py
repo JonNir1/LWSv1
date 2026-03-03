@@ -60,7 +60,14 @@ def prepare_funnel(
         raise ValueError(f"Invalid `event_type`: {event_type}. Must be 'fixation' or 'visit'.")
     if funnel_type not in ["lws", "target_return"]:
         raise NotImplementedError(f"Unknown `funnel_type`: {funnel_type}.")
-    targets, actions, metadata, idents, fixations, visits = read_data(data_dir)
+    loaded_data = read_data(data_dir)
+    targets = loaded_data.targets
+    metadata = loaded_data.metadata
+    fixations = loaded_data.fixations
+    visits = loaded_data.visits
+    idents = loaded_data.identifications
+    actions = loaded_data.actions
+
     event_data = fixations if event_type == "fixation" else visits
     event_data = _append_metadata_and_filter_by_eye(event_data, targets, metadata)
     event_data = _coerce_column_types(event_data)

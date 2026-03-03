@@ -2,7 +2,7 @@ from typing import Union, List, Literal
 
 import pandas as pd
 
-import analysis.helpers.trial_inclusion as excl
+import analysis.helpers.funnels.trial_inclusion as excl
 from data_models.LWSEnums import SubjectActionCategoryEnum
 
 

@@ -41,7 +41,7 @@ def _aggregate_and_sort(proportions: pd.DataFrame, by: Union[str, List[str]]) ->
         by = [by]
     has_subject = "subject" in by
     # calculated aggregates across all category levels
-    overall = proportions.groupby("subject", as_index=False) if has_subject else proportions
+    overall = proportions.groupby("subject", as_index=False, observed=True) if has_subject else proportions
     overall = overall.agg(
         n_trials=("proportion", "count"),
         median=("proportion", "median"),
@@ -52,7 +52,7 @@ def _aggregate_and_sort(proportions: pd.DataFrame, by: Union[str, List[str]]) ->
     # calculated aggregates per category level
     aggregated = (
         proportions
-        .groupby(by)
+        .groupby(by, observed=True)
         .agg(
             n_trials=("proportion", "count"),
             median=("proportion", "median"),

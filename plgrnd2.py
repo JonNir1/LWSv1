@@ -40,7 +40,7 @@ del loaded_data    # free up memory by deleting the loaded_data object
 
 # %%
 from analysis.helpers.funnels import build_trial_inclusion_funnel, build_event_classification_funnel, calculate_funnel_step_sizes
-from analysis.helpers.funnel_config import TRIAL_INCLUSION_CRITERIA, IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA
+from analysis.helpers.funnels.funnel_config import TRIAL_INCLUSION_CRITERIA, IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA
 
 trial_funnel = build_trial_inclusion_funnel(
     cnfg.OUTPUT_PATH
