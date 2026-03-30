@@ -1,16 +1,21 @@
 
+#' === LWS PROBABILITY OVER SPACE ===
+
+
 library(mgcv)
+source(file.path("analysis", "R", "helpers.R"))
 
 # set constants
 set.seed(42)
 K <- 15
 
 
-# load the data
-dat <- read.csv(file.path("analysis" ,"R", "spatial_lws.csv"))
-dat$subject <- as.factor(dat$subject)
-dat$trial_category <- as.factor(dat$trial_category)
-dat$is_lws <- as.numeric(dat$is_lws)
+# load and filter the data
+dat <- load_data(
+  file.path("analysis" ,"R", "funnel_results.csv"),
+  valid_only=TRUE,
+  on_target_only = TRUE
+)
 
 
 # fit a GAM with only main effects
@@ -65,10 +70,10 @@ preds <- predict(
   simple_model,
   newdata = grid,
   type = "response",
-  # exclude = "s(subject)"
+  # exclude = "s(subject)"  # uncomment to calculate the same probability for all subjects (mean subject's probability)
 )
 grid$prob <- preds  # append the predicted probability column
 
 # save to file
 outfile <- file.path("analysis", "R", "spatial_lws_predictions.csv")
-write.csv(grid, outfile, row.names = TRUE)
+write.csv(grid, outfile, row.names = FALSE)
