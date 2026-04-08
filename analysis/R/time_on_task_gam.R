@@ -42,7 +42,7 @@ grid <- expand.grid(
 
 preds <- predict(
   model, newdata = grid, type = "response",
-  # exclude = "s(subejct)"  # uncomment to calculate the same probability for all subjects (mean subject's probability)
+  # exclude = "s(subject)"  # uncomment to calculate the same probability for all subjects (mean subject's probability)
 )
 grid$prob <- preds
 
