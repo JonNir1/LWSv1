@@ -12,8 +12,10 @@ STIMULI_VERSION = 1
 _BASE_PATH = r"S:\Lab-Shared\Experiments\LWS\Tobii Demo"
 RAW_DATA_PATH = os.path.join(_BASE_PATH, "RawData")
 OUTPUT_PATH = os.path.join(_BASE_PATH, "Results")
+PUBLICATIONS_PATH = os.path.join(_BASE_PATH, "Publications")
 
-OUTPUT_PATH = r'C:\Users\nirjo\Desktop\HCNL\LWS\Results'    # TODO: remove me!
+OUTPUT_PATH = r'C:\Users\nirjo\Desktop\HCNL\LWS\Results'                # TODO: remove me!
+PUBLICATIONS_PATH = r"C:\Users\nirjo\Desktop\HCNL\LWS\Publications"     # TODO: remove me!
 
 SUBJECT_OUTPUT_PATH = os.path.join(OUTPUT_PATH, f"{SUBJECT_STR}s")
 
