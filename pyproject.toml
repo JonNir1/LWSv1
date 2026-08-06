@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+# The codebase has no packaging metadata and imports absolutely from the repo root
+# (`import config as cnfg`, `from analysis.helpers... import ...`), so put the root on sys.path.
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "realdata: needs the built pickles in cnfg.OUTPUT_PATH; skipped when absent",
+]
