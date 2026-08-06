@@ -165,13 +165,9 @@ class Trial:
     def _create_search_array(self) -> SearchArray:
         search_array_type = SearchArrayCategoryEnum[_extract_singleton_column(self._gaze, cnfg.CONDITION_STR).upper()]
         search_array_num = int(_extract_singleton_column(self._gaze, "image_num"))
-        search_array = SearchArray.from_mat(os.path.join(
-            cnfg.SEARCH_ARRAY_PATH,
-            f"generated_stim{cnfg.STIMULI_VERSION}",
-            search_array_type.name.lower(),
-            f"image_{search_array_num}.mat"
-        ))
-        return search_array
+        return SearchArray.from_mat(
+            SearchArray.get_path(cnfg.STIMULI_VERSION, search_array_type, search_array_num, "mat")
+        )
 
     def _detect_eye_movements(self) -> Tuple[pd.DataFrame, pd.Series, pd.Series]:
         from data_models.parse.eye_movements import detect_eye_movements

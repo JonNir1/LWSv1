@@ -115,13 +115,20 @@ def _validate_event_type(event_type: str) -> None:
         raise ValueError(f"Unknown event type: {event_type!r}. Expected 'fixation' or 'visit'.")
 
 
+# For a visit, `min`/`max`/`weighted` distance columns all exist. Taking `.any()` over all three is equivalent to
+# testing `min` alone (min <= weighted <= max), which reads as stricter than it is. Name the statistic explicitly:
+# a visit counts as on-target when its duration-weighted mean distance is within threshold.
+VISIT_DISTANCE_COLUMN = "weighted_distance_dva"
+
+
 def _distance_columns(event_data: pd.DataFrame, event_type: Literal["fixation", "visit"]) -> list[str]:
     if event_type == "fixation":
-        # e.g. target0_distance_dva, target1_distance_dva, ...
+        # e.g. target0_distance_dva, target1_distance_dva, ... one per target, and the event is on-target if it is
+        # within threshold of any of them
         dist_cols = [c for c in event_data.columns if c.startswith("target") and c.endswith("distance_dva")]
     else:
-        # event_type == "visit" ->
-        dist_cols = [c for c in event_data.columns if c.endswith("distance_dva")]
+        # a visit already belongs to exactly one target, so there is a single distance to test
+        dist_cols = [c for c in event_data.columns if c == VISIT_DISTANCE_COLUMN]
     if not dist_cols:
         raise ValueError(f"No distance columns found for event_type={event_type!r}.")
     return dist_cols

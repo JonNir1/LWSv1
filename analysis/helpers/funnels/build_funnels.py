@@ -178,16 +178,20 @@ def _convert_criteria_to_funnel(criteria_df: pd.DataFrame) -> pd.DataFrame:
 def _coerce_column_types(data: pd.DataFrame) -> pd.DataFrame:
     base_types = {"subject": "category", "trial": int, "target": "category", "target_angle": float}
     data = data.astype({col: typ for col, typ in base_types.items() if col in data.columns})
+    # NOTE: build the categorical from the *values*, not via `from_codes` on the enum members. `from_codes` treats the
+    # enum value as a position in the categories list, which only works while the enums stay zero-based and
+    # contiguous; a gap or a non-zero start would either raise or silently mislabel every row.
     if "trial_category" in data.columns:
-        data["trial_category"] = pd.Categorical.from_codes(
-            data["trial_category"].map(lambda val: SearchArrayCategoryEnum[val]),
-            categories=[cat.name for cat in SearchArrayCategoryEnum],
-            ordered=True,
-        ).remove_unused_categories()
+        data["trial_category"] = _as_ordered_categorical(data["trial_category"], SearchArrayCategoryEnum)
     if "target_category" in data.columns:
-        data["target_category"] = pd.Categorical.from_codes(
-            data["target_category"].map(lambda val: ImageCategoryEnum[val]),
-            categories=[cat.name for cat in ImageCategoryEnum],
-            ordered=True,
-        ).remove_unused_categories()
+        data["target_category"] = _as_ordered_categorical(data["target_category"], ImageCategoryEnum)
     return data
+
+
+def _as_ordered_categorical(values: pd.Series, enum_cls) -> pd.Categorical:
+    """Categorical over `enum_cls`'s member names, ordered by the enum's declaration order."""
+    categories = [member.name for member in enum_cls]
+    unknown = set(values.dropna().unique()) - set(categories)
+    if unknown:
+        raise ValueError(f"values not in {enum_cls.__name__}: {sorted(unknown)}")
+    return pd.Categorical(values, categories=categories, ordered=True).remove_unused_categories()

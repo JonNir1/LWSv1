@@ -161,11 +161,11 @@ class SearchArray:
 
     @property
     def mat_path(self) -> str:
-        return self._get_path(self._version, self._array_type, self._num, "mat")
+        return self.get_path(self._version, self._array_type, self._num, "mat")
 
     @property
     def image_path(self) -> str:
-        return self._get_path(self._version, self._array_type, self._num, "bmp")
+        return self.get_path(self._version, self._array_type, self._num, "bmp")
 
     def get_categories(self) -> npt_.NDArray[ImageCategoryEnum]:
         """
@@ -180,13 +180,20 @@ class SearchArray:
         return cls._is_in_rectangle(p[0], p[1], cls._BOTTOM_STRIP_TOP_LEFT, cls._BOTTOM_STRIP_BOTTOM_RIGHT)
 
     @staticmethod
-    def _get_path(
+    def get_path(
             arr_version: int, arr_type: SearchArrayCategoryEnum, arr_num: int, file_type: str
     ) -> str:
+        """
+        Path to a stimulus file, e.g. `<SEARCH_ARRAY_PATH>/generated_stim1/color/image_12.mat`.
+
+        The category directory is the bare category name. `from_mat` parses it back with
+        `SearchArrayCategoryEnum[dir_name.upper()]`, so an `array_` prefix here would make the two disagree and
+        every path this returns point at a file that does not exist.
+        """
         return os.path.join(
             cnfg.SEARCH_ARRAY_PATH,
             f"generated_stim{arr_version}",
-            f"array_{arr_type.name.lower()}",
+            arr_type.name.lower(),
             f"image_{arr_num}.{file_type}",
         )
 
