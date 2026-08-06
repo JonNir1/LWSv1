@@ -391,7 +391,7 @@ swallowed.
 `test_unclosed_final_trial` and `test_dropped_end_trigger_does_not_merge_trials` (both `xfail(strict)`).
 
 A scan-in-order version that dropped unclosed segments was written and then reverted (`74129aa`, reverted in
-`d7b4d2c`): discarding a trial is safe but lossy, and a better option exists.
+`eff16a7`): discarding a trial is safe but lossy, and a better option exists.
 
 **Agreed approach — recover the boundary from `TRIAL_END`.** `_ExperimentTriggerEnum` carries `TRIAL_START`/
 `TRIAL_END` alongside `STIMULUS_ON`/`STIMULUS_OFF`; `TRIAL_END` lands roughly 1 s after `STIMULUS_OFF`. When a
