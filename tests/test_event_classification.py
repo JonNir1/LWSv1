@@ -39,21 +39,11 @@ class TestIdentificationTimeLookup:
         lookup = _identification_time_lookup(make_idents([("target0", "hit", 4000.0)]))
         assert lookup.loc[(1, 1, "target0")] == 4000.0
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="C4: false-alarm rows carry the nearest target, are sorted earlier in time, and win under "
-        "keep='first' - so the FA time is used as target0's identification time",
-    )
     def test_false_alarm_does_not_shadow_the_real_hit(self):
         """FA near target0 at t=500, genuine hit on target0 at t=4000. Identification time must be 4000."""
         idents = make_idents([("target0", "false_alarm", 500.0), ("target0", "hit", 4000.0)])
         assert _identification_time_lookup(idents).loc[(1, 1, "target0")] == 4000.0
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="C4/decision 3: keep='first' happens to give the first hit only because rows arrive time-sorted; "
-        "the lookup does not sort or aggregate, so the guarantee is incidental",
-    )
     def test_repeated_hit_does_not_move_identification_time(self):
         """Rows deliberately supplied out of order: the earliest hit must still win."""
         idents = make_idents([("target1", "repeated_hit", 3000.0), ("target1", "hit", 1000.0)])
@@ -83,11 +73,6 @@ class TestBeforeAfterIdentification:
         assert is_before_identification(data, ident).tolist() == [True, True]
         assert is_after_identification(data, ident).tolist() == [False, False]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="C4/decision 1: an unmapped (subject, trial, target) yields NaN and is silently swallowed as False. "
-        "Every target should have a time, so this must raise instead",
-    )
     def test_unknown_target_raises(self):
         """A target with no identification row at all is a data error, not a 'not LWS' verdict."""
         ident = _identification_time_lookup(make_idents([("target0", "hit", 4000.0)]))

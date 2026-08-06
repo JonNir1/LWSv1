@@ -1,8 +1,14 @@
+import warnings
 from typing import Literal, Callable
 
 import pandas as pd
 
+import constants as cnst
 from analysis.helpers.funnels.funnel_config import IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA
+from data_models.LWSEnums import SignalDetectionCategoryEnum
+
+# identification categories that count as "the subject identified this target"
+_HIT_CATEGORIES = frozenset({SignalDetectionCategoryEnum.HIT, SignalDetectionCategoryEnum.REPEATED_HIT})
 
 
 def check_lws_criteria(
@@ -68,8 +74,9 @@ def is_on_target(
 
 def is_before_identification(event_data: pd.DataFrame, ident_time: pd.Series) -> pd.Series:
     """
-    True if event ends before identification time.
-    If identification time is missing/NaN -> returns False (conservative).
+    True if the event ends before the target was identified.
+    A target that was never identified has `time = inf`, so every event on it qualifies.
+    Events with a missing `end_time` return False (conservative); a missing identification time raises.
     """
     t = _map_ident_time(event_data, ident_time)
     out = event_data["end_time"] < t
@@ -79,8 +86,9 @@ def is_before_identification(event_data: pd.DataFrame, ident_time: pd.Series) ->
 
 def is_after_identification(event_data: pd.DataFrame, ident_time: pd.Series) -> pd.Series:
     """
-    True if event starts after identification time.
-    If identification time is missing/NaN -> returns False (conservative).
+    True if the event starts after the target was identified.
+    A target that was never identified has `time = inf`, so no event on it qualifies.
+    Events with a missing `start_time` return False (conservative); a missing identification time raises.
     """
     t = _map_ident_time(event_data, ident_time)
     out = event_data["start_time"] > t
@@ -121,23 +129,42 @@ def _distance_columns(event_data: pd.DataFrame, event_type: Literal["fixation", 
 
 def _identification_time_lookup(idents: pd.DataFrame) -> pd.Series:
     """
-    Build a lookup Series mapping (subject, trial, target) -> time.
-    If duplicates exist, keep the first.
+    Build a lookup Series mapping (subject, trial, target) -> the time the target was identified.
+
+    Only confirmed identifications count: the time is that of the *first* hit on the target, so a `repeated_hit` does
+    not move it. Targets that were never identified are carried through from their `miss` row with `time = inf`, which
+    makes every on-target event on them pre-identification. False alarms identify no target and carry no target label
+    (see `_classify_hits_and_false_alarms`), so they cannot shadow a real hit.
     """
-    required = {"subject", "trial", "target", "time"}
+    required = {"subject", "trial", "target", "time", cnst.IDENTIFICATION_CATEGORY_STR}
     missing = required - set(idents.columns)
     if missing:
         raise KeyError(f"`idents` missing columns: {sorted(missing)}")
-    s = idents.dropna(subset=["time"]).set_index(["subject", "trial", "target"])["time"]
-    if s.index.has_duplicates:
-        s = s[~s.index.duplicated(keep="first")]
-    return s
+    labelled = idents[idents["target"].notna()]
+    categories = labelled[cnst.IDENTIFICATION_CATEGORY_STR]
+    identified = labelled[categories.isin(_HIT_CATEGORIES)]
+    unidentified = labelled[categories == SignalDetectionCategoryEnum.MISS]
+    keys = ["subject", "trial", "target"]
+    lookup = pd.concat([
+        identified.groupby(keys, observed=True)["time"].min(),    # first hit wins over any repeated hit
+        unidentified.set_index(keys)["time"],                     # inf
+    ])
+    if lookup.index.has_duplicates:
+        # a target cannot be both hit and missed; keep the hit and surface the inconsistency
+        duplicated = lookup.index[lookup.index.duplicated()].tolist()
+        warnings.warn(f"targets classified as both hit and miss: {duplicated}", RuntimeWarning)
+        lookup = lookup[~lookup.index.duplicated(keep="first")]
+    return lookup
 
 
 def _map_ident_time(event_data: pd.DataFrame, id_time: pd.Series) -> pd.Series:
     """
     Map identification time into event_data rows by (subject, trial, target).
     Returns a float Series aligned to event_data.index.
+
+    Every target has an identification time - a finite one if it was hit, `inf` if it was missed - so an unmapped key
+    means the identification table and the event table disagree about which targets exist. That is a data error, and
+    silently treating it as "not LWS" would hide it, so it raises.
     """
     required = {"subject", "trial", "target"}
     missing = required - set(event_data.columns)
@@ -145,4 +172,11 @@ def _map_ident_time(event_data: pd.DataFrame, id_time: pd.Series) -> pd.Series:
         raise KeyError(f"`event_data` missing columns: {sorted(missing)}")
 
     key = pd.MultiIndex.from_frame(event_data[["subject", "trial", "target"]])
-    return pd.Series(key.map(id_time), index=event_data.index, dtype=float)
+    mapped = pd.Series(key.map(id_time), index=event_data.index, dtype=float)
+    if mapped.isna().any():
+        unmapped = key[mapped.isna().to_numpy()].unique().tolist()
+        raise KeyError(
+            f"{len(unmapped)} (subject, trial, target) key(s) have no identification time, e.g. {unmapped[:5]}. "
+            f"Every target should appear in `idents` as a hit or a miss."
+        )
+    return mapped

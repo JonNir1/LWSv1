@@ -58,8 +58,9 @@ def test_h7_long_fixation_cap_is_immaterial_in_this_dataset(loaded, capsys):
 
 @pytest.mark.xfail(
     strict=True,
-    reason="C4: measured 2026-08-06 - 12 targets take their identification time from a preceding false alarm, "
-    "truncating the LWS window by a median of 3684 ms (max 12904 ms)",
+    reason="C4: FIXED IN CODE, but these pickles predate the fix. Measured 2026-08-06 on the stale build - 12 "
+    "targets take their identification time from a preceding false alarm, truncating the LWS window by a median "
+    "of 3684 ms (max 12904 ms). Remove this marker after re-running the pipeline (needs SEARCH_ARRAY_PATH).",
 )
 def test_c4_false_alarms_shadowing_hits(loaded, capsys):
     """C4: count targets whose earliest identification row is a false alarm that precedes a genuine hit."""
