@@ -1,3 +1,4 @@
+import json
 import os
 from time import time
 from typing import List, Union
@@ -41,7 +42,9 @@ def run_pipeline(
         raise ValueError(f"`on_target_threshold_dva` must be non-negative.")
     if visit_merging_time_threshold < 0:
         raise ValueError(f"`visit_merging_time_threshold` must be non-negative.")
-    subjects = parse_all_subjects(raw_data_path, verbose)
+    subjects, bad_subjects = parse_all_subjects(raw_data_path, verbose)
+    if not subjects:
+        raise RuntimeError(f"No subjects could be parsed from {raw_data_path!r}. Failures: {bad_subjects}")
     targets, actions, metadata, idents, fixations, visits = build_dataframes(
         subjects,
         identification_actions=identification_actions,
@@ -62,6 +65,10 @@ def run_pipeline(
         idents.to_pickle(os.path.join(save_to, 'idents.pkl'))
         fixations.to_pickle(os.path.join(save_to, 'fixations.pkl'))
         visits.to_pickle(os.path.join(save_to, 'visits.pkl'))
+        # record which subjects were skipped and why, so a reduced N is visible in the output rather than only in
+        # whatever console the pipeline happened to run in
+        with open(os.path.join(save_to, 'parse_failures.json'), 'w', encoding='utf-8') as f:
+            json.dump({"n_subjects": len(subjects), "failures": bad_subjects}, f, indent=2)
     if verbose:
         print(f"Full pipeline completed in {time() - start_time:.2f} seconds.")
     return targets, actions, metadata, idents, fixations, visits
