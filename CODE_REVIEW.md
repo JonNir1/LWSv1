@@ -8,14 +8,16 @@ numpy 2.3.4 / the installed `peyes`) were verified by running them. Design quest
 on 2026-08-05 and are recorded under **[Resolved design decisions](#resolved-design-decisions)**; the research
 questions they surfaced are under **[Open tasks](#open-tasks-not-bugs)**.
 
-Numbering note: the original C1 was **downgraded to M15** after verifying against `peyes` that it cannot affect any
-current output. That verification surfaced **H7**, and building the test suite surfaced **H8** and **M17**. IDs are
-kept stable so earlier references still resolve.
+Numbering note: IDs are kept stable so earlier references still resolve, even where severity changed.
+**C1 → M15** (verified inert for current output). **H7 → Low** (measured: 6 of 116,947 fixations). **H8 resolved** by
+the numpy/pandas upgrade. New findings surfaced while building the test suite: **H7**, **H8**, **H9**, **M17**.
 
 ### Verification status
 
 `tests/` encodes the findings as executable claims. Each test for an unfixed bug is `xfail(strict=True)`, so the suite
 is green now and turns red the moment a bug is fixed without its marker being removed.
+
+Suite status: **14 passed, 20 xfailed** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6.
 
 | Finding | Test | Status |
 | --- | --- | --- |
@@ -23,12 +25,19 @@ is green now and turns red the moment a bug is fixed without its marker being re
 | C3 `KeyError: None`; attempted mark clobbered | `test_attempted_mark_*` | **confirmed** |
 | C4 FA shadows the real hit | `test_false_alarm_does_not_shadow_the_real_hit` | **confirmed** — lookup returns 500.0, not 4000.0 |
 | C4 first-hit guarantee is incidental | `test_repeated_hit_does_not_move_identification_time` | **confirmed** |
+| C4 **frequency** | `test_c4_false_alarms_shadowing_hits` | **confirmed** — 12 targets affected; LWS window truncated by a median **3684 ms** (max 12904 ms) |
 | H1 cross-eye strip count | `test_does_not_count_across_the_eye_boundary` | **confirmed** — `[2.0, 1.0]` where `[inf, inf]` is correct |
 | H1 wrongly rejects an LWS candidate | `test_leak_can_wrongly_reject_an_lws_candidate` | **confirmed** — count 1 vs threshold 3 |
+| H2 **magnitude** | `test_h2_outlier_exclusion_is_a_noop_for_visits` | **confirmed** — 11,830/116,947 fixations dropped (10.1%), **0** of 5,720 visits |
 | H5 unbalanced triggers | `test_unclosed_final_trial`, `test_dropped_end_trigger_*` | **confirmed** — `np.vstack` `ValueError` |
+| H7 **magnitude** | `test_h7_long_fixation_cap_is_immaterial_in_this_dataset` | **downgraded** — only 6/116,947 (0.005%) exceed the cap |
+| H9 pandas 3 breaks trigger alignment | `TestTrialBoundaries::test_balanced` | **confirmed** — `AttributeError: '_hasna'` |
+| M1 metadata dtypes | `test_m1_metadata_is_object_dtype` | **confirmed** — all numeric columns are `object` |
 | M4 falsy-zero guard | `test_mark_at_row_zero` | **confirmed** — guard assertion does not fire |
+| M15 wrong `pixel_size` | `test_saccade_amplitude_in_degrees` | **confirmed** — 300 px saccade reports **179.24°**, correct is 7.92° |
+| M15 is inert for current output | `test_outlier_reasons_are_independent_of_pixel_size` | **holds** — clean trace yields no outlier reasons |
+| M16 monitor mismatch | `test_peyes_monitor_matches_the_project_monitor` | **confirmed** — 53.1 cm vs 53.0 cm |
 | M17 `del` on unbound name | `test_no_block_trigger_raises` | **confirmed** |
-| H2, H7, C4-frequency, M1 | `test_realdata_findings.py` | **blocked by H8** — cannot read the pickles |
 | C3 real-world frequency | — | **not measured** — raw data (`S:`) not mounted |
 
 Decision 1 semantics (miss → `inf`, every on-target event pre-identification) are pinned as *passing* tests, so a
@@ -42,6 +51,9 @@ future change cannot alter them silently.
 | **High** | Wrong or misleading results under plausible data conditions; or makes results irreproducible. |
 | **Medium** | Latent bug, fragile assumption, or a real statistical concern that changes interpretation. |
 | **Low** | Style, dead code, tooling, documentation. |
+
+Environment these results were produced on: numpy 2.5.1, pandas 3.0.5, peyes 0.0.9.6, Python 3.12.2.
+Reproduce with `pytest tests/ -q`; add `-s` to see the measured magnitudes.
 
 ---
 
@@ -173,8 +185,14 @@ Consequences, verified:
 - `dropna` does not remove `inf`, so a missed target keeps `time = inf`. That part is correct (decision 1), but it
   means the docstring's "missing -> False (conservative)" describes a branch that should never be reachable.
 
-**Outcome.** Direct corruption of the two headline constructs. The `no_miss_with_false_alarm` trial criterion masks only
-the subset of trials that have *both* a miss and a FA; the hit-preceded-by-FA case is not covered.
+**Outcome — measured.** Against the built pickles (2026-08-06): of 1,639 identification rows, 47 are false alarms and
+**all 47 carry a target label**. 19 targets have both a false alarm and a hit, and in **12** of them the false alarm
+comes first — so those 12 take their identification time from the false alarm. The LWS window is truncated by a
+median of **3,684 ms** (max 12,904 ms): visits in that window are misclassified as target-returns instead of LWS
+candidates.
+
+Direct corruption of the two headline constructs. The `no_miss_with_false_alarm` trial criterion masks only the subset
+of trials that have *both* a miss and a FA; the hit-preceded-by-FA case is not covered.
 
 **Fix — at the source (decision 2).** A false alarm is not an identification of any target, so it must not carry a
 target label. In `target_identifications.py:_classify_hits_and_false_alarms`, null out the target once the row is
@@ -271,10 +289,14 @@ built in stage 1 from *all* fixations, and the visit table carries no outlier co
 `build_event_classification_funnel(..., event_type="visit", exclude="outliers"|"both")` accepts and appears to honour
 the request; `"both"` is the default.
 
-**Outcome.** Every visit-level analysis (the primary unit of analysis in `time_on_task`, `time_in_trial`,
-`spatial_effects`, `ssm_and_ab`) silently includes outlier-derived visits, while the parallel fixation-level analysis
-excludes them. Fixation- and visit-level results are therefore not comparable, and the discrepancy is invisible from
-the call site.
+**Outcome — measured.** Against the built pickles (2026-08-06), `drop_outliers=True` removes **11,830 of 116,947
+fixations (10.1%)** and **0 of 5,720 visits** — an exact no-op, confirmed by
+`test_h2_outlier_exclusion_is_a_noop_for_visits`.
+
+So every visit-level analysis (the primary unit in `time_on_task`, `time_in_trial`, `spatial_effects`, `ssm_and_ab`)
+silently includes outlier-derived visits, while the parallel fixation-level analysis excludes a tenth of its data.
+The two event levels are therefore built on materially different samples, and the discrepancy is invisible from the
+call site.
 
 **Fix — now.** What makes a visit an outlier is an open research question (T2), so do **not** invent a rule. Make the
 API honest instead: in `build_event_classification_funnel`, when `event_type == "visit"` and `exclude` is `"outliers"`
@@ -419,7 +441,7 @@ rule is visible rather than silent.
 
 ---
 
-### H7. Fixations longer than 2500 ms are silently dropped as outliers, by an inherited library default
+### H7 (downgraded to Low after measurement). Fixations longer than 2500 ms are dropped as outliers, by an inherited library default
 
 **Where:** `data_models/parse/eye_movements.py:12-13`; effective values verified from `peyes._DataModels.config`
 
@@ -433,11 +455,23 @@ peyes.set_event_configurations("saccade", min_duration=_MIN_EVENT_DURATION)
 Any fixation longer than 2.5 s therefore gets `outlier_reasons = ["max_duration"]` and is removed by
 `read_data(drop_outliers=True)`, the default for every funnel.
 
-**Outcome.** This is an undocumented, inherited analysis decision sitting directly on the dependent variable. In a
-visual-search task with long trials, a multi-second dwell on a target the subject has *not* yet identified is precisely
-the strongest LWS candidate — exactly the events most likely to exceed 2.5 s. The exclusion is invisible: it is a
-library default, not a project constant, and appears nowhere in `config.py`, `funnel_config.py`, or the
-`default_value_selection/` notebooks that justify every *other* hyperparameter.
+**Outcome — measured, and much smaller than predicted.** Against the built pickles (2026-08-06):
+
+| | |
+| --- | --- |
+| fixations total | 116,947 |
+| duration > 2500 ms | **6 (0.005%)** |
+| duration percentiles | p50 = 170 ms, p95 = 346 ms, p99 = 770 ms, max = 2797 ms |
+| of those 6, on-target | **6 (100%)** vs a 10.0% base rate |
+
+The predicted *direction* holds exactly — every fixation the cap removes is on-target, against a 10% base rate — but
+at n = 6 it cannot move any result. **Downgraded from High: the mechanism is real, the impact is not.**
+
+What remains is a hygiene point rather than a correctness one: this is an inherited analysis decision sitting directly
+on the dependent variable, invisible because it is a library default rather than a project constant, and it appears
+nowhere in `config.py`, `funnel_config.py`, or the `default_value_selection/` notebooks that justify every *other*
+hyperparameter. It should be chosen rather than defaulted (T3), and it should be watched: the guard assertion in
+`test_h7_long_fixation_cap_is_immaterial_in_this_dataset` fails if the affected share ever exceeds 0.1%.
 
 Note this is unrelated to M15 — the criterion is duration-based, so it is computed correctly. The concern is that the
 threshold was never chosen.
@@ -454,9 +488,56 @@ longer, or `inf` is a research decision (see T3).
 
 ---
 
-### H8. The venv cannot read its own pickles: `peyes` pins numpy 1.x, the pickles were written by numpy 2.x
+### H9. pandas 3.0 breaks trigger/gaze alignment: stage 1 cannot run
 
-**Where:** environment; surfaced by `tests/test_realdata_findings.py` (all four checks currently skip)
+**Where:** `data_models/parse/triggers_and_gaze.py:139`
+
+```python
+triggers.loc[:, _TRIGGER_COLUMNS] = triggers[_TRIGGER_COLUMNS].fillna(0).astype('Int64')
+```
+
+**Description.** After the outer merge, `trigger` is `float64` (the column holds `IntEnum` members, which pandas
+infers as `int64`, then the gaze-only rows introduce NaN) while `action` is `Int64`. Assigning an `Int64` frame into
+`.loc[:, cols]` over that dtype combination raises under pandas 3.0.5:
+
+```
+AttributeError: 'Series' object has no attribute '_hasna'
+```
+
+Confirmed the real parser produces the breaking combination — `_read_triggers` returns
+`{'time': float64, 'trigger': int64, 'action': Int64}`, and the merge turns `trigger` into `float64`. Reproduced
+standalone; it is not an artefact of the test fixtures. Under pandas 2.3.3 the same line worked, so this arrived with
+the upgrade taken to resolve H8.
+
+**Outcome.** Blocking for stage 1: no subject can be parsed from raw data on the current environment. Stage 2 is
+unaffected — the pickles read fine and every analysis path works.
+
+**Fix.** Avoid the mixed-dtype `.loc` round-trip. Assign column-wise, and keep `trigger` a stable dtype rather than
+letting the merge decide:
+
+```python
+for col in _TRIGGER_COLUMNS:
+    triggers[col] = triggers[col].fillna(0).astype("Int64")
+```
+
+Better still, stop relying on inference: build `trigger` as `Int64` in `_read_triggers` and keep the enum conversion
+at the point of use, so the merge cannot silently retype it.
+
+**Validate.** Remove the `xfail` markers from `TestTrialBoundaries::test_balanced` and `::test_two_balanced_trials`.
+Then parse one subject end-to-end and confirm trial counts match E-Prime's.
+
+---
+
+### H8. Version-fragile pickles: `peyes` pins numpy 1.x, the pickles were written by numpy 2.x
+
+**Status: resolved for now** (2026-08-06) — numpy/pandas were upgraded to 2.5.1 / 3.0.5, above `peyes`'s pin. `peyes`
+imports *and* runs correctly outside the pin: segmentation and `create_events` were both verified on a synthetic
+trace, so the declared `numpy~=1.2` is conservative rather than a real incompatibility. The pickles now load and all
+four empirical checks run. The upgrade did surface **H9**.
+
+The underlying fragility below is unchanged and still worth fixing.
+
+**Where:** environment; surfaced by `tests/test_realdata_findings.py`
 
 **Description.** Found while trying to run the empirical checks. `peyes 0.0.9.6` declares `Requires-Dist: numpy~=1.2`
 (i.e. `>=1.2, <2.0`), so installing it downgraded the project venv from numpy 2.3.4 to **1.26.4**. The six pickles in
@@ -474,29 +555,23 @@ So the environment that can *run* the pipeline cannot *read* its output, and vic
 | `import peyes` / run stage 1 | works | unsupported by the pin |
 | read the existing pickles | **fails** | works |
 
-**Outcome.** Blocking: no analysis notebook and no empirical validation can run in the venv as it stands. It also
-means the existing pickles were produced by an environment that no longer exists on this machine, so they are not
-reproducible from the current lockfile-free setup — a concrete instance of the H3 risk rather than a separate one.
+**Outcome (at the time).** Blocking: no analysis notebook and no empirical validation could run. It also means the
+existing pickles were produced by an environment that no longer exists on this machine, so they are not reproducible
+from the current lockfile-free setup — a concrete instance of the H3 risk rather than a separate one.
 
 More generally, pickle is being used as the interchange format between stage 1 and stage 2 (`*.pkl`, plus the
 per-subject caches). Pickle is not version-portable: it couples the stored data to the exact class and module layout of
 the writing environment. Any future dependency bump can silently orphan the whole dataset the same way.
 
-**Fix.** Two levels.
+**Fix (remaining work).** Pin the environment — `pyproject.toml` dependencies plus a lockfile — so the analysis
+environment is reproducible, and record that `peyes` is deliberately run above its declared `numpy~=1.2` pin, with the
+smoke test as the justification. Then move the stage-1/stage-2 interchange off pickle to a version-portable columnar
+format (parquet/feather). The object columns currently in these frames — `outlier_reasons` (list) and the visits'
+`event` (list) — need a defined encoding before that move.
 
-1. *Unblock now* — pick one, deliberately:
-   - re-run the pipeline under the pinned numpy 1.x so the pickles match the runtime (needs the raw data on `S:`,
-     which was not mounted during this review); or
-   - upgrade numpy to ≥2 and run `peyes` outside its declared pin, having first checked it actually works (the pin may
-     be conservative rather than a real incompatibility); or
-   - keep two environments, one per stage, and accept the split explicitly.
-2. *Stop it recurring* — pin the environment (`pyproject.toml` dependencies + a lockfile) so the analysis environment
-   is reproducible, and move the stage-1/stage-2 interchange off pickle to a version-portable columnar format
-   (parquet/feather). The object columns currently in these frames — `outlier_reasons` (list) and the visits' `event`
-   (list) — need a defined encoding before that move.
-
-**Validate.** `pytest tests/test_realdata_findings.py -m realdata` runs instead of skipping. Add an environment
-smoke test asserting `import peyes` and `read_data(cnfg.OUTPUT_PATH)` both succeed in the same interpreter.
+**Validate.** Done: `pytest tests/test_realdata_findings.py` runs instead of skipping. Still to add: an environment
+smoke test asserting `import peyes`, a `detect_eye_movements` round-trip, and `read_data(cnfg.OUTPUT_PATH)` all
+succeed in the same interpreter, so a future dependency change cannot re-open this silently.
 
 ---
 
@@ -1005,15 +1080,16 @@ wherever the two are compared.
 
 ## Fix order
 
-0. **H8 first — it is blocking.** Nothing can be measured or re-run until the venv can both `import peyes` and read
-   the pickles.
+0. ~~H8~~ — resolved by the numpy/pandas upgrade. **H9 now blocks stage 1**: fix it first or no subject can be
+   re-parsed from raw data.
 1. **H3 (cache invalidation) next.** Until per-subject pickles invalidate on code change, you cannot tell whether any
    later fix took effect.
-2. **C2, C3, C4** — these change the numbers. C4 spans the parser and the funnel, so land it as one change.
-3. **H1, H2, H4, H5, H6.**
-4. **H7** — needs decision T3 first; until then at least surface the count of fixations it removes.
-5. **L1** — write the tests in the table as you fix each item, not after.
-6. **M1–M16**, then **L2–L6**. M15 is a one-line fix with no re-run needed; M16 pairs naturally with H7, since both
-   set `peyes` global configuration and should land in the same `configure_peyes()` function.
+2. **C2, C3, C4** — these change the numbers. C4 spans the parser and the funnel, so land it as one change; expect the
+   12 measured mis-timed targets to move between the LWS and target-return categories.
+3. **H1, H2, H4, H5, H6.** H2 is the largest measured effect after C4 (10.1% of fixations vs 0% of visits).
+4. **L1** — the tests exist; remove each `xfail` marker as its fix lands. `strict=True` means a silent fix fails the
+   suite, so the markers cannot rot.
+5. **M1–M17**, then **L2–L6**. M15 is a one-line fix with no re-run needed; M16 and H7 both set `peyes` global
+   configuration and should land together in one `configure_peyes()`.
 
 Then delete every per-subject pickle and re-run the pipeline once, with the C4 invariant test as the gate.
