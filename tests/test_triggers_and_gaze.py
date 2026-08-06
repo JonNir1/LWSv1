@@ -42,30 +42,16 @@ class TestActionClassification:
         path = write_trigger_log(tmp_path, [Trg.START_RECORD, Trg.SPACE_ACT, Trg.NOT_CONFIRM_ACT, Trg.STOP_RECORD])
         assert actions_of(_read_triggers(path)) == [SubjectActionCategoryEnum.MARK_AND_REJECT]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="C2: MARK_ONLY is written to a stray 'subj_action' column instead of cnst.ACTION_STR, "
-        "so it never reaches the actions table",
-    )
     def test_mark_only_is_recorded(self, tmp_path):
         """Subject marks a target but the trial ends before they confirm."""
         path = write_trigger_log(tmp_path, [Trg.START_RECORD, Trg.SPACE_ACT, Trg.STIMULUS_OFF, Trg.STOP_RECORD])
         assert actions_of(_read_triggers(path)) == [SubjectActionCategoryEnum.MARK_ONLY]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="C3: with no pending mark, start_identify_idx is None and `.loc[None, ...]` raises KeyError",
-    )
     def test_attempted_mark_without_pending_mark(self, tmp_path):
         """A rejected space press with no preceding successful mark is an event in its own right."""
         path = write_trigger_log(tmp_path, [Trg.START_RECORD, Trg.SPACE_NO_ACT, Trg.STOP_RECORD])
         assert actions_of(_read_triggers(path)) == [SubjectActionCategoryEnum.ATTEMPTED_MARK]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="C3: ATTEMPTED_MARK overwrites the pending mark's row, then CONFIRM_ACT overwrites it again, "
-        "so the attempted mark is lost",
-    )
     def test_attempted_mark_does_not_clobber_pending_mark(self, tmp_path):
         """Space pressed twice before confirming: both the rejected press and the confirmed mark should survive."""
         path = write_trigger_log(
@@ -75,11 +61,6 @@ class TestActionClassification:
             [SubjectActionCategoryEnum.MARK_AND_CONFIRM, SubjectActionCategoryEnum.ATTEMPTED_MARK]
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="M4: index label 0 is falsy, so `assert not start_identify_idx` and `if start_identify_idx and ...` "
-        "misread a pending mark held at row 0",
-    )
     def test_mark_at_row_zero(self, tmp_path):
         """A trigger log whose very first row is a key press."""
         path = write_trigger_log(tmp_path, [Trg.SPACE_ACT, Trg.SPACE_ACT, Trg.CONFIRM_ACT])

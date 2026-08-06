@@ -178,17 +178,20 @@ def _read_triggers(triggers_path: str) -> pd.DataFrame:
     # add `action` column
     triggers[cnst.ACTION_STR] = SubjectActionCategoryEnum.NO_ACTION
     start_identify_idx = None
-    for idx, series in triggers.iterrows():
-        trg = series[cnst.TRIGGER_STR]
+    # iterate the trigger column directly: `iterrows()` coerces each row to a common dtype, which turns the trigger
+    # into a float and makes `trg.name` unavailable in the assertion messages below.
+    for idx, code in triggers[cnst.TRIGGER_STR].items():
+        trg = _ExperimentTriggerEnum(code)
 
         if trg == _ExperimentTriggerEnum.SPACE_NO_ACT:
-            # subject attempted to mark target but failed
-            triggers.loc[start_identify_idx, cnst.ACTION_STR] = SubjectActionCategoryEnum.ATTEMPTED_MARK
+            # subject pressed space but E-Prime rejected the mark; this is an event in its own right and does not
+            # belong to any pending mark, so record it on its own row
+            triggers.loc[idx, cnst.ACTION_STR] = SubjectActionCategoryEnum.ATTEMPTED_MARK
             continue
 
         if trg == _ExperimentTriggerEnum.SPACE_ACT:
             # subject marks target
-            assert not start_identify_idx, f"{trg.name} follows previous {trg.name} (idx: {idx})"
+            assert start_identify_idx is None, f"{trg.name} follows previous {trg.name} (idx: {idx})"
             start_identify_idx = idx
             continue
 
@@ -197,7 +200,7 @@ def _read_triggers(triggers_path: str) -> pd.DataFrame:
             _ExperimentTriggerEnum.NOT_CONFIRM_ACT,
         ]:
             # subject performed an action after marking target
-            assert start_identify_idx and start_identify_idx < idx,\
+            assert start_identify_idx is not None and start_identify_idx < idx,\
                 f"{trg.name} not follows a previous {_ExperimentTriggerEnum.SPACE_ACT.name} (idx: {idx})"
             if trg == _ExperimentTriggerEnum.CONFIRM_ACT:
                 # subject confirms the identified target
@@ -208,14 +211,14 @@ def _read_triggers(triggers_path: str) -> pd.DataFrame:
             start_identify_idx = None
             continue
 
-        if start_identify_idx and trg in [
+        if start_identify_idx is not None and trg in [
             _ExperimentTriggerEnum.ABORT_TRIAL,
             _ExperimentTriggerEnum.STIMULUS_OFF,
             _ExperimentTriggerEnum.TRIAL_END,
         ]:
             # subject ran out of time before confirming target
             assert start_identify_idx < idx, f"{trg.name} not follows a previous {_ExperimentTriggerEnum.SPACE_ACT.name} (idx: {idx})"
-            triggers.loc[start_identify_idx, 'subj_action'] = SubjectActionCategoryEnum.MARK_ONLY
+            triggers.loc[start_identify_idx, cnst.ACTION_STR] = SubjectActionCategoryEnum.MARK_ONLY
             start_identify_idx = None
             continue
     triggers[cnst.ACTION_STR] = triggers[cnst.ACTION_STR].astype('Int64')
