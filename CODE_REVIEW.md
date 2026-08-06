@@ -849,7 +849,7 @@ way to write one).
 
 ### M7. Cumulative funnel columns keep the raw criterion name
 
-**STATUS: FIXED** (2026-08-06, `<SHA>`). Reopened after the first attempt closed it as documentation-only.
+**STATUS: FIXED** (2026-08-06, `8a8ad54`). Reopened after the first attempt closed it as documentation-only.
 
 Funnel columns now carry an explicit `upto_` prefix - `upto_on_target` reads as "passed everything up to and
 including on_target". This avoids the objection to a bare `passed_` prefix, which could equally be read as "passed
