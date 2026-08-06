@@ -9,8 +9,30 @@ on 2026-08-05 and are recorded under **[Resolved design decisions](#resolved-des
 questions they surfaced are under **[Open tasks](#open-tasks-not-bugs)**.
 
 Numbering note: the original C1 was **downgraded to M15** after verifying against `peyes` that it cannot affect any
-current output, and that verification surfaced a new High issue (**H7**). IDs are kept stable so earlier references
-still resolve.
+current output. That verification surfaced **H7**, and building the test suite surfaced **H8** and **M17**. IDs are
+kept stable so earlier references still resolve.
+
+### Verification status
+
+`tests/` encodes the findings as executable claims. Each test for an unfixed bug is `xfail(strict=True)`, so the suite
+is green now and turns red the moment a bug is fixed without its marker being removed.
+
+| Finding | Test | Status |
+| --- | --- | --- |
+| C2 `MARK_ONLY` never recorded | `test_mark_only_is_recorded` | **confirmed** |
+| C3 `KeyError: None`; attempted mark clobbered | `test_attempted_mark_*` | **confirmed** |
+| C4 FA shadows the real hit | `test_false_alarm_does_not_shadow_the_real_hit` | **confirmed** — lookup returns 500.0, not 4000.0 |
+| C4 first-hit guarantee is incidental | `test_repeated_hit_does_not_move_identification_time` | **confirmed** |
+| H1 cross-eye strip count | `test_does_not_count_across_the_eye_boundary` | **confirmed** — `[2.0, 1.0]` where `[inf, inf]` is correct |
+| H1 wrongly rejects an LWS candidate | `test_leak_can_wrongly_reject_an_lws_candidate` | **confirmed** — count 1 vs threshold 3 |
+| H5 unbalanced triggers | `test_unclosed_final_trial`, `test_dropped_end_trigger_*` | **confirmed** — `np.vstack` `ValueError` |
+| M4 falsy-zero guard | `test_mark_at_row_zero` | **confirmed** — guard assertion does not fire |
+| M17 `del` on unbound name | `test_no_block_trigger_raises` | **confirmed** |
+| H2, H7, C4-frequency, M1 | `test_realdata_findings.py` | **blocked by H8** — cannot read the pickles |
+| C3 real-world frequency | — | **not measured** — raw data (`S:`) not mounted |
+
+Decision 1 semantics (miss → `inf`, every on-target event pre-identification) are pinned as *passing* tests, so a
+future change cannot alter them silently.
 
 **Severity:**
 
@@ -432,7 +454,84 @@ longer, or `inf` is a research decision (see T3).
 
 ---
 
+### H8. The venv cannot read its own pickles: `peyes` pins numpy 1.x, the pickles were written by numpy 2.x
+
+**Where:** environment; surfaced by `tests/test_realdata_findings.py` (all four checks currently skip)
+
+**Description.** Found while trying to run the empirical checks. `peyes 0.0.9.6` declares `Requires-Dist: numpy~=1.2`
+(i.e. `>=1.2, <2.0`), so installing it downgraded the project venv from numpy 2.3.4 to **1.26.4**. The six pickles in
+`cnfg.OUTPUT_PATH` were written under numpy ≥2 — verified by inspecting the raw bytes, which reference
+`numpy._core.numeric`, the 2.x module path. Under numpy 1.26.4 that path does not exist:
+
+```
+ModuleNotFoundError: No module named 'numpy._core.numeric'
+```
+
+So the environment that can *run* the pipeline cannot *read* its output, and vice versa. Current state:
+
+| | numpy 1.26.4 (now) | numpy ≥2 |
+| --- | --- | --- |
+| `import peyes` / run stage 1 | works | unsupported by the pin |
+| read the existing pickles | **fails** | works |
+
+**Outcome.** Blocking: no analysis notebook and no empirical validation can run in the venv as it stands. It also
+means the existing pickles were produced by an environment that no longer exists on this machine, so they are not
+reproducible from the current lockfile-free setup — a concrete instance of the H3 risk rather than a separate one.
+
+More generally, pickle is being used as the interchange format between stage 1 and stage 2 (`*.pkl`, plus the
+per-subject caches). Pickle is not version-portable: it couples the stored data to the exact class and module layout of
+the writing environment. Any future dependency bump can silently orphan the whole dataset the same way.
+
+**Fix.** Two levels.
+
+1. *Unblock now* — pick one, deliberately:
+   - re-run the pipeline under the pinned numpy 1.x so the pickles match the runtime (needs the raw data on `S:`,
+     which was not mounted during this review); or
+   - upgrade numpy to ≥2 and run `peyes` outside its declared pin, having first checked it actually works (the pin may
+     be conservative rather than a real incompatibility); or
+   - keep two environments, one per stage, and accept the split explicitly.
+2. *Stop it recurring* — pin the environment (`pyproject.toml` dependencies + a lockfile) so the analysis environment
+   is reproducible, and move the stage-1/stage-2 interchange off pickle to a version-portable columnar format
+   (parquet/feather). The object columns currently in these frames — `outlier_reasons` (list) and the visits' `event`
+   (list) — need a defined encoding before that move.
+
+**Validate.** `pytest tests/test_realdata_findings.py -m realdata` runs instead of skipping. Add an environment
+smoke test asserting `import peyes` and `read_data(cnfg.OUTPUT_PATH)` both succeed in the same interpreter.
+
+---
+
 ## Medium
+
+### M17. `del ... start_idx` raises `UnboundLocalError` when the log has no BLOCK trigger
+
+**Where:** `data_models/parse/triggers_and_gaze.py:90-102`
+
+```python
+for trg in _ExperimentTriggerEnum:
+    ...
+    if not is_block_start.any():
+        continue          # block_num / start_idx never bound
+    start_idx = is_block_start.idxmax()
+    ...
+del trg, name, block_num, is_block_start, start_idx   # unconditional
+```
+
+**Description.** The `del` is manual scratch-variable cleanup, but it runs unconditionally while three of the five
+names are bound only inside the loop body's `if` branch. A trigger log containing no `BLOCK_*` trigger at all raises
+`UnboundLocalError: cannot access local variable 'start_idx'`. Confirmed by
+`tests/test_triggers_and_gaze.py::TestTrialBoundaries::test_no_block_trigger_raises`.
+
+**Outcome.** Latent in production — every real session should emit `BLOCK_1` — but it turns a benign edge case into a
+crash that H4 would convert into a silently dropped subject. Its practical cost today is to testing: the function
+cannot be exercised without constructing block triggers, which is why the boundary tests carry that extra setup.
+
+**Fix.** Delete the `del` statement. It frees nothing meaningful — the names go out of scope when the function
+returns — and scoping the loop body into a helper (`_assign_block_numbers(merged)`) removes the motivation for it
+entirely.
+
+**Validate.** Remove the `xfail` marker from `test_no_block_trigger_raises`.
+
+---
 
 ### M15 (was C1, downgraded after verification). `peyes.create_events` receives `pixel_size = viewer_distance_cm`
 
@@ -906,7 +1005,9 @@ wherever the two are compared.
 
 ## Fix order
 
-1. **H3 (cache invalidation) first.** Until per-subject pickles invalidate on code change, you cannot tell whether any
+0. **H8 first — it is blocking.** Nothing can be measured or re-run until the venv can both `import peyes` and read
+   the pickles.
+1. **H3 (cache invalidation) next.** Until per-subject pickles invalidate on code change, you cannot tell whether any
    later fix took effect.
 2. **C2, C3, C4** — these change the numbers. C4 spans the parser and the funnel, so land it as one change.
 3. **H1, H2, H4, H5, H6.**
