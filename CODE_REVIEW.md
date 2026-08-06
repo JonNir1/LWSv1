@@ -989,25 +989,22 @@ returns nothing. Pipeline runs on a machine without the Desktop path.
 
 ---
 
-### M14. No package structure; `plgrnd2.py` cannot import
+### M14. ~~No package structure~~; `plgrnd2.py` cannot import
 
-**Where:** repo-wide (no `__init__.py` anywhere); `plgrnd2.py:42-43`
+**STATUS: WITHDRAWN in part** (2026-08-06). The packaging half is **not applicable**: this repo is an analysis
+pipeline for a single research project, not a distributable library. Run-from-repo-root is a deliberate,
+adequate contract; `[project]` metadata, `__init__.py` files and an editable install would add ceremony for no
+benefit. `pyproject.toml` exists solely to hold `pythonpath = ["."]` for pytest.
+
+The broken import in the scratchpad was a real (if trivial) defect and is **FIXED** (`b3e1c40`):
 
 ```python
-from analysis.helpers.funnels import build_trial_inclusion_funnel, build_event_classification_funnel, calculate_funnel_step_sizes
+from analysis.helpers.funnels import build_trial_inclusion_funnel, ..., calculate_funnel_step_sizes
 ```
 
-`analysis.helpers.funnels` is an implicit namespace package that exports nothing, and `calculate_funnel_step_sizes`
-does not exist — the function is `calculate_step_sizes` in `size_and_proportion.py`. This import raises `ImportError`.
-
-**Outcome.** The scratchpad is broken, and every module depends on the CWD being the repo root — with no
-`pyproject.toml`, that contract is undocumented and unenforceable.
-
-**Fix.** Add a minimal `pyproject.toml` with `[project]` metadata and install with `pip install -e .`. Add
-`__init__.py` files (or configure a src layout) and re-export the funnel entry points from
-`analysis/helpers/funnels/__init__.py`. Fix the symbol name in `plgrnd2.py`.
-
-**Validate.** `python -c "import plgrnd2"` from a different CWD succeeds.
+`analysis.helpers.funnels` is an implicit namespace package that exports nothing, so importing names *from* it fails
+regardless of packaging, and `calculate_funnel_step_sizes` does not exist — the function is `calculate_step_sizes` in
+`size_and_proportion.py`. Now imports from the defining modules directly, which needs no packaging at all.
 
 ---
 
@@ -1096,11 +1093,16 @@ Suggested layout: `tests/` at repo root, `pytest` + `pytest-cov`, fixtures build
 
 ### L2. No linter/formatter/type-checker configuration
 
-No `pyproject.toml`, `ruff.toml`, or mypy config. Type hints are inconsistent: `parse_subject_info(file_path) -> dict`
-(untyped parameter, unparameterised return), `_extract_singleton_column(df, col_name)` (no annotations),
-`_validate_inputs(...)` (no return type), `detect_eye_movements(..., detector=_DETECTOR)` (untyped). Recommended:
-`ruff` with `select = ["E","W","F","I","B","C4","UP","SIM"]`, `line-length = 120`, plus `mypy` in non-strict mode
-initially (`disallow_untyped_defs = true` for `data_models/` and `analysis/helpers/` only).
+**STATUS: DEFERRED by decision** (2026-08-06) — no linter for now. A ruff config was added and then removed
+(`9805560`, reverted in `4f1a8e2`); it was never installed or run, so it had asserted nothing about the code.
+`pyproject.toml` now holds only the pytest `pythonpath` setting.
+
+Kept as a low-priority note rather than closed, because the underlying observation stands: type hints are
+inconsistent — `_extract_singleton_column(df, col_name)` (no annotations), `_validate_inputs(...)` (no return type),
+`detect_eye_movements(..., detector=_DETECTOR)` (untyped detector). Worth revisiting if the codebase gains other
+contributors, at which point `ruff check` (lint only, no reformatting) is the cheapest first step. Adopting it later
+means absorbing a large one-off diff — mostly import ordering and unused imports — so it is best done deliberately,
+between analyses rather than during one.
 
 ### L3. Resource handling and small correctness nits
 
@@ -1159,7 +1161,8 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | **M7** cumulative funnel column names | naming/API change; touches the R scripts and every notebook |
 | **M10, M11** GAM specification | statistical, in `analysis/R/`; needs your call on the nesting structure |
 | **M12** `px2deg` small-angle approximation | matters only at large eccentricity; needs a decision on where to apply the exact form |
-| **M14** packaging / `plgrnd2.py` import | `pyproject.toml` now exists; `__init__.py` files and the broken scratchpad import remain |
+| ~~**M14** packaging~~ | withdrawn — not a distributable package; the scratchpad import is fixed |
+| **L2** linter | deferred by decision; low priority, revisit if the project gains contributors |
 | **L4** hardcoded strip geometry | wants the stimulus-generation config, which is on `S:` |
 | **L5, L6** | documentation and R hygiene |
 
@@ -1179,7 +1182,7 @@ invalidate themselves (H3), so the next `run_pipeline()` rebuilds from raw. Unti
 3. **H1, H2, H4, H5, H6.** H2 is the largest measured effect after C4 (10.1% of fixations vs 0% of visits).
 4. **L1** — the tests exist; remove each `xfail` marker as its fix lands. `strict=True` means a silent fix fails the
    suite, so the markers cannot rot.
-5. **M1–M17**, then **L2–L6**. M15 is a one-line fix with no re-run needed; M16 and H7 both set `peyes` global
+5. **M1–M17** (M14 withdrawn), then **L3–L6** (L2 deferred). M15 is a one-line fix with no re-run needed; M16 and H7 both set `peyes` global
    configuration and should land together in one `configure_peyes()`.
 
 Then delete every per-subject pickle and re-run the pipeline once, with the C4 invariant test as the gate.
