@@ -1,6 +1,4 @@
-import warnings
 from enum import IntEnum as _IntEnum
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -103,37 +101,23 @@ def _assign_block_numbers(trigs: pd.Series) -> pd.Series:
 
 def _is_between_triggers(trigs: pd.Series, start: int, end: int) -> pd.Series:
     """
-    Mark every sample from each `start` trigger through the first `end` trigger that follows it.
+    Returns a boolean series indicating whether the values in the 'trigs' series occur after 'start' and before 'end'.
 
-    Pairs by scanning in order rather than by position, so an unbalanced log - a trial truncated by the end of the
-    recording, or a dropped `end` trigger - degrades gracefully instead of raising or silently mispairing one
-    segment's start with another's end.
+    KNOWN LIMITATION (CODE_REVIEW.md H5, deferred): pairs `start` and `end` triggers **positionally**, so it requires
+    equal counts of each. An unbalanced log - a trial truncated by the end of the recording, or a dropped
+    `STIMULUS_OFF` - raises `ValueError` from `np.vstack`; equal-but-misaligned counts silently pair one segment's
+    start with another's end.
 
-    An unclosed `start` is **dropped**, with a warning, in both cases where one can occur: a second `start` arriving
-    while one is already open, and a `start` still open at the end of the log. Dropping is deliberate - the segment's
-    true extent is unknown, and guessing it (for instance ending it at the next `start`) would fabricate a boundary
-    and merge inter-segment samples into the data.
+    Deliberately left as-is until the subjects can be re-parsed. The intended fix is to fall back to `TRIAL_END`
+    (~1 s after `STIMULUS_OFF`) when a trial's `STIMULUS_OFF` is missing, which recovers a real boundary instead of
+    either discarding the trial or inventing one - but it can only be validated against raw data.
     """
-    res = pd.Series(False, index=range(len(trigs)))
-    codes = trigs.to_numpy()
-    open_at: Optional[int] = None
-    for pos, code in enumerate(codes):
-        if code == start:
-            if open_at is not None:
-                warnings.warn(
-                    f"trigger {start} at position {pos} while the one at {open_at} is still open; "
-                    f"the {end} trigger appears to be missing, so that segment is dropped.",
-                    RuntimeWarning,
-                )
-            open_at = pos
-        elif code == end and open_at is not None:
-            res.iloc[open_at:pos + 1] = True
-            open_at = None
-    if open_at is not None:
-        warnings.warn(
-            f"trigger {start} at position {open_at} has no matching {end}; ignoring the trailing segment.",
-            RuntimeWarning,
-        )
+    start_idxs = np.nonzero(trigs == start)[0]
+    end_idxs = np.nonzero(trigs == end)[0]
+    start_end_idxs = np.vstack([start_idxs, end_idxs]).T
+    res = pd.Series(np.full_like(trigs, False, dtype=bool))
+    for (start, end) in start_end_idxs:
+        res.iloc[start:end + 1] = True
     return res
 
 

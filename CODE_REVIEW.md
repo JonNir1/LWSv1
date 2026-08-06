@@ -17,10 +17,10 @@ the numpy/pandas upgrade. New findings surfaced while building the test suite: *
 `tests/` encodes the findings as executable claims. Each test for an unfixed bug is `xfail(strict=True)`, so the suite
 is green now and turns red the moment a bug is fixed without its marker being removed.
 
-Suite status: **63 passed, 3 xfailed** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6.
+Suite status: **61 passed, 5 xfailed** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6.
 
-The 3 remaining `xfail`s are all "fixed in code, but the built pickles predate the fix" (C4 frequency, H2 magnitude,
-M1 dtypes). They clear on the next `run_pipeline()`.
+Of the 5 remaining `xfail`s, three are "fixed in code, but the built pickles predate the fix" (C4 frequency, H2
+magnitude, M1 dtypes) and clear on the next `run_pipeline()`. Two are H5, deferred by decision.
 
 | Finding | Test | Status |
 | --- | --- | --- |
@@ -387,7 +387,29 @@ swallowed.
 
 ### H5. `_is_between_triggers` assumes start/end triggers are equal in count and correctly interleaved
 
-**STATUS: FIXED** (`74129aa`).
+**STATUS: DEFERRED** — needs raw-data re-parsing to validate. Confirmed by
+`test_unclosed_final_trial` and `test_dropped_end_trigger_does_not_merge_trials` (both `xfail(strict)`).
+
+A scan-in-order version that dropped unclosed segments was written and then reverted (`74129aa`, reverted in
+`d7b4d2c`): discarding a trial is safe but lossy, and a better option exists.
+
+**Agreed approach — recover the boundary from `TRIAL_END`.** `_ExperimentTriggerEnum` carries `TRIAL_START`/
+`TRIAL_END` alongside `STIMULUS_ON`/`STIMULUS_OFF`; `TRIAL_END` lands roughly 1 s after `STIMULUS_OFF`. When a
+trial's `STIMULUS_OFF` is missing, close the trial at its `TRIAL_END` instead. That yields a *real* boundary, ~1 s
+long rather than however long the inter-trial interval happens to be, so the trial is kept without fabricating its
+extent.
+
+Three things to settle when implementing, all of which need the raw data:
+
+1. How often a `STIMULUS_OFF` is actually missing, and whether it correlates with subject, session position or trial
+   duration. If it does, dropping trials would be a selection effect rather than a rounding error.
+2. Whether `TRIAL_END` is reliably present when `STIMULUS_OFF` is not — they may well be lost together.
+3. Whether the ~1 s tail should be trimmed back to an estimated stimulus offset, since `to_trial_end` feeds the
+   `not_close_to_trial_end` LWS criterion at a 1000 ms threshold; an extra second of tail sits exactly on it.
+
+Until then the original positional pairing stands, documented in the function's docstring. Note H4 changes its
+failure mode for the better: the `ValueError` is now caught as a recoverable parse error, so the affected subject is
+recorded in `bad_subjects` and `parse_failures.json` rather than vanishing silently.
 
 **Where:** `data_models/parse/triggers_and_gaze.py:104-114`
 
@@ -1125,13 +1147,14 @@ wherever the two are compared.
 
 ## Remaining work
 
-Everything Critical and High is fixed and covered by tests. What is left:
+Every Critical is fixed, and every High except H5 (deferred by decision). All are covered by tests. What is left:
 
 | Item | Why it is still open |
 | --- | --- |
 | **T1** d' denominator | research decision |
 | **T2** what makes a *visit* an outlier | research decision; H2 refuses the request until this is settled |
 | **T3** fixation `max_duration` | research decision; the value is now explicit in `config.py` at its previous 2500 ms |
+| **H5** trigger pairing | deferred by decision: fall back to `TRIAL_END`; needs raw data to validate |
 | **C3 frequency** | needs `SEARCH_ARRAY_PATH` on `S:` to re-parse from raw |
 | **M7** cumulative funnel column names | naming/API change; touches the R scripts and every notebook |
 | **M10, M11** GAM specification | statistical, in `analysis/R/`; needs your call on the nesting structure |
@@ -1140,7 +1163,7 @@ Everything Critical and High is fixed and covered by tests. What is left:
 | **L4** hardcoded strip geometry | wants the stimulus-generation config, which is on `S:` |
 | **L5, L6** | documentation and R hygiene |
 
-**Re-run required.** Every stage-1 fix (C2, C3, C4, H1, H5, H6, M15) changes the pickles, and the caches now
+**Re-run required.** Every stage-1 fix (C2, C3, C4, H1, H6, M15) changes the pickles, and the caches now
 invalidate themselves (H3), so the next `run_pipeline()` rebuilds from raw. Until then the built pickles in
 `OUTPUT_PATH` are pre-fix, which is why the three real-data checks remain `xfail`. That run needs `S:` mounted for
 `SEARCH_ARRAY_PATH`.
