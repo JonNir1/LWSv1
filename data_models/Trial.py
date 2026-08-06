@@ -193,15 +193,17 @@ class Trial:
         return labels, left_events, right_events
 
     def _calculate_gaze_target_distances(self,) -> pd.DataFrame:
-        left_dists = self._calculate_target_distances(
-            self._gaze[cnfg.LEFT_X_STR].values, self._gaze[cnfg.LEFT_Y_STR].values
-        )
-        right_dists = self._calculate_target_distances(
-            self._gaze[cnfg.RIGHT_X_STR].values, self._gaze[cnfg.RIGHT_Y_STR].values
-        )
-        main = left_dists if self._subject.eye == DominantEyeEnum.LEFT else right_dists
-        second = right_dists if self._subject.eye == DominantEyeEnum.LEFT else left_dists
-        dists = main.fillna(second)
+        """
+        Per-sample distance from gaze to each target, computed from the **dominant eye only**.
+
+        Samples with no dominant-eye gaze get NaN rather than falling back to the other eye: these distances decide
+        hit vs false-alarm classification, and mixing eyes there would be inconsistent with the rest of the pipeline,
+        where `read_data(drop_bad_eye=True)` discards the non-dominant eye outright.
+        """
+        is_left = self._subject.eye == DominantEyeEnum.LEFT
+        x_str = cnfg.LEFT_X_STR if is_left else cnfg.RIGHT_X_STR
+        y_str = cnfg.LEFT_Y_STR if is_left else cnfg.RIGHT_Y_STR
+        dists = self._calculate_target_distances(self._gaze[x_str].values, self._gaze[y_str].values)
         dists.index = self._gaze.index
         return dists
 
