@@ -8,9 +8,11 @@ DATE_TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
 MILLISECONDS_IN_SECOND = 1000
 
 ## TOBII SCREEN TOBII_MONITOR ##
+# TOBII Spectrum uses a 23.8 screen with aspect ratio 16:9 :: https://www.tobii.com/products/eye-trackers/screen-based/tobii-pro-spectrum#specifcations
+# Active screen dimensions are 52.69cm wide over 29.64cm tall :: https://www.displaywars.com/23,8-inch-16x9-vs-55-inch-21x9
 TOBII_MONITOR = _Monitor(
     width=1920, height=1080,
-    width_mm=530, height_mm=300,
+    width_mm=527, height_mm=296,
     x=0, y=0, name="tobii", is_primary=True,
 )
 TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan, pd.NA, MISSING_VALUE]
