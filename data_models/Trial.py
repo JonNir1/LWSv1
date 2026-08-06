@@ -179,14 +179,14 @@ class Trial:
             self._gaze,
             DominantEyeEnum.LEFT,
             self._subject.screen_distance_cm,
-            pixel_size_cm=cnfg.PIXEL_SIZE_MM / 10,
+            pixel_size_cm=cnfg.PIXEL_SIZE_CM,
             only_labels=False
         )
         right_labels, right_events = detect_eye_movements(
             self._gaze,
             DominantEyeEnum.RIGHT,
             self._subject.screen_distance_cm,
-            pixel_size_cm=cnfg.PIXEL_SIZE_MM / 10,
+            pixel_size_cm=cnfg.PIXEL_SIZE_CM,
             only_labels=False
         )
         labels = pd.concat([left_labels, right_labels], axis=1)

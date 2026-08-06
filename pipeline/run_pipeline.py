@@ -7,6 +7,7 @@ import pandas as pd
 
 import config as cnfg
 from data_models.LWSEnums import SubjectActionCategoryEnum
+from data_models.parse.eye_movements import configure_peyes
 
 from pipeline.parse_raw_data import parse_all_subjects
 from pipeline.build_dataframes import build_dataframes
@@ -43,6 +44,7 @@ def run_pipeline(
         raise ValueError(f"`on_target_threshold_dva` must be non-negative.")
     if visit_merging_time_threshold < 0:
         raise ValueError(f"`visit_merging_time_threshold` must be non-negative.")
+    configure_peyes()   # explicit at the entry point, rather than only as an import side effect
     subjects, bad_subjects = parse_all_subjects(raw_data_path, verbose, force_reparse=force_reparse)
     if not subjects:
         raise RuntimeError(f"No subjects could be parsed from {raw_data_path!r}. Failures: {bad_subjects}")

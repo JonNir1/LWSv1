@@ -22,6 +22,20 @@ PUBLICATIONS_PATH = os.path.join(_BASE_PATH, "Publications")
 
 
 ## Analysis Parameters ##
+### Eye-Movement Detection Parameters ###
+# Duration bounds (ms) for `peyes` event detection. Events outside these bounds are flagged as outliers and are
+# dropped by `read_data(drop_outliers=True)`, so these sit directly on the dependent variable.
+# NOTE: the values below reproduce what the pipeline used implicitly before they were made explicit - the min values
+# were set in code, the max values were inherited from `peyes` defaults and never chosen for this paradigm.
+# FIXATION_MAX_DURATION_MS in particular is an open question (see CODE_REVIEW.md T3): long dwells on a not-yet
+# identified target are theoretically the strongest LWS candidates, and 2500 ms currently removes 6 of ~117k
+# fixations, all of them on-target.
+MIN_EVENT_DURATION_MS = 5               # shortest event the detector will emit
+FIXATION_MIN_DURATION_MS = 50
+FIXATION_MAX_DURATION_MS = 2500         # TODO(T3): justify or replace this inherited default
+SACCADE_MIN_DURATION_MS = MIN_EVENT_DURATION_MS
+SACCADE_MAX_DURATION_MS = 200
+
 ### Pre-Processing Pipeline Parameters ###
 ON_TARGET_THRESHOLD_DVA = 1.75          # threshold to determine if a gaze/fixation is on-target
 IDENTIFICATION_ACTIONS = [     # list of subject-actions indicating target identification

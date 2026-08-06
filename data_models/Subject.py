@@ -161,8 +161,7 @@ class Subject:
         To move from `d` pixels to DVA, use the formula: `d * self.px2deg`.
         """
         assert np.isfinite(self._screen_distance_cm), "Screen distance must be finite to convert pixels to degrees."
-        pixel_size_cm = cnfg.PIXEL_SIZE_MM / 10  # Convert mm to cm
-        return 2 * np.degrees(np.arctan2(pixel_size_cm / 2, self._screen_distance_cm))
+        return 2 * np.degrees(np.arctan2(cnfg.PIXEL_SIZE_CM / 2, self._screen_distance_cm))
 
     @property
     def out_dir(self) -> str:

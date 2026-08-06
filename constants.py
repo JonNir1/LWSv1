@@ -17,6 +17,7 @@ TOBII_MONITOR = _Monitor(
 )
 TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan, pd.NA, MISSING_VALUE]
 PIXEL_SIZE_MM = np.mean([TOBII_MONITOR.width_mm / TOBII_MONITOR.width, TOBII_MONITOR.height_mm / TOBII_MONITOR.height,])
+PIXEL_SIZE_CM = PIXEL_SIZE_MM / 10  # `peyes` and the DVA conversions work in cm; keep the unit in the name
 
 ## STRINGS ##
 SUBJECT_STR, SESSION_STR = "subject", "session"
