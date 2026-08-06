@@ -110,7 +110,26 @@ Analysis lives in notebooks at `analysis/*.ipynb` (`hit_rate`, `time_on_task`, `
 - Both eyes are detected and kept through stage 1; the non-dominant eye is dropped at read time via
   `read_data(drop_bad_eye=True)`.
 - Figures use plotly, with fonts/colors and `get_discrete_color()` defined in `config.py`.
-- Data paths in `config.py` are absolute and machine-specific.
+
+## Data locations
+
+Paths in `config.py` are absolute and machine-specific. On this machine the working copies live under
+`C:\Users\nirjo\Desktop\HCNL\LWS\`:
+
+| What | Path | `config.py` constant |
+| --- | --- | --- |
+| Raw data (28 subject dirs) | `C:\Users\nirjo\Desktop\HCNL\LWS\RawData` | `RAW_DATA_PATH` — **not overridden, still points at `S:`** |
+| Built pickles | `C:\Users\nirjo\Desktop\HCNL\LWS\Results` | `OUTPUT_PATH` (overridden) |
+| Publications | `C:\Users\nirjo\Desktop\HCNL\LWS\Publications` | `PUBLICATIONS_PATH` (overridden) |
+| Stimuli (`.mat` search arrays) | **not on this machine** | `SEARCH_ARRAY_PATH` → `S:\Lab-Shared\...\Stimuli` |
+| Icon images | **not on this machine** | `IMAGE_DIR_PATH` → `S:\Lab-Shared\...` |
+
+`config.py` overrides `OUTPUT_PATH` and `PUBLICATIONS_PATH` to the Desktop copies but **not** `RAW_DATA_PATH`, so
+`run_pipeline()` with defaults looks for raw data on the unmounted `S:` share. Pass `raw_data_path` explicitly, or add
+the matching override. Stage 1 additionally needs `SEARCH_ARRAY_PATH` (`Trial._create_search_array` loads a `.mat` per
+trial), which is only on the lab share — so re-parsing from raw currently requires `S:` mounted regardless.
+
+Stage 2 needs only `OUTPUT_PATH` and works fully offline.
 
 ## Known issues
 
