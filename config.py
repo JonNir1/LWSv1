@@ -9,18 +9,16 @@ from data_models.LWSEnums import SubjectActionCategoryEnum
 STIMULI_VERSION = 1
 
 ## PATHS ##
+IMAGE_DIR_PATH = r"S:\Lab-Shared\Experiments\N170 free scan\ClutteredObjects_scan\Origional_Objects_Pics\organized"
+
 _BASE_PATH = r"S:\Lab-Shared\Experiments\LWS\Tobii Demo"
+_BASE_PATH = r"C:\Users\nirjo\Desktop\HCNL\LWS"                         # TODO: remove me!
+
 RAW_DATA_PATH = os.path.join(_BASE_PATH, "RawData")
 SEARCH_ARRAY_PATH = os.path.join(_BASE_PATH, "Stimuli")
 OUTPUT_PATH = os.path.join(_BASE_PATH, "Results")
-PUBLICATIONS_PATH = os.path.join(_BASE_PATH, "Publications")
-IMAGE_DIR_PATH = r"S:\Lab-Shared\Experiments\N170 free scan\ClutteredObjects_scan\Origional_Objects_Pics\organized"
-
-
-OUTPUT_PATH = r'C:\Users\nirjo\Desktop\HCNL\LWS\Results'                # TODO: remove me!
-PUBLICATIONS_PATH = r"C:\Users\nirjo\Desktop\HCNL\LWS\Publications"     # TODO: remove me!
-
 SUBJECT_OUTPUT_PATH = os.path.join(OUTPUT_PATH, f"{SUBJECT_STR}s")
+PUBLICATIONS_PATH = os.path.join(_BASE_PATH, "Publications")
 
 
 ## Analysis Parameters ##
