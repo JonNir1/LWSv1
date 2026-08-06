@@ -996,7 +996,7 @@ pipeline for a single research project, not a distributable library. Run-from-re
 adequate contract; `[project]` metadata, `__init__.py` files and an editable install would add ceremony for no
 benefit. `pyproject.toml` exists solely to hold `pythonpath = ["."]` for pytest.
 
-The broken import in the scratchpad was a real (if trivial) defect and is **FIXED** (`b3e1c40`):
+The broken import in the scratchpad was a real (if trivial) defect and is **FIXED** (`4a11e53`):
 
 ```python
 from analysis.helpers.funnels import build_trial_inclusion_funnel, ..., calculate_funnel_step_sizes
@@ -1094,7 +1094,7 @@ Suggested layout: `tests/` at repo root, `pytest` + `pytest-cov`, fixtures build
 ### L2. No linter/formatter/type-checker configuration
 
 **STATUS: DEFERRED by decision** (2026-08-06) — no linter for now. A ruff config was added and then removed
-(`9805560`, reverted in `4f1a8e2`); it was never installed or run, so it had asserted nothing about the code.
+(`9805560`, reverted in `4a11e53`); it was never installed or run, so it had asserted nothing about the code.
 `pyproject.toml` now holds only the pytest `pythonpath` setting.
 
 Kept as a low-priority note rather than closed, because the underlying observation stands: type hints are
