@@ -135,8 +135,11 @@ def _align_triggers_and_gaze(triggers, gaze) -> (pd.DataFrame, pd.DataFrame):
     merged = merged[cols_ord]
 
     # split out the triggers
-    triggers = merged.loc[merged[cnst.TRIGGER_STR].notna(), _MUTUAL_COLUMNS + _TRIGGER_COLUMNS]
-    triggers.loc[:, _TRIGGER_COLUMNS] = triggers[_TRIGGER_COLUMNS].fillna(0).astype('Int64')
+    triggers = merged.loc[merged[cnst.TRIGGER_STR].notna(), _MUTUAL_COLUMNS + _TRIGGER_COLUMNS].copy()
+    for col in _TRIGGER_COLUMNS:
+        # assign column-wise: a frame-wide `.loc[:, cols] = <Int64 frame>` over the mixed float64/Int64 pair the
+        # outer merge leaves behind raises `AttributeError: '_hasna'` on pandas 3.
+        triggers[col] = triggers[col].fillna(0).astype('Int64')
     triggers[cnst.ACTION_STR] = triggers[cnst.ACTION_STR].map(lambda act: SubjectActionCategoryEnum(act))
 
     # split out the gaze data
