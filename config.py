@@ -42,38 +42,11 @@ IDENTIFICATION_ACTIONS = [     # list of subject-actions indicating target ident
     SubjectActionCategoryEnum.MARK_AND_CONFIRM,
     # SubjectActionCategoryEnum.MARK_ONLY    # uncomment this to include marking-only actions
 ]
-BAD_ACTIONS = [
-    act for act in SubjectActionCategoryEnum if
-    act != SubjectActionCategoryEnum.NO_ACTION and act not in IDENTIFICATION_ACTIONS
-]
 
-### Funnel Analysis Parameters ###
-GAZE_COVERAGE_PERCENT_THRESHOLD = 80    # minimum percent of trial time that gaze data must cover to be included in analysis
-TIME_TO_TRIAL_END_THRESHOLD = 1000      # fixations/visits ending within this time from the trial end are considered not-LWS.
-FIXATIONS_TO_STRIP_THRESHOLD = 3        # fixations/visits whose following number of fixations fall in the bottom strip are not considered LWS.
-
-_ANY_FUNNEL_STEPS = [
-    # sequence of steps to determine if a fixation/visit is valid (valid trial, valid fixation) and on-target
-    "all",
-    "trial_gaze_coverage",
-    # "trial_has_actions",    # uncomment to exclude trials with no subject-actions
-    "trial_no_bad_action",
-    "trial_no_miss_with_false_alarm",
-    "instance_not_outlier",
-    "instance_on_target",
-]
-LWS_FUNNEL_STEPS = _ANY_FUNNEL_STEPS + [
-    # additional steps to determine if a valid & on-target fixation/visit is a Looking-without-Seeing (LWS) instance
-    "instance_before_identification",
-    "instance_not_close_to_trial_end",
-    "not_before_exemplar_visit",  # fixations/visits that precede exemplar section (bottom-strip) visits are not LWS
-    "final"
-]
-TARGET_RETURN_FUNNEL_STEPS = _ANY_FUNNEL_STEPS + [
-    # additional steps to determine if a valid & on-target fixation/visit is a target-return instance
-    "instance_after_identification",
-    "final"
-]
+# NOTE: funnel behaviour lives in `analysis/helpers/funnels/funnel_config.py`, not here. This file previously also
+# carried GAZE_COVERAGE_PERCENT_THRESHOLD, TIME_TO_TRIAL_END_THRESHOLD, FIXATIONS_TO_STRIP_THRESHOLD, BAD_ACTIONS and
+# the *_FUNNEL_STEPS lists, none of which the funnel code read - two sources of truth describing different pipelines.
+# They now live in funnel_config.py as DEFAULT_* constants and the criteria lists.
 
 
 ## VISUALIZATION CONFIGURATION ##
