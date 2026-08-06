@@ -20,7 +20,14 @@ def check_trial_inclusion_criteria(
         bad_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]],
         require_actions: bool,
 ) -> pd.DataFrame:
-    """ Returns a DataFrame indexed by (subject, trial) with boolean columns for each criterion and `is_valid_trial`. """
+    """
+    Returns a DataFrame indexed by (subject, trial) with boolean columns for each criterion and `is_valid_trial`.
+
+    These columns are **standalone**: each reports only its own criterion. This is the opposite of the identically
+    named columns in funnel output, which `_convert_criteria_to_funnel` makes cumulative ("passed this and every
+    earlier criterion"). Both meanings exist in memory, so mind which function produced the frame you are reading.
+    `is_valid_trial` is the conjunction either way.
+    """
     meta_idx = metadata.set_index(_SUBJECT_TRIAL_COLS).index
     # criterion registry: each callable returns a boolean Series indexed by (subject, trial)
     criteria_functions: dict[str, Callable[[], pd.Series]] = {

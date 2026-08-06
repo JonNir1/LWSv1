@@ -849,6 +849,19 @@ way to write one).
 
 ### M7. Cumulative funnel columns keep the raw criterion name
 
+**STATUS: CLOSED — documented, not renamed** (2026-08-06, `4740138` + this commit). The proposed rename was
+rejected on review: `passed_on_target` could equally be read as "passed *only* the on-target criterion", so it trades
+one ambiguity for another, and the funnel context already implies cumulativity.
+
+Verified scope before closing. No persisted artifact carries standalone criterion columns: nothing in the repo calls
+`to_csv`, so `funnel_results.csv` is written by hand from whatever frame is in the notebook session, and both funnel
+builders return cumulative columns. **One qualification** — `check_trial_inclusion_criteria` returns *standalone*
+columns under the same names, and two notebooks call it directly (`hit_rate.ipynb`, `trial_exclusion.ipynb`), so both
+meanings do coexist in memory. Neither notebook exports it, and both use only `is_valid_trial`, which is the
+conjunction either way — so no result is affected. Documented at all three sites instead: the funnel docstring,
+`check_trial_inclusion_criteria`'s docstring (explicitly "these are standalone, unlike funnel output"), and
+`analysis/R/helpers.R`.
+
 **Where:** `analysis/helpers/funnels/build_funnels.py:160-166`; consumed in `analysis/R/helpers.R:27-28`
 
 `_convert_criteria_to_funnel` overwrites each criterion column with the running AND of that criterion and all previous
@@ -905,6 +918,10 @@ number.
 
 ### M10. Statistical: the GAMs treat correlated visits as independent Bernoulli trials
 
+**STATUS: DEFERRED by decision** (2026-08-06) — accepted as valid and statistically important; the nesting
+structure is a modelling choice to be made later. Both time-domain scripts now carry an inline warning at the
+fit site so the limitation travels with the code.
+
 **Where:** `analysis/R/time_on_task_gam.R:23-28`, `time_in_trial_gam.R:24-29`, `spatial_gam.R:18-40`
 
 Every model is `is_lws ~ trial_category + s(...) + s(subject, bs="re")`. The unit of observation is a *visit*, but
@@ -925,6 +942,11 @@ dataset (shuffle `is_lws` within trial) and confirm the Type-I error rate of the
 
 ### M11. Statistical: `anova(simple_model, interaction_model, test = "Chisq")` on REML fits is not valid
 
+**STATUS: DEFERRED by decision** (2026-08-06) — deferred alongside M10, since both change reported statistics.
+An ML refit was written and reverted; `spatial_gam.R` keeps REML and carries a warning at the fit site. The
+`concurvity()` call added under L6 is worth reading first either way: a global `te(x,y)` and a by-factor
+`te(x,y)` share basis functions, so high concurvity undermines the comparison regardless of ML vs REML.
+
 **Where:** `analysis/R/spatial_gam.R:49`
 
 The two models differ in their smooth structure and are both fitted with `method = "REML"`. REML log-likelihoods are
@@ -939,23 +961,57 @@ whichever test is used.
 
 ---
 
-### M12. `px2deg` is a small-angle constant applied at large eccentricities
+### M12. `px2deg` is a constant, but the px→deg mapping depends on screen position
 
 **Where:** `data_models/Subject.py:157-165`
 
-`px2deg` is the angle subtended by *one* pixel at the screen centre, then applied as a linear multiplier to distances up
-to ~1000 px. Because visual angle is a tangent function, the linear form overestimates: at 1000 px (≈27.7 cm) and 60 cm
-viewing distance, linear gives ≈26.4° vs a true ≈24.8° — about 7%.
+**Corrects two errors in the original write-up of this finding.** The first version said the error at the on-target
+threshold was "<0.1%", computing it for a pair straddling the screen centre and ignoring eccentricity entirely. A
+later corner example then overstated it. Measured values are below.
 
-**Outcome.** Negligible where it matters most (the 1.75 DVA on-target threshold ≈ 66 px, error <0.1%), but any analysis
-using DVA at large eccentricity — e.g. saccade amplitudes, target eccentricity effects in `spatial_effects.ipynb` — is
-biased outward, and the bias grows with distance, so it is *not* a constant offset.
+`px2deg` is the angle subtended by one pixel at the screen centre, applied as a linear multiplier:
+`distance_dva = distance_px * px2deg`.
 
-**Fix.** Provide `px2deg_at(distance_px)` using `degrees(arctan2(distance_px * pixel_size_cm, screen_distance_cm))` for
-large-distance conversions; keep the linear constant only for near-threshold work and document the split.
+**The mechanism.** The angle a fixation–target pair subtends at the eye is fixed by the eye's nodal point and the two
+screen positions. Eye rotation does not change it: rotating changes which direction is "straight ahead", not the angle
+*between* two directions. So the constant mapping is not rescued by the fovea moving with gaze — what matters is
+where on the *screen* the pair sits. For a small separation `r` at eccentricity `e` from the screen centre, the true
+angle is smaller than the linear estimate by a factor of `D²/(D² + e²)`. Only a screen curved about the eye would make
+the mapping position-independent.
 
-**Validate.** Compare linear vs arctan conversion across the observed distance range; assert the discrepancy at the
-on-target threshold is <1% and report the max discrepancy in the analysis.
+**Measured, against the built data** (1,582 targets; viewing distances 60–63 cm, median 61.5; `px2deg` 0.0258 °/px):
+
+| | overestimate |
+| --- | --- |
+| median target | **3.1%** |
+| p90 target | 7.0% |
+| worst target | 9.8% |
+| targets exceeding 10% | **0%** |
+
+So the approximation holds better than the geometry alone suggests — not because eye rotation compensates, but
+because the icon grid keeps every target within ~19 cm of screen centre, well inside the region where the quadratic
+term stays small. At the physical screen corners (~28 cm) the error would reach 23%, but no target sits there.
+
+**Outcome.** Two distinct cases, with different magnitudes:
+
+1. *Small separations at eccentricity* (on-target threshold, visit distances): 0% at centre rising to ~10% at the edge
+   of the icon field. In pixels, the effective threshold radius shrinks from 67.8 px at centre to ~62 px at the edge —
+   small against ~107 px icon spacing, so on-target classification is unlikely to flip.
+2. *Large separations* (saccade amplitudes, distance-from-centre covariates): the original ~7% at 1000 px still
+   applies, and grows with separation.
+
+The residual concern is not the magnitude but its *structure*: the bias is a smooth, monotonic centre→periphery
+gradient, which is precisely the shape `spatial_effects.ipynb` models. A ~10% gradient in effective on-target
+sensitivity is a candidate confound for a spatial effect on LWS probability, and it is aligned with the predictor
+rather than independent of it.
+
+**Fix.** Optional given the magnitudes. If taken: compute the true subtended angle from both screen positions rather
+than from their separation, i.e. the angle between the two eye→screen vectors, and keep the linear constant only for
+display. The cheaper alternative is to leave the conversion alone and add target eccentricity as a covariate in the
+spatial model, so any centre→periphery artefact is absorbed rather than attributed to LWS.
+
+**Validate.** Refit the spatial GAM with exact-angle distances and confirm the smooth's shape is unchanged; or add
+eccentricity as a covariate and confirm the `te(x, y)` term survives it.
 
 ---
 
@@ -1117,6 +1173,10 @@ between analyses rather than during one.
 
 ### L4. Hardcoded stimulus geometry
 
+**STATUS: DEFERRED** (2026-08-06) — the four strip coordinates are confirmed correct and double-checked by the
+author. What remains is validation rather than correction: assert them against the stimulus-generation config
+once `Stimuli/` is available locally, so a future stimulus version cannot silently invalidate them.
+
 `SearchArray._BOTTOM_STRIP_TOP_LEFT/_BOTTOM_STRIP_BOTTOM_RIGHT = (720, 910), (1200, 1080)` carries a
 `# TODO: read this from stimulus generation config` (`SearchArray.py:67`). The exemplar-strip rectangle directly
 determines `num_fixs_to_strip` and therefore the `not_before_exemplar_visit` LWS criterion. `_NUM_ROWS/_NUM_COLS` and
@@ -1158,13 +1218,12 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | **T3** fixation `max_duration` | research decision; the value is now explicit in `config.py` at its previous 2500 ms |
 | **H5** trigger pairing | deferred by decision: fall back to `TRIAL_END`; needs raw data to validate |
 | **C3 frequency** | needs `SEARCH_ARRAY_PATH` on `S:` to re-parse from raw |
-| **M7** cumulative funnel column names | naming/API change; touches the R scripts and every notebook |
-| **M10, M11** GAM specification | statistical, in `analysis/R/`; needs your call on the nesting structure |
-| **M12** `px2deg` small-angle approximation | matters only at large eccentricity; needs a decision on where to apply the exact form |
+| ~~**M7** cumulative column names~~ | closed — rename rejected; documented at all three sites instead |
+| **M10, M11** GAM specification | deferred by decision; accepted as valid, modelling choice pending |
+| **M12** `px2deg` position dependence | measured: median 3.1% / max 9.8% across real targets; residual risk is the centre→periphery *gradient* in `spatial_effects` |
 | ~~**M14** packaging~~ | withdrawn — not a distributable package; the scratchpad import is fixed |
 | **L2** linter | deferred by decision; low priority, revisit if the project gains contributors |
-| **L4** hardcoded strip geometry | wants the stimulus-generation config, which is on `S:` |
-| **L5, L6** | documentation and R hygiene |
+| **L4** strip geometry validation | values confirmed correct; deferred until `Stimuli/` is local |
 
 **Re-run required.** Every stage-1 fix (C2, C3, C4, H1, H6, M15) changes the pickles, and the caches now
 invalidate themselves (H3), so the next `run_pipeline()` rebuilds from raw. Until then the built pickles in
