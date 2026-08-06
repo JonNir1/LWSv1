@@ -21,8 +21,13 @@ pytestmark = pytest.mark.realdata
 PEYES_FIXATION_MAX_DURATION_MS = 2500
 
 
-def test_h7_long_fixations_dropped_as_outliers(loaded, capsys):
-    """H7: how many fixations does the inherited 2500 ms cap remove, and are on-target ones over-represented?"""
+def test_h7_long_fixation_cap_is_immaterial_in_this_dataset(loaded, capsys):
+    """H7: measure the reach of the inherited 2500 ms cap.
+
+    Measured 2026-08-06: 6 of 116,947 fixations (0.005%) exceed the cap, max observed duration 2797 ms. All 6 are
+    on-target against a 10.0% base rate - the predicted enrichment direction, but far too few to move any result.
+    This test pins the magnitude so a change in the detector or the threshold shows up.
+    """
     fixs = loaded.fixations
     too_long = fixs["duration"] > PEYES_FIXATION_MAX_DURATION_MS
     flagged = fixs["outlier_reasons"].map(lambda r: isinstance(r, list) and "max_duration" in r)
@@ -45,8 +50,17 @@ def test_h7_long_fixations_dropped_as_outliers(loaded, capsys):
 
     # the cap and the flag must agree - if they diverge, the flag is being set by something else
     assert flagged.sum() == too_long.sum(), "outlier flag disagrees with the duration cap"
+    # magnitude guard: if this ever climbs, T3 stops being cosmetic
+    assert too_long.mean() < 0.001, (
+        f"{100 * too_long.mean():.3f}% of fixations now exceed the inherited cap - revisit T3"
+    )
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="C4: measured 2026-08-06 - 12 targets take their identification time from a preceding false alarm, "
+    "truncating the LWS window by a median of 3684 ms (max 12904 ms)",
+)
 def test_c4_false_alarms_shadowing_hits(loaded, capsys):
     """C4: count targets whose earliest identification row is a false alarm that precedes a genuine hit."""
     idents = loaded.identifications
@@ -81,6 +95,11 @@ def test_c4_false_alarms_shadowing_hits(loaded, capsys):
     )
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="H2: measured 2026-08-06 - drop_outliers removes 11,830 of 116,947 fixations (10.1%) but 0 of 5,720 "
+    "visits, so fixation- and visit-level analyses differ by a tenth of the underlying data",
+)
 def test_h2_outlier_exclusion_is_a_noop_for_visits(output_dir, loaded, capsys):
     """H2: `drop_outliers` must change the visit table, not only the fixation table."""
     kept = read_data(output_dir, drop_bad_eye=False, drop_outliers=False, missing="raise")
@@ -97,6 +116,10 @@ def test_h2_outlier_exclusion_is_a_noop_for_visits(output_dir, loaded, capsys):
     assert len(dropped.visits) < len(kept.visits), "drop_outliers had no effect on the visit table"
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="M1: measured 2026-08-06 - every numeric metadata column is object dtype after the concat/.T round-trip",
+)
 def test_m1_metadata_is_object_dtype(loaded, capsys):
     """M1: metadata columns come back as object dtype after the concat/transpose round-trip."""
     numeric_cols = ["duration", "num_targets", "num_distractors", "gaze_coverage", "num_actions"]
