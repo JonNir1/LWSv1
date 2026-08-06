@@ -99,7 +99,8 @@ def test_c4_false_alarms_shadowing_hits(loaded, capsys):
 @pytest.mark.xfail(
     strict=True,
     reason="H2: measured 2026-08-06 - drop_outliers removes 11,830 of 116,947 fixations (10.1%) but 0 of 5,720 "
-    "visits, so fixation- and visit-level analyses differ by a tenth of the underlying data",
+    "visits. read_data still silently ignores the request; build_event_classification_funnel now refuses it "
+    "(see test_h2_visit_funnel_refuses_outlier_exclusion). Remove once T2 is decided and implemented.",
 )
 def test_h2_outlier_exclusion_is_a_noop_for_visits(output_dir, loaded, capsys):
     """H2: `drop_outliers` must change the visit table, not only the fixation table."""
@@ -115,6 +116,23 @@ def test_h2_outlier_exclusion_is_a_noop_for_visits(output_dir, loaded, capsys):
 
     assert len(dropped.fixations) < len(kept.fixations), "no fixations dropped - is the flag reaching read_data?"
     assert len(dropped.visits) < len(kept.visits), "drop_outliers had no effect on the visit table"
+
+
+@pytest.mark.parametrize("exclude", ["outliers", "both"])
+def test_h2_visit_funnel_refuses_outlier_exclusion(output_dir, exclude):
+    """H2: asking for visit-level outlier exclusion must fail loudly rather than be silently ignored."""
+    from analysis.helpers.funnels.build_funnels import build_event_classification_funnel
+
+    with pytest.raises(NotImplementedError, match="outlier exclusion is not implemented for visits"):
+        build_event_classification_funnel(output_dir, "lws", "visit", exclude=exclude)
+
+
+def test_h2_fixation_funnel_still_accepts_outlier_exclusion(output_dir):
+    """The refusal must be scoped to visits - fixation-level exclusion works and must keep working."""
+    from analysis.helpers.funnels.build_funnels import build_event_classification_funnel
+
+    funnel = build_event_classification_funnel(output_dir, "lws", "fixation", exclude="both")
+    assert len(funnel) > 0
 
 
 @pytest.mark.xfail(

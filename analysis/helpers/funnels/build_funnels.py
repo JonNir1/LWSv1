@@ -59,6 +59,15 @@ def build_event_classification_funnel(
         raise ValueError("`event_type` must be 'fixation' or 'visit'.")
     if exclude not in {"none", "invalid_trials", "outliers", "both"}:
         raise ValueError("`exclude` must be 'none', 'invalid_trials', 'outliers', or 'both'.")
+    if event_type == "visit" and exclude in {"outliers", "both"}:
+        # `drop_outliers` filters fixations on their `outlier_reasons`; the visit table carries no such column, so the
+        # request would silently do nothing. What makes a *visit* an outlier is undecided (CODE_REVIEW T2), so refuse
+        # rather than invent a rule.
+        raise NotImplementedError(
+            f"outlier exclusion is not implemented for visits (exclude={exclude!r}). Visits carry no outlier "
+            f"information, so the request would be silently ignored. Use exclude='invalid_trials' or 'none', or "
+            f"decide the visit-outlier rule first (see CODE_REVIEW.md T2 / H2)."
+        )
     bad_actions = _bad_actions_as_list(bad_actions)
     loaded = read_data(data_dir, drop_bad_eye=True, drop_outliers=exclude in {"outliers", "both"})
     event_data = loaded.fixations if event_type == "fixation" else loaded.visits
