@@ -994,13 +994,15 @@ where on the *screen* the pair sits. For a small separation `r` at eccentricity 
 angle is smaller than the linear estimate by a factor of `D²/(D² + e²)`. Only a screen curved about the eye would make
 the mapping position-independent.
 
-**Measured, against the built data** (1,582 targets; viewing distances 60–63 cm, median 61.5; `px2deg` 0.0258 °/px):
+**Measured, against the built data** (1,582 targets; viewing distances 60–63 cm, median 61.4). Recomputed after
+the TOBII dimensions were corrected to 527 × 296 mm; the earlier figures used 530 × 300 mm and were marginally
+larger (3.1 / 7.0 / 9.8%):
 
 | | overestimate |
 | --- | --- |
-| median target | **3.1%** |
-| p90 target | 7.0% |
-| worst target | 9.8% |
+| median target | **3.0%** |
+| p90 target | 6.9% |
+| worst target | 9.7% |
 | targets exceeding 10% | **0%** |
 
 So the approximation holds better than the geometry alone suggests — not because eye rotation compensates, but
@@ -1260,19 +1262,22 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | **T1** d' denominator | research decision |
 | **T2** what makes a *visit* an outlier | research decision; H2 refuses the request until this is settled |
 | **T3** fixation `max_duration` | research decision; the value is now explicit in `config.py` at its previous 2500 ms |
-| **H5** trigger pairing | deferred by decision: fall back to `TRIAL_END`; needs raw data to validate |
-| **C3 frequency** | needs `SEARCH_ARRAY_PATH` on `S:` to re-parse from raw |
+| **H5** trigger pairing | unblocked - raw data and stimuli are local; fall back to `TRIAL_END` |
+| **C3 frequency** | unblocked - `SEARCH_ARRAY_PATH` is now local; needs a pipeline re-run |
 | **M10, M11** GAM specification | deferred by decision; accepted as valid, modelling choice pending |
-| **M12** `px2deg` position dependence | deferred by decision; measured median 3.1% / max 9.8% across real targets |
+| **M12** `px2deg` position dependence | deferred by decision; measured median 3.0% / max 9.7% across real targets |
 | **L7** broken cell in `_determine_time_to_trial_end` | pre-existing `KeyError`; fix depends on the intended denominator |
 | ~~**M14** packaging~~ | withdrawn — not a distributable package; the scratchpad import is fixed |
 | **L2** linter | deferred by decision; low priority, revisit if the project gains contributors |
-| **L4** strip geometry validation | values confirmed correct; deferred until `Stimuli/` is local |
+| **L4** strip geometry validation | unblocked - `Stimuli/` is now local |
 
 **Re-run required.** Every stage-1 fix (C2, C3, C4, H1, H6, M15) changes the pickles, and the caches now
 invalidate themselves (H3), so the next `run_pipeline()` rebuilds from raw. Until then the built pickles in
-`OUTPUT_PATH` are pre-fix, which is why the three real-data checks remain `xfail`. That run needs `S:` mounted for
-`SEARCH_ARRAY_PATH`.
+`OUTPUT_PATH` are pre-fix, which is why the three real-data checks remain `xfail`.
+
+**No longer blocked.** `SEARCH_ARRAY_PATH` now resolves locally (`<base>\Stimuli`), so the re-run, the C3
+measurement, H5 and L4 can all proceed. Note the re-run will also pick up the corrected TOBII dimensions
+(527 × 296 mm), so every DVA figure shifts slightly against the current pickles.
 
 ## Fix order
 

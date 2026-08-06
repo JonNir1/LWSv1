@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git workflow (applies to every Claude session)
+
+**`main` is off limits.** Never commit to it, merge into it, rebase it, reset it, or check it out. The only exception
+is an explicit, specific instruction from the user in the current session. `dev` is the integration branch.
+
+The flow is worktree -> `dev` -> `origin/dev`, and each arrow needs the user to ask for it:
+
+1. **Work on the session's worktree branch.** Small, atomic commits, each standalone where possible. Commit as you
+   go rather than batching.
+2. **Rebase onto local `dev`** to pick up the user's changes, not onto `main`. Tag a backup ref first
+   (`backup/pre-<something>`) - a rebase rewrites the branch, and a 30-commit replay can conflict in ways that are
+   tedious to reconstruct.
+3. **Merge into local `dev` only when the user says so**, and use a merge commit (`--no-ff`) so the branch's shape
+   stays visible in the history.
+4. **Push to `origin/dev` only when the user says so**, and only after (3). Never push a worktree branch straight to
+   the remote. Never push to `origin/main`.
+
+Run the test suite before any merge, and say plainly if anything fails.
+
 ## What this project is
 
 Analysis code for the LWS ("Looking Without Seeing") v1 experiment: a visual-search task recorded with a Tobii
@@ -128,16 +147,15 @@ Paths in `config.py` are absolute and machine-specific. On this machine the work
 
 | What | Path | `config.py` constant |
 | --- | --- | --- |
-| Raw data (28 subject dirs) | `C:\Users\nirjo\Desktop\HCNL\LWS\RawData` | `RAW_DATA_PATH` — **not overridden, still points at `S:`** |
-| Built pickles | `C:\Users\nirjo\Desktop\HCNL\LWS\Results` | `OUTPUT_PATH` (overridden) |
-| Publications | `C:\Users\nirjo\Desktop\HCNL\LWS\Publications` | `PUBLICATIONS_PATH` (overridden) |
-| Stimuli (`.mat` search arrays) | **not on this machine** | `SEARCH_ARRAY_PATH` → `S:\Lab-Shared\...\Stimuli` |
-| Icon images | **not on this machine** | `IMAGE_DIR_PATH` → `S:\Lab-Shared\...` |
+| Raw data (28 subject dirs) | `<base>\RawData` | `RAW_DATA_PATH` |
+| Built pickles | `<base>\Results` | `OUTPUT_PATH` |
+| Stimuli (`.mat` search arrays) | `<base>\Stimuli` | `SEARCH_ARRAY_PATH` |
+| Publications | `<base>\Publications` | `PUBLICATIONS_PATH` |
+| Icon images | **not on this machine** | `IMAGE_DIR_PATH` -> `S:\Lab-Shared\...` |
 
-`config.py` overrides `OUTPUT_PATH` and `PUBLICATIONS_PATH` to the Desktop copies but **not** `RAW_DATA_PATH`, so
-`run_pipeline()` with defaults looks for raw data on the unmounted `S:` share. Pass `raw_data_path` explicitly, or add
-the matching override. Stage 1 additionally needs `SEARCH_ARRAY_PATH` (`Trial._create_search_array` loads a `.mat` per
-trial), which is only on the lab share — so re-parsing from raw currently requires `S:` mounted regardless.
+`config.py` sets `_BASE_PATH` twice: the lab share first, then a local override marked `# TODO: remove me!`. All four
+paths above derive from it, so pointing the pipeline at a different machine is a one-line change. `IMAGE_DIR_PATH` is
+separate and still points at `S:`; it is only used for `_SearchArrayImage.path`, not by the pipeline.
 
 Stage 2 needs only `OUTPUT_PATH` and works fully offline.
 
