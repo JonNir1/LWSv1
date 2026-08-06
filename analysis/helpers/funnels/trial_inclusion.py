@@ -50,11 +50,6 @@ def check_trial_inclusion_criteria(
     return inclusion_df
 
 
-def all_pass(trial_indices: pd.MultiIndex) -> pd.Series:
-    """ Dummy inclusion criterion that all trials pass. """
-    return pd.Series(True, index=trial_indices, name="all")
-
-
 def has_gaze_coverage(metadata: pd.DataFrame, min_percent: int | float) -> pd.Series:
     """ True iff trial has at least `min_percent` gaze coverage (percent of trial time with gaze data). """
     if min_percent <= 1.0:

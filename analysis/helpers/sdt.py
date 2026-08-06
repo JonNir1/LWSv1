@@ -72,7 +72,6 @@ def calc_aprime_per_trial(metadata: pd.DataFrame, idents: pd.DataFrame) -> pd.Da
     """ Calculate A' (A-prime) for each subject-trial pair. """
     hit_rate = calc_sdt_class_per_trial(metadata, idents, "hit")["rate"].rename("h")
     fa_rate = calc_sdt_class_per_trial(metadata, idents, "false_alarm")["rate"].rename("fa")
-    diff = (hit_rate - fa_rate).rename("diff")
     a_prime = (
         pd.concat([hit_rate, fa_rate], axis=1)
         .apply(lambda row: _calc_aprime(row["h"], row["fa"]), axis=1)
