@@ -17,9 +17,20 @@ from data_models.LWSEnums import SignalDetectionCategoryEnum
 
 @pytest.fixture(scope="session")
 def output_dir() -> str:
-    """Path to the built pickles, or skip the test if they are not on this machine."""
+    """Path to the built pickles, or skip if they are absent or unreadable in this environment."""
     if not os.path.isdir(cnfg.OUTPUT_PATH):
         pytest.skip(f"built pickles not found at {cnfg.OUTPUT_PATH}")
+    try:
+        pd.read_pickle(os.path.join(cnfg.OUTPUT_PATH, "metadata.pkl"))
+    except FileNotFoundError:
+        pytest.skip(f"built pickles not found at {cnfg.OUTPUT_PATH}")
+    except ModuleNotFoundError as exc:
+        # H8: the pickles were written under numpy>=2 but `peyes` pins numpy~=1.2, so the environment that can run
+        # the pipeline cannot read its own output.
+        pytest.skip(
+            f"pickles at {cnfg.OUTPUT_PATH} are unreadable in this environment ({exc}); "
+            f"numpy is {np.__version__} - see CODE_REVIEW.md H8"
+        )
     return cnfg.OUTPUT_PATH
 
 
