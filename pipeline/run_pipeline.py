@@ -23,6 +23,7 @@ def run_pipeline(
         visit_merging_time_threshold: float = VISIT_MERGING_TIME_THRESHOLD,
         save: bool = True,
         verbose: bool = True,
+        force_reparse: bool = False,
 ) -> (
         pd.DataFrame,   # targets
         pd.DataFrame,   # actions
@@ -42,7 +43,7 @@ def run_pipeline(
         raise ValueError(f"`on_target_threshold_dva` must be non-negative.")
     if visit_merging_time_threshold < 0:
         raise ValueError(f"`visit_merging_time_threshold` must be non-negative.")
-    subjects, bad_subjects = parse_all_subjects(raw_data_path, verbose)
+    subjects, bad_subjects = parse_all_subjects(raw_data_path, verbose, force_reparse=force_reparse)
     if not subjects:
         raise RuntimeError(f"No subjects could be parsed from {raw_data_path!r}. Failures: {bad_subjects}")
     targets, actions, metadata, idents, fixations, visits = build_dataframes(

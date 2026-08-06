@@ -312,7 +312,7 @@ class Subject:
         )
         return idents
 
-    def get_fixations(self, save: bool = True, verbose: bool = False,) -> pd.DataFrame:
+    def get_fixations(self, save: bool = True, verbose: bool = False, force_rebuild: bool = False,) -> pd.DataFrame:
         """
         Extracts the subject's fixations across all trials and returns them as a DataFrame.
         :param save: bool; if True, saves the fixations DataFrame to a pickle file in the subject's output directory.
@@ -337,16 +337,18 @@ class Subject:
         in the strip during the trial.
         """
         path = os.path.join(self.out_dir, f'{cnfg.FIXATION_STR}_df.pkl')
-        try:
-            fixations = pd.read_pickle(path)
-            if verbose:
-                print(f"Subject {self.id}'s fixations DataFrame loaded.")
-        except FileNotFoundError:
-            if verbose:
-                print(f"Fixations DataFrame not found for subject {self.id}. Extracting...")
-            fixations = self._process_fixations(verbose)
-            if save:
-                fixations.to_pickle(path)
+        if not force_rebuild:
+            try:
+                fixations = pd.read_pickle(path)
+                if verbose:
+                    print(f"Subject {self.id}'s fixations DataFrame loaded.")
+                return fixations
+            except FileNotFoundError:
+                if verbose:
+                    print(f"Fixations DataFrame not found for subject {self.id}. Extracting...")
+        fixations = self._process_fixations(verbose)
+        if save:
+            fixations.to_pickle(path)
         return fixations
 
     def get_visits(self, target_distance_threshold_dva: float, visit_merging_time_threshold: float,) -> pd.DataFrame:
