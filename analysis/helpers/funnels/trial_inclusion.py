@@ -40,9 +40,12 @@ def check_trial_inclusion_criteria(
     inclusion_df = (
         pd.concat(ordered_components, axis=1)
         .reindex(meta_idx)  # ensure same order / includes duplicates if any
+        # a trial missing from any criterion's index becomes NaN here, and NaN is truthy - it would silently *pass*
+        # the criterion it was never evaluated against. Treat an unevaluated criterion as failed.
+        .fillna(False)
+        .astype(bool)
         .assign(is_valid_trial=lambda df: df.all(axis=1))
         .sort_index(level=_SUBJECT_TRIAL_COLS)
-        .astype(bool)
     )
     return inclusion_df
 

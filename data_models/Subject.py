@@ -252,12 +252,19 @@ class Subject:
         return actions
 
 
+    # dtypes for the per-trial metadata table; `pd.concat(...).T` would otherwise leave every column as `object`,
+    # which silently loses NaN semantics and makes downstream arithmetic and groupby results dtype-unstable.
+    _METADATA_DTYPES = {
+        "trial": "int64", "block": "int64", "trial_category": "string", "duration": "float64",
+        "num_targets": "int64", "num_distractors": "int64", "num_actions": "int64",
+        "bad_actions": "bool", "gaze_coverage": "float64",
+    }
+
     def get_metadata(self, bad_actions: Sequence[SubjectActionCategoryEnum]) -> pd.DataFrame:
         """ Extract all trials' metadata into a DataFrame """
-        metadata = dict()
-        for trial in tqdm(self.get_trials(), desc="Trial Metadata", disable=True):
-            metadata[trial.trial_num] = trial.get_metadata(bad_actions)
-        res = pd.concat(metadata.values(), keys=metadata.keys(), axis=1).T.reset_index(drop=True)
+        rows = [trial.get_metadata(bad_actions) for trial in self.get_trials()]
+        res = pd.DataFrame.from_records([row.to_dict() for row in rows])
+        res = res.astype({col: dtype for col, dtype in self._METADATA_DTYPES.items() if col in res.columns})
         # add subject-level info
         res["px2deg"] = self.px2deg
         res["sex"] = self.sex

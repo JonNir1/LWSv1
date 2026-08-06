@@ -89,7 +89,7 @@ def _assign_visit_ids(
     eyes = fixs_subset[cnst.EYE_STR].unique()
     if len(eyes) != 1:
         raise RuntimeError(
-            f"Fixation subset from trial {trials.iloc[0]} is not from a single eye: {eyes.tolist()}"
+            f"Fixation subset from trial {trials[0]} is not from a single eye: {eyes.tolist()}"
         )
     # check temporal threshold
     time_diffs = fixs_subset["start_time"] - fixs_subset["end_time"].shift(1)
@@ -101,7 +101,7 @@ def _assign_visit_ids(
     dist_dva_cols = [col for col in fixs_subset.columns if col.endswith(dist_dva_suffix)]
     if len(dist_dva_cols) == 0:
         raise RuntimeError(
-            f"Fixation subset from trial {trials.iloc[0]} and eye {eyes.iloc[0]} does not contain DVA distances."
+            f"Fixation subset from trial {trials[0]} and eye {eyes[0]} does not contain DVA distances."
         )
     target_visit_ids = []
     for col in dist_dva_cols:
