@@ -17,14 +17,17 @@ the numpy/pandas upgrade. New findings surfaced while building the test suite: *
 `tests/` encodes the findings as executable claims. Each test for an unfixed bug is `xfail(strict=True)`, so the suite
 is green now and turns red the moment a bug is fixed without its marker being removed.
 
-Suite status: **14 passed, 20 xfailed** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6.
+Suite status: **63 passed, 3 xfailed** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6.
+
+The 3 remaining `xfail`s are all "fixed in code, but the built pickles predate the fix" (C4 frequency, H2 magnitude,
+M1 dtypes). They clear on the next `run_pipeline()`.
 
 | Finding | Test | Status |
 | --- | --- | --- |
-| C2 `MARK_ONLY` never recorded | `test_mark_only_is_recorded` | **confirmed** |
-| C3 `KeyError: None`; attempted mark clobbered | `test_attempted_mark_*` | **confirmed** |
+| C2 `MARK_ONLY` never recorded | `test_mark_only_is_recorded` | **confirmed → fixed** |
+| C3 `KeyError: None`; attempted mark clobbered | `test_attempted_mark_*` | **confirmed → fixed** |
 | C4 FA shadows the real hit | `test_false_alarm_does_not_shadow_the_real_hit` | **confirmed** — lookup returns 500.0, not 4000.0 |
-| C4 first-hit guarantee is incidental | `test_repeated_hit_does_not_move_identification_time` | **confirmed** |
+| C4 first-hit guarantee is incidental | `test_repeated_hit_does_not_move_identification_time` | **confirmed → fixed** |
 | C4 **frequency** | `test_c4_false_alarms_shadowing_hits` | **confirmed** — 12 targets affected; LWS window truncated by a median **3684 ms** (max 12904 ms) |
 | H1 cross-eye strip count | `test_does_not_count_across_the_eye_boundary` | **confirmed** — `[2.0, 1.0]` where `[inf, inf]` is correct |
 | H1 wrongly rejects an LWS candidate | `test_leak_can_wrongly_reject_an_lws_candidate` | **confirmed** — count 1 vs threshold 3 |
@@ -37,7 +40,7 @@ Suite status: **14 passed, 20 xfailed** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.
 | M15 wrong `pixel_size` | `test_saccade_amplitude_in_degrees` | **confirmed** — 300 px saccade reports **179.24°**, correct is 7.92° |
 | M15 is inert for current output | `test_outlier_reasons_are_independent_of_pixel_size` | **holds** — clean trace yields no outlier reasons |
 | M16 monitor mismatch | `test_peyes_monitor_matches_the_project_monitor` | **confirmed** — 53.1 cm vs 53.0 cm |
-| M17 `del` on unbound name | `test_no_block_trigger_raises` | **confirmed** |
+| M17 `del` on unbound name | `test_no_block_trigger_raises` | **confirmed → fixed** |
 | C3 real-world frequency | — | **not measured** — raw data (`S:`) not mounted |
 
 Decision 1 semantics (miss → `inf`, every on-target event pre-identification) are pinned as *passing* tests, so a
@@ -94,6 +97,8 @@ Recorded here so they are not re-litigated as defects. These need a research dec
 
 ### C2. `MARK_ONLY` is written to the wrong column and is never recorded
 
+**STATUS: FIXED** (`9de4780`).
+
 **Where:** `data_models/parse/triggers_and_gaze.py:215`
 
 ```python
@@ -120,6 +125,8 @@ hand-built trigger table covering all four `SubjectActionCategoryEnum` sequences
 ---
 
 ### C3. `ATTEMPTED_MARK` branch raises `KeyError` (or clobbers a pending mark)
+
+**STATUS: FIXED** (`9de4780`).
 
 **Where:** `data_models/parse/triggers_and_gaze.py:181-184`
 
@@ -163,6 +170,8 @@ This also removes the `None`-index path entirely.
 ---
 
 ### C4. A false alarm can be used as the identification time of a real target
+
+**STATUS: FIXED** (`c25b527`).
 
 **Where:** `analysis/helpers/funnels/event_classification.py:122-134`
 
@@ -246,6 +255,8 @@ def _identification_time_lookup(idents: pd.DataFrame) -> pd.Series:
 
 ### H1. `num_fixs_to_strip` is computed across both eyes concatenated
 
+**STATUS: FIXED** (`54362bf`).
+
 **Where:** `data_models/preprocess/fixations.py:121-146`, called from `process_trial_fixations:53`
 
 **Description.** `Trial.get_raw_eye_movements()` concatenates left-eye and right-eye events
@@ -281,6 +292,8 @@ are outside the strip.
 ---
 
 ### H2. `drop_outliers` never applies to visits, so `exclude="outliers"` is a silent no-op for visit funnels
+
+**STATUS: FIXED** (`e3d432a`).
 
 **Where:** `analysis/helpers/read_data.py:42-46`; `analysis/helpers/funnels/build_funnels.py:63-64`
 
@@ -318,6 +331,8 @@ equality is the bug, and is the regression test).
 
 ### H3. Per-subject pickle caches are silent and unversioned
 
+**STATUS: FIXED** (`5215e36`).
+
 **Where:** `pipeline/parse_raw_data.py:39-48`; `data_models/Subject.py:339-350`
 
 **Description.** `parse_single_subject` prefers `Subject.pkl` over re-parsing, and `get_fixations` prefers
@@ -338,6 +353,8 @@ manual deletion.
 ---
 
 ### H4. `parse_all_subjects` swallows all exceptions; the dirname split sits outside the `try`
+
+**STATUS: FIXED** (`d84dafc`).
 
 **Where:** `pipeline/parse_raw_data.py:15-28`
 
@@ -369,6 +386,8 @@ swallowed.
 ---
 
 ### H5. `_is_between_triggers` assumes start/end triggers are equal in count and correctly interleaved
+
+**STATUS: FIXED** (`74129aa`).
 
 **Where:** `data_models/parse/triggers_and_gaze.py:104-114`
 
@@ -411,6 +430,8 @@ def _is_between_triggers(trigs: pd.Series, start: int, end: int) -> pd.Series:
 
 ### H6. Target distances silently fall back to the non-dominant eye
 
+**STATUS: FIXED** (`f1cb289`).
+
 **Where:** `data_models/Trial.py:195-206`
 
 ```python
@@ -441,7 +462,7 @@ rule is visible rather than silent.
 
 ---
 
-### H7 (downgraded to Low after measurement). Fixations longer than 2500 ms are dropped as outliers, by an inherited library default
+### H7 (downgraded to Low; config made explicit in `1d6cb47`). Fixations longer than 2500 ms are dropped as outliers, by an inherited library default
 
 **Where:** `data_models/parse/eye_movements.py:12-13`; effective values verified from `peyes._DataModels.config`
 
@@ -489,6 +510,8 @@ longer, or `inf` is a research decision (see T3).
 ---
 
 ### H9. pandas 3.0 breaks trigger/gaze alignment: stage 1 cannot run
+
+**STATUS: FIXED** (`12a67af`).
 
 **Where:** `data_models/parse/triggers_and_gaze.py:139`
 
@@ -579,6 +602,8 @@ succeed in the same interpreter, so a future dependency change cannot re-open th
 
 ### M17. `del ... start_idx` raises `UnboundLocalError` when the log has no BLOCK trigger
 
+**STATUS: FIXED** (`74129aa`).
+
 **Where:** `data_models/parse/triggers_and_gaze.py:90-102`
 
 ```python
@@ -608,7 +633,7 @@ entirely.
 
 ---
 
-### M15 (was C1, downgraded after verification). `peyes.create_events` receives `pixel_size = viewer_distance_cm`
+### M15 (was C1; **FIXED** in `1d6cb47`). `peyes.create_events` receives `pixel_size = viewer_distance_cm`
 
 **Where:** `data_models/parse/eye_movements.py:44-45`
 
@@ -655,6 +680,8 @@ tolerance. Optionally confirm inertness by rebuilding one subject and asserting 
 
 ### M1. `metadata` columns are all `object` dtype
 
+**STATUS: FIXED** (`30fe583`).
+
 **Where:** `data_models/Subject.py:256-267`
 
 `pd.concat(list_of_mixed_type_Series, axis=1).T` produces an all-`object` frame — verified: `duration`,
@@ -672,6 +699,8 @@ tolerance. Optionally confirm inertness by rebuilding one subject and asserting 
 ---
 
 ### M2. `is_on_target` for visits collapses to "minimum distance ≤ threshold"
+
+**STATUS: FIXED** (`26968d6`).
 
 **Where:** `analysis/helpers/funnels/event_classification.py:110-119`, `50-66`
 
@@ -694,6 +723,8 @@ rather than globbing.
 
 ### M3. `SearchArray._get_path` disagrees with the directory layout the loader reads
 
+**STATUS: FIXED** (`26968d6`).
+
 **Where:** `data_models/SearchArray.py:183-191` vs `data_models/Trial.py:165-174`
 
 The loader builds `.../generated_stim1/<color|bw|noise>/image_N.mat`; `_get_path` builds
@@ -713,6 +744,8 @@ one array of each category.
 ---
 
 ### M4. Falsy-zero bugs on `start_identify_idx`
+
+**STATUS: FIXED** (`9de4780`).
 
 **Where:** `data_models/parse/triggers_and_gaze.py:188`, `197`, `208`
 
@@ -735,6 +768,8 @@ with `START_RECORD`), but the failure is silent.
 ---
 
 ### M5. `pd.Categorical.from_codes` relies on enum values matching list positions
+
+**STATUS: FIXED** (`26968d6`).
 
 **Where:** `analysis/helpers/funnels/build_funnels.py:172-183`
 
@@ -764,6 +799,8 @@ consolidate on that one function and delete the duplicate logic.
 ---
 
 ### M6. `reindex(...).astype(bool)` turns missing criteria into `True`
+
+**STATUS: FIXED** (`30fe583`).
 
 **Where:** `analysis/helpers/funnels/trial_inclusion.py:40-46`
 
@@ -811,6 +848,8 @@ are genuinely useful for diagnosing which step drops what.
 
 ### M8. `detect_eye_movements` default `pixel_size_cm` is a millimetre value
 
+**STATUS: FIXED** (`1d6cb47`).
+
 **Where:** `data_models/parse/eye_movements.py:27` — `pixel_size_cm: float = cnst.PIXEL_SIZE_MM`
 
 The default is ~0.277 mm supplied to a parameter named `..._cm`. Both call sites in `Trial._detect_eye_movements` pass
@@ -826,6 +865,8 @@ name.
 ---
 
 ### M9. `visits.py` error paths raise `AttributeError` instead of the intended message
+
+**STATUS: FIXED** (`30fe583`).
 
 **Where:** `data_models/preprocess/visits.py:92-93`, `103-105`
 
@@ -898,6 +939,8 @@ on-target threshold is <1% and report the max discrepancy in the analysis.
 
 ### M13. Configuration is duplicated, partly stale, and hardcodes machine-specific paths
 
+**STATUS: FIXED** (`2a49ed0`).
+
 **Where:** `config.py`
 
 - Lines 17-18 override `OUTPUT_PATH` and `PUBLICATIONS_PATH` with `C:\Users\nirjo\Desktop\...` and are marked
@@ -947,6 +990,8 @@ does not exist — the function is `calculate_step_sizes` in `size_and_proportio
 ---
 
 ### M16. The screen geometry driving outlier detection is `peyes`'s default, not the project's monitor
+
+**STATUS: FIXED** (`1d6cb47`).
 
 **Where:** `data_models/parse/eye_movements.py:10-19` (module-level config block); consumed by
 `peyes._DataModels/Event.py:127-131`
@@ -1077,6 +1122,28 @@ wherever the two are compared.
   (`valid_only=TRUE` → `valid_only = TRUE`) to match the rest of the file.
 
 ---
+
+## Remaining work
+
+Everything Critical and High is fixed and covered by tests. What is left:
+
+| Item | Why it is still open |
+| --- | --- |
+| **T1** d' denominator | research decision |
+| **T2** what makes a *visit* an outlier | research decision; H2 refuses the request until this is settled |
+| **T3** fixation `max_duration` | research decision; the value is now explicit in `config.py` at its previous 2500 ms |
+| **C3 frequency** | needs `SEARCH_ARRAY_PATH` on `S:` to re-parse from raw |
+| **M7** cumulative funnel column names | naming/API change; touches the R scripts and every notebook |
+| **M10, M11** GAM specification | statistical, in `analysis/R/`; needs your call on the nesting structure |
+| **M12** `px2deg` small-angle approximation | matters only at large eccentricity; needs a decision on where to apply the exact form |
+| **M14** packaging / `plgrnd2.py` import | `pyproject.toml` now exists; `__init__.py` files and the broken scratchpad import remain |
+| **L4** hardcoded strip geometry | wants the stimulus-generation config, which is on `S:` |
+| **L5, L6** | documentation and R hygiene |
+
+**Re-run required.** Every stage-1 fix (C2, C3, C4, H1, H5, H6, M15) changes the pickles, and the caches now
+invalidate themselves (H3), so the next `run_pipeline()` rebuilds from raw. Until then the built pickles in
+`OUTPUT_PATH` are pre-fix, which is why the three real-data checks remain `xfail`. That run needs `S:` mounted for
+`SEARCH_ARRAY_PATH`.
 
 ## Fix order
 
