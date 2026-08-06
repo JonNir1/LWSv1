@@ -68,9 +68,9 @@ Object model (`Subject` -> list of `Trial` -> one `SearchArray` each):
   time, finds the closest target, and labels it hit / repeated_hit / false_alarm; unidentified targets are appended as
   misses with `time = inf`.
 
-Caching is layered and silent: `Subject.pkl` and `fixation_df.pkl` are written per subject under
+Caching is layered: `Subject.pkl` and `fixation_df.pkl` are written per subject under
 `OUTPUT_PATH/subjects/<exp>_Subject_NN/`, and `parse_single_subject` prefers the pickle over re-parsing raw data.
-**Changing preprocessing code has no effect until those per-subject pickles are deleted.**
+**Changing preprocessing code has no effect until those per-subject pickles are deleted** (see `CODE_REVIEW.md` H3).
 
 ### Stage 2: funnels and analysis (`analysis/`)
 
@@ -100,19 +100,23 @@ Analysis lives in notebooks at `analysis/*.ipynb` (`hit_rate`, `time_on_task`, `
 `analysis/helpers/default_value_selection/_*.ipynb` are the notebooks that justify the hyperparameter defaults.
 `__old__subject_comparisons/` is superseded, `_publications_/` holds figure notebooks, `plgrnd2.py` is a scratchpad.
 
-## Conventions and gotchas
+## Conventions
 
 - Column and key names are centralized in `constants.py` as `*_STR` constants and referenced as `cnst.X` /
   `cnfg.X` rather than string literals; `config.py` does `from constants import *`, so `cnfg.TRIAL_STR` also works.
-- `config.py` hardcodes absolute Windows paths, including two `# TODO: remove me!` overrides of `OUTPUT_PATH` and
-  `PUBLICATIONS_PATH` pointing at a local Desktop folder rather than the lab share. Data paths are machine-specific.
-- `config.py` also still contains an older set of thresholds and `*_FUNNEL_STEPS` lists that the current funnel code
-  does **not** read (it uses `funnel_config.py`). `cnfg.TIME_TO_TRIAL_END_THRESHOLD` is still referenced directly from
-  a couple of notebooks. Treat `funnel_config.py` as the source of truth for funnel behavior.
+- `funnel_config.py` is the source of truth for funnel behavior, not `config.py`.
 - Times are ms relative to trial onset; distances exist in both px and DVA (`px2deg` derived per subject from screen
   distance and `TOBII_MONITOR`). `to_trial_end` is time remaining, not elapsed.
 - Both eyes are detected and kept through stage 1; the non-dominant eye is dropped at read time via
   `read_data(drop_bad_eye=True)`.
 - Figures use plotly, with fonts/colors and `get_discrete_color()` defined in `config.py`.
-- Known data quirks are listed in `README.md` (interleaved record/trial triggers, ~55 ms offset between the BioSemi
-  trial-start trigger and the first Tobii sample) and open analyses in `plans.md`.
+- Data paths in `config.py` are absolute and machine-specific.
+
+## Known issues
+
+**`CODE_REVIEW.md` is the register of known bugs, latent assumptions, and open analysis questions.** Read it before
+changing preprocessing or interpreting funnel output; several Critical items currently affect the numbers. Add to it
+rather than to this file when you find something new.
+
+Data quirks from the experiment itself are in `README.md` (interleaved record/trial triggers, ~55 ms offset between the
+BioSemi trial-start trigger and the first Tobii sample); open analyses are in `plans.md`.
