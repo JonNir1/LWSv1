@@ -1,9 +1,10 @@
 """Trigger-log parsing: action classification and trial-boundary detection.
 
-Covers CODE_REVIEW findings C2, C3, M4 and H5. Tests that encode a known-unfixed bug are `xfail(strict=True)`.
+Covers CODE_REVIEW findings C2, C3, M4, M17 and H5. Trial boundaries are exercised through
+`_align_triggers_and_gaze` rather than `_is_between_triggers` directly, so the tests cover the derived
+`trial` / `block` columns the rest of the pipeline actually consumes.
 """
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -13,10 +14,6 @@ from data_models.parse.triggers_and_gaze import (
     _align_triggers_and_gaze,
     _read_triggers,
 )
-
-# NOTE: `_is_between_triggers` is a closure defined inside `_align_triggers_and_gaze`, so it cannot be imported and
-# tested directly. Trial-boundary behaviour is therefore exercised through `_align_triggers_and_gaze`. Extracting it
-# to module level is part of the H5 fix.
 
 
 def write_trigger_log(tmp_path, trigger_codes: list[int], times: list[float] | None = None) -> str:
@@ -72,8 +69,7 @@ class TestActionClassification:
 def align(trigger_codes: list[int], with_block: bool = True) -> pd.DataFrame:
     """Run `_align_triggers_and_gaze` over a trigger sequence with one interleaved gaze sample per trigger.
 
-    A BLOCK_1 trigger is prepended by default, matching real logs - without one, `_align_triggers_and_gaze` raises
-    (see `test_no_block_trigger_raises`).
+    A BLOCK_1 trigger is prepended by default, matching real logs; `test_no_block_trigger` covers its absence.
 
     Returns the gaze frame, whose `trial` column carries the derived trial boundaries.
     """
@@ -101,12 +97,7 @@ def align(trigger_codes: list[int], with_block: bool = True) -> pd.DataFrame:
 
 
 class TestTrialBoundaries:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="M17: `del ... start_idx` at triggers_and_gaze.py:102 runs unconditionally, but start_idx is only "
-        "bound when a BLOCK_* trigger is present -> UnboundLocalError",
-    )
-    def test_no_block_trigger_raises(self):
+    def test_no_block_trigger(self):
         """A trigger log with no BLOCK trigger should still align, not crash on a cleanup `del`."""
         gaze = align([Trg.STIMULUS_ON, Trg.STIMULUS_OFF], with_block=False)
         assert gaze["trial"].dropna().unique().tolist() == [1]
@@ -119,23 +110,19 @@ class TestTrialBoundaries:
         gaze = align([Trg.STIMULUS_ON, Trg.STIMULUS_OFF, Trg.NULL, Trg.STIMULUS_ON, Trg.STIMULUS_OFF])
         assert gaze["trial"].dropna().unique().tolist() == [1, 2]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="H5: np.vstack requires equal start/end counts, so a truncated final trial raises "
-        "instead of being ignored",
-    )
     def test_unclosed_final_trial(self):
         """Recording stops mid-trial: the last STIMULUS_ON never gets its STIMULUS_OFF."""
         gaze = align([Trg.STIMULUS_ON, Trg.STIMULUS_OFF, Trg.NULL, Trg.STIMULUS_ON])
         assert gaze["trial"].dropna().unique().tolist() == [1]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="H5: pairing is positional, so a dropped STIMULUS_OFF pairs trial 1's start with trial 2's end "
-        "and swallows the gap between them",
-    )
     def test_dropped_end_trigger_does_not_merge_trials(self):
-        """A dropped STIMULUS_OFF must not merge two trials into one long one."""
-        gaze = align([Trg.STIMULUS_ON, Trg.NULL, Trg.STIMULUS_ON, Trg.STIMULUS_OFF])
+        """A dropped STIMULUS_OFF must not merge two trials into one long one.
+
+        The first trial's extent is unknown, so it is dropped with a warning rather than being closed at the second
+        trial's start - which would sweep the inter-trial gap into it.
+        """
+        with pytest.warns(RuntimeWarning, match="still open"):
+            gaze = align([Trg.STIMULUS_ON, Trg.NULL, Trg.STIMULUS_ON, Trg.STIMULUS_OFF])
         in_trial = gaze["trial"].notna().tolist()
         assert in_trial[1] is False, "the gap between the two trials must not be marked as in-trial"
+        assert gaze["trial"].dropna().nunique() == 1, "only the well-formed trial should survive"

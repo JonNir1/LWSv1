@@ -1,4 +1,6 @@
+import warnings
 from enum import IntEnum as _IntEnum
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -82,36 +84,64 @@ def parse_triggers_and_gaze(triggers_path, gaze_path) -> (pd.DataFrame, pd.DataF
     return triggers, gaze
 
 
+def _assign_block_numbers(trigs: pd.Series) -> pd.Series:
+    """
+    Assign a block number to each sample, starting at the first trigger of each block and running to the end of the
+    recording (a later block trigger overwrites it). Samples before the first block trigger are NA.
+    """
+    blocks = pd.Series(np.nan, index=trigs.index)
+    for trg in _ExperimentTriggerEnum:
+        if not trg.name.startswith("BLOCK_"):
+            continue
+        is_block_start = trigs.eq(trg)
+        if not is_block_start.any():
+            continue
+        first_pos = int(np.flatnonzero(is_block_start.to_numpy())[0])
+        blocks.iloc[first_pos:] = int(trg.name.split("_")[-1])
+    return blocks.astype('Int64')
+
+
+def _is_between_triggers(trigs: pd.Series, start: int, end: int) -> pd.Series:
+    """
+    Mark every sample from each `start` trigger through the first `end` trigger that follows it.
+
+    Pairs by scanning in order rather than by position, so an unbalanced log - a trial truncated by the end of the
+    recording, or a dropped `end` trigger - degrades gracefully instead of raising or silently mispairing one
+    segment's start with another's end.
+
+    An unclosed `start` is **dropped**, with a warning, in both cases where one can occur: a second `start` arriving
+    while one is already open, and a `start` still open at the end of the log. Dropping is deliberate - the segment's
+    true extent is unknown, and guessing it (for instance ending it at the next `start`) would fabricate a boundary
+    and merge inter-segment samples into the data.
+    """
+    res = pd.Series(False, index=range(len(trigs)))
+    codes = trigs.to_numpy()
+    open_at: Optional[int] = None
+    for pos, code in enumerate(codes):
+        if code == start:
+            if open_at is not None:
+                warnings.warn(
+                    f"trigger {start} at position {pos} while the one at {open_at} is still open; "
+                    f"the {end} trigger appears to be missing, so that segment is dropped.",
+                    RuntimeWarning,
+                )
+            open_at = pos
+        elif code == end and open_at is not None:
+            res.iloc[open_at:pos + 1] = True
+            open_at = None
+    if open_at is not None:
+        warnings.warn(
+            f"trigger {start} at position {open_at} has no matching {end}; ignoring the trailing segment.",
+            RuntimeWarning,
+        )
+    return res
+
+
 def _align_triggers_and_gaze(triggers, gaze) -> (pd.DataFrame, pd.DataFrame):
     merged = pd.merge(gaze, triggers, how='outer', on=[cnst.TIME_STR])  # merge on time
 
     # add block column
-    merged[cnst.BLOCK_STR] = np.nan
-    for trg in _ExperimentTriggerEnum:
-        name = trg.name
-        if not name.startswith("BLOCK_"):
-            continue
-        block_num = int(name.split("_")[-1])
-        is_block_start = merged[cnst.TRIGGER_STR].eq(trg)
-        if not is_block_start.any():
-            # no such block trigger - skip
-            continue
-        start_idx = is_block_start.idxmax()  # find the first occurrence of the block trigger
-        merged.loc[merged.index[start_idx:], cnst.BLOCK_STR] = block_num
-    merged[cnst.BLOCK_STR] = merged[cnst.BLOCK_STR].astype('Int64')
-    del trg, name, block_num, is_block_start, start_idx
-
-    def _is_between_triggers(trigs: pd.Series, start: int, end: int) -> pd.Series:
-        """
-        Returns a boolean series indicating whether the values in the 'trigs' series occur after 'start' and before 'end'.
-        """
-        start_idxs = np.nonzero(trigs == start)[0]
-        end_idxs = np.nonzero(trigs == end)[0]
-        start_end_idxs = np.vstack([start_idxs, end_idxs]).T
-        res = pd.Series(np.full_like(trigs, False, dtype=bool))
-        for (start, end) in start_end_idxs:
-            res.iloc[start:end + 1] = True
-        return res
+    merged[cnst.BLOCK_STR] = _assign_block_numbers(merged[cnst.TRIGGER_STR])
 
     # add trial column
     is_trial = _is_between_triggers(
