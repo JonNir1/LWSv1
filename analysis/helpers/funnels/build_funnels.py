@@ -50,6 +50,26 @@ def build_event_classification_funnel(
     on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
     exclude: Literal["none", "invalid_trials", "outliers", "both"] = "both",
 ) -> pd.DataFrame:
+    """
+    Build a per-event funnel classifying each event as LWS or as a target-return.
+
+    Returns `event_data` with one **cumulative** boolean column per criterion appended, plus `trial_category`,
+    `target_category` and `target_angle`. Each criterion column means "passed this criterion *and every earlier
+    one*", so `on_target` is not "this event is on target" but "this event is in a valid trial and is on target".
+    The final column (`is_lws` / `is_target_return`) is the full conjunction.
+
+    IMPORTANT - `event_type` changes the unit of analysis *and* how targets are attributed, so fixation-level and
+    visit-level results are not directly comparable:
+
+    - `"fixation"`: one row per fixation, carrying a single `target` - the **closest** one. A fixation within
+      threshold of two targets is attributed only to the nearer.
+    - `"visit"`: one row per (target, visit). The same fixation can belong to visits to several targets at once, so
+      it contributes a row per target. Visit counts are therefore not fixation counts, and the denominator of any
+      proportion differs between the two.
+
+    Prefer visits when the question is about episodes of looking at a target, and fixations when it is about
+    individual fixations; do not mix them within one comparison.
+    """
     funnel_type = funnel_type.lower()
     event_type = event_type.lower()
     exclude = exclude.lower()

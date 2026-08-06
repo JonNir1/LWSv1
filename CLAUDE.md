@@ -89,8 +89,18 @@ The "funnel" is the core abstraction: an ordered list of boolean criteria, conve
 
 Criteria ordering lives in `analysis/helpers/funnels/funnel_config.py` (the lists), the predicates in
 `trial_inclusion.py` and `event_classification.py` (each returns a named boolean Series). To add a criterion: write
-the predicate, register it in the `criteria_functions` dict, and insert its name into the relevant list. Missing
-identification times are treated conservatively (`False`, i.e. not LWS / not a return).
+the predicate, register it in the `criteria_functions` dict, and insert its name into the relevant list.
+
+Two things to keep in mind when reading funnel output:
+
+- **Columns are cumulative, but keep the raw criterion name.** `on_target` means "passed every earlier criterion
+  *and* is on target". This matters when computing proportions from the exported CSV (`CODE_REVIEW.md` M7).
+- **`event_type` changes target attribution.** A fixation row carries only its *closest* target; a visit row exists
+  per (target, visit), so one fixation can contribute to several. Fixation- and visit-level counts are not
+  comparable denominators.
+
+Every target has an identification time by construction: the first hit, or `inf` if it was never identified (so
+every on-target event on a missed target is pre-identification). A missing time is a data error and raises.
 
 `analysis/helpers/sdt.py` computes hit/miss/FA/CR counts and rates, d' (with Macmillan & Kaplan or log-linear
 corrections), A', and F1 per subject-trial.
