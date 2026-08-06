@@ -8,12 +8,18 @@
 #' `funnel_results.csv` is written by pandas, so every boolean arrives as the literal string "True"/"False".
 #' Listing the columns explicitly is safer than scanning the whole frame for those strings, which would also
 #' convert a genuine text column that happened to contain "True".
+#'
+#' The `upto_` prefix marks a *cumulative* funnel column: "passed this criterion and every criterion before it".
+#' `upto_on_target` therefore means "in a valid trial AND on target", not "on target". The three unprefixed
+#' columns are conjunctions by definition.
 FUNNEL_LOGICAL_COLUMNS <- c(
-  # trial-level criteria (cumulative - see CODE_REVIEW.md M7)
-  "gaze_coverage", "fixation_rate", "has_actions", "no_bad_action", "no_miss_with_false_alarm", "is_valid_trial",
-  # event-level criteria (cumulative)
-  "on_target", "before_identification", "not_close_to_trial_end", "not_before_exemplar_visit", "is_lws",
-  "after_identification", "is_target_return"
+  # trial-level criteria
+  "upto_gaze_coverage", "upto_fixation_rate", "upto_has_actions", "upto_no_bad_action",
+  "upto_no_miss_with_false_alarm", "is_valid_trial",
+  # event-level criteria
+  "upto_on_target", "upto_before_identification", "upto_not_close_to_trial_end",
+  "upto_not_before_exemplar_visit", "is_lws",
+  "upto_after_identification", "is_target_return"
 )
 
 
@@ -38,13 +44,13 @@ as_logical_columns <- function(dat, columns = FUNNEL_LOGICAL_COLUMNS) {
 #' Reads the funnel results CSV, converts the Python booleans, casts grouping variables to factors, and applies
 #' the experimental filters.
 #'
-#' NOTE: the funnel's criterion columns are *cumulative* - `on_target` means "passed every trial-level criterion
-#' AND is on target", not "is on target" (CODE_REVIEW.md M7). `valid_only` is therefore redundant whenever
-#' `on_target_only` is TRUE; both are kept so the intent of a given analysis stays explicit.
+#' NOTE: funnel columns are cumulative, so `upto_on_target` already implies `is_valid_trial`. `valid_only` is
+#' therefore redundant whenever `on_target_only` is TRUE; both are kept so the intent of a given analysis stays
+#' explicit in the calling script.
 #'
 #' @param csv_path Path to the funnel_results.csv file.
 #' @param valid_only Logical; if TRUE, keeps only rows where is_valid_trial is TRUE.
-#' @param on_target_only Logical; if TRUE, keeps only rows where on_target is TRUE.
+#' @param on_target_only Logical; if TRUE, keeps only rows where upto_on_target is TRUE.
 #' @return A cleaned data frame ready for GAM fitting.
 load_data <- function(csv_path, valid_only = TRUE, on_target_only = TRUE) {
 
@@ -64,8 +70,17 @@ load_data <- function(csv_path, valid_only = TRUE, on_target_only = TRUE) {
   dat$is_lws <- as.numeric(dat$is_lws)  # ensure the response column is 0/1 for binomial GAM
 
   # Apply filters based on flags
+  required <- c(if (valid_only) "is_valid_trial", if (on_target_only) "upto_on_target")
+  missing <- setdiff(required, names(dat))
+  if (length(missing) > 0) {
+    stop(
+      "funnel column(s) not found: ", paste(missing, collapse = ", "), ".\n",
+      "Funnel columns carry an 'upto_' prefix (CODE_REVIEW.md M7); a CSV exported before that change will use the ",
+      "bare criterion names and must be re-exported."
+    )
+  }
   if (valid_only) { dat <- subset(dat, is_valid_trial) }
-  if (on_target_only) { dat <- subset(dat, on_target) }
+  if (on_target_only) { dat <- subset(dat, upto_on_target) }
 
   return(dat)
 }

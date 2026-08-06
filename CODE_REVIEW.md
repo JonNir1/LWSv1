@@ -849,18 +849,30 @@ way to write one).
 
 ### M7. Cumulative funnel columns keep the raw criterion name
 
-**STATUS: CLOSED — documented, not renamed** (2026-08-06, `4740138` + this commit). The proposed rename was
-rejected on review: `passed_on_target` could equally be read as "passed *only* the on-target criterion", so it trades
-one ambiguity for another, and the funnel context already implies cumulativity.
+**STATUS: FIXED** (2026-08-06, `<SHA>`). Reopened after the first attempt closed it as documentation-only.
 
-Verified scope before closing. No persisted artifact carries standalone criterion columns: nothing in the repo calls
-`to_csv`, so `funnel_results.csv` is written by hand from whatever frame is in the notebook session, and both funnel
-builders return cumulative columns. **One qualification** — `check_trial_inclusion_criteria` returns *standalone*
-columns under the same names, and two notebooks call it directly (`hit_rate.ipynb`, `trial_exclusion.ipynb`), so both
-meanings do coexist in memory. Neither notebook exports it, and both use only `is_valid_trial`, which is the
-conjunction either way — so no result is affected. Documented at all three sites instead: the funnel docstring,
-`check_trial_inclusion_criteria`'s docstring (explicitly "these are standalone, unlike funnel output"), and
-`analysis/R/helpers.R`.
+Funnel columns now carry an explicit `upto_` prefix - `upto_on_target` reads as "passed everything up to and
+including on_target". This avoids the objection to a bare `passed_` prefix, which could equally be read as "passed
+*only* that criterion". The three terminal columns (`is_valid_trial`, `is_lws`, `is_target_return`) keep their names:
+they are conjunctions by definition, so both readings coincide, and they are what downstream analyses select on.
+`funnel_config.cumulative_name()` / `cumulative_names()` map a criteria list onto column names, so callers never
+hardcode the prefix.
+
+The standalone columns returned by `check_trial_inclusion_criteria` keep the bare names, so the two can no longer
+collide in a saved CSV or in memory.
+
+Backed by an invariant rather than a convention: `assert_is_cumulative()` verifies that passing step *i* implies
+passing every earlier step, runs on every funnel build, and is exported for notebooks to re-check a filtered or
+merged funnel. Covered by `tests/test_trial_inclusion.py` (naming, mapping, the invariant, and a check against a
+real funnel).
+
+Migrated: `analysis/R/helpers.R` (column list, `subset`, plus a clear error when an old CSV is loaded),
+`plgrnd2.py`, and the three notebooks that index funnel columns - `stimulus_features`, `ssm_and_ab`,
+`_publications_/2026_vss`. `trial_exclusion` and `hit_rate` were deliberately left alone: they consume
+`check_trial_inclusion_criteria`, whose columns are standalone and correctly keep the bare names.
+
+**Note.** Any `funnel_results.csv` exported before this change uses the old bare names; re-export it. `helpers.R`
+raises a message saying exactly that rather than failing obscurely.
 
 **Where:** `analysis/helpers/funnels/build_funnels.py:160-166`; consumed in `analysis/R/helpers.R:27-28`
 
@@ -962,6 +974,9 @@ whichever test is used.
 ---
 
 ### M12. `px2deg` is a constant, but the px→deg mapping depends on screen position
+
+**STATUS: DEFERRED by decision** (2026-08-06) — deferred alongside M10 and M11. Measured magnitudes are below;
+the open question is whether the centre→periphery gradient needs absorbing in the spatial model.
 
 **Where:** `data_models/Subject.py:157-165`
 
@@ -1183,6 +1198,35 @@ determines `num_fixs_to_strip` and therefore the `not_before_exemplar_visit` LWS
 `_RESOLUTION` are likewise hardcoded and asserted against the `.mat` contents. Read from the stimulus config, or at
 minimum assert the strip lies inside the screen and document the provenance of the four numbers.
 
+### L7. `_determine_time_to_trial_end.ipynb` indexes a column that does not exist
+
+**Where:** `analysis/helpers/default_value_selection/_determine_time_to_trial_end.ipynb`, cell 12
+
+```python
+pre_ident_visit = visits.loc[visits["before_identification"], [...]]
+```
+
+`visits` is assigned in cell 3 from `read_data(cnfg.OUTPUT_PATH).visits` — the raw visits table, whose columns are
+`subject, trial, eye, target, visit, event, start_time, end_time, duration, to_trial_end, x, y, min_distance_dva,
+max_distance_dva, weighted_distance_dva, num_fixs_to_strip`. There is no `before_identification`, and nothing
+between cells 3 and 12 adds one, so the cell raises `KeyError`.
+
+**Found while migrating M7**; it predates that change and is unrelated to it (the funnel rename would not have
+supplied the column either).
+
+**Outcome.** This notebook is what justifies `TIME_TO_TRIAL_END_THRESHOLD = 1000 ms`, so the stated justification
+cannot currently be reproduced from it. The committed outputs presumably came from an earlier version where
+`visits` was a funnel, or where the column was computed inline.
+
+**Fix.** Build an LWS funnel in that notebook and use `upto_before_identification`, or compute the predicate
+directly from `idents`. Which one depends on whether the intended denominator was all pre-identification visits or
+only those in valid trials — a research question, so left alone.
+
+**Validate.** Re-run the notebook end to end and confirm the reported percentile matches the 1000 ms in
+`funnel_config.DEFAULT_MIN_MS_BEFORE_TRIAL_END`.
+
+---
+
 ### L5. Fixation-level and visit-level analyses attribute targets differently
 
 A fixation row carries a single `target` (the closest one, `fixations.py:102-118`), whereas a fixation on-target for two
@@ -1218,9 +1262,9 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | **T3** fixation `max_duration` | research decision; the value is now explicit in `config.py` at its previous 2500 ms |
 | **H5** trigger pairing | deferred by decision: fall back to `TRIAL_END`; needs raw data to validate |
 | **C3 frequency** | needs `SEARCH_ARRAY_PATH` on `S:` to re-parse from raw |
-| ~~**M7** cumulative column names~~ | closed — rename rejected; documented at all three sites instead |
 | **M10, M11** GAM specification | deferred by decision; accepted as valid, modelling choice pending |
-| **M12** `px2deg` position dependence | measured: median 3.1% / max 9.8% across real targets; residual risk is the centre→periphery *gradient* in `spatial_effects` |
+| **M12** `px2deg` position dependence | deferred by decision; measured median 3.1% / max 9.8% across real targets |
+| **L7** broken cell in `_determine_time_to_trial_end` | pre-existing `KeyError`; fix depends on the intended denominator |
 | ~~**M14** packaging~~ | withdrawn — not a distributable package; the scratchpad import is fixed |
 | **L2** linter | deferred by decision; low priority, revisit if the project gains contributors |
 | **L4** strip geometry validation | values confirmed correct; deferred until `Stimuli/` is local |

@@ -41,7 +41,9 @@ del loaded_data    # free up memory by deleting the loaded_data object
 # %%
 from analysis.helpers.funnels.build_funnels import build_trial_inclusion_funnel, build_event_classification_funnel
 from analysis.helpers.funnels.size_and_proportion import calculate_step_sizes
-from analysis.helpers.funnels.funnel_config import TRIAL_INCLUSION_CRITERIA, IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA
+from analysis.helpers.funnels.funnel_config import (
+    TRIAL_INCLUSION_CRITERIA, IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA, cumulative_names,
+)
 
 trial_funnel = build_trial_inclusion_funnel(
     cnfg.OUTPUT_PATH
@@ -49,7 +51,7 @@ trial_funnel = build_trial_inclusion_funnel(
 trial_funnel_sizes = calculate_step_sizes(
     trial_funnel,
     ["subject", "trial"],
-    TRIAL_INCLUSION_CRITERIA + ["is_valid_trial"]
+    cumulative_names(TRIAL_INCLUSION_CRITERIA + ["is_valid_trial"])
 )
 
 is_lws_funnel = build_event_classification_funnel(
@@ -60,7 +62,7 @@ is_lws_funnel = build_event_classification_funnel(
 lws_sizes = calculate_step_sizes(
     is_lws_funnel,
     ["subject", "trial", "trial_category", "target_category"],
-    IS_LWS_CRITERIA + ["is_lws"]
+    cumulative_names(IS_LWS_CRITERIA + ["is_lws"])
 )
 
 is_tr_funnel = build_event_classification_funnel(
@@ -71,7 +73,7 @@ is_tr_funnel = build_event_classification_funnel(
 tr_funnel_sizes = calculate_step_sizes(
     is_tr_funnel,
     ["subject", "trial", "trial_category", "target_category"],
-    IS_TARGET_RETURN_CRITERIA + ["is_target_return"]
+    cumulative_names(IS_TARGET_RETURN_CRITERIA + ["is_target_return"])
 )
 
 
