@@ -44,11 +44,6 @@ class TestNumFixationsToStrip:
         frame = fixation_frame([("left", False), ("left", False)])
         assert _num_fixations_to_strip(frame).tolist() == [np.inf, np.inf]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="H1: the scan crosses the left/right eye boundary, so a left-eye fixation with no later left-eye "
-        "strip visit is assigned a count taken from the right eye's sequence instead of inf",
-    )
     def test_does_not_count_across_the_eye_boundary(self):
         """Left eye never enters the strip; the right eye's first fixation does.
 
@@ -60,11 +55,6 @@ class TestNumFixationsToStrip:
         result = _num_fixations_to_strip(frame).tolist()
         assert result[:2] == [np.inf, np.inf], f"left-eye counts leaked into the right eye: {result[:2]}"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="H1: the same leak in the direction that changes LWS classification - a spurious small count "
-        "makes the not_before_exemplar_visit criterion reject a genuine LWS candidate",
-    )
     def test_leak_can_wrongly_reject_an_lws_candidate(self):
         """A left-eye fixation far from any strip visit gets count 1 purely because the right eye starts in the strip.
 

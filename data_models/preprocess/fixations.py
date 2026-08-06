@@ -119,31 +119,43 @@ def _find_closest_target(distances: pd.DataFrame) -> pd.Series:
 
 
 def _num_fixations_to_strip(fix_features: pd.DataFrame) -> pd.Series:
-    """ For each fixation, check how many fixations from it until a visit in the bottom strip of the SearchArray. """
-    xy = fix_features[[cnst.X, cnst.Y]]      # shape (num_fixs, 2)
+    """
+    For each fixation, count how many fixations until one lands in the bottom strip of the SearchArray, or `inf` if
+    none do.
+
+    The count is computed **per eye**. `fix_features` holds both eyes' fixations concatenated (all of the left eye's,
+    then all of the right eye's - see `Trial.get_raw_eye_movements`), so scanning the frame as one sequence would run
+    off the end of one eye's fixations and into the other's, which restarts at the beginning of the trial.
+    """
     is_in_strip = pd.Series(
-        map(lambda tup: SearchArray.is_in_bottom_strip((tup.x, tup.y)), xy.itertuples()),
-        name="is_in_strip", dtype=bool,
+        [SearchArray.is_in_bottom_strip((row.x, row.y)) for row in fix_features[[cnst.X, cnst.Y]].itertuples()],
+        index=fix_features.index, name="is_in_strip", dtype=bool,
     )
-
-    def num_to_true(bools: Sequence[bool]) -> pd.Series:
-        """
-        Converts a boolean Series or array to a Series of floats indicating the distance to the next True value, or inf
-        if no future True exists.
-        """
-        bools = pd.Series(np.asarray(bools), dtype=bool)
-        indices = np.arange(len(bools))
-        true_indices = np.flatnonzero(bools.to_numpy())
-        next_true_idx = np.searchsorted(true_indices, indices, side='left')
-        dist_to_true = np.full(len(bools), np.inf)
-        valid = next_true_idx < len(true_indices)
-        dist_to_true[valid] = true_indices[next_true_idx[valid]] - indices[valid]
-        assert (dist_to_true >= 0).all(), "Distances should be non-negative."
-        return pd.Series(dist_to_true, index=bools.index, dtype=float)
-
-
-    fixs_to_strip = num_to_true(is_in_strip).rename("num_fixs_to_strip")
+    if cnst.EYE_STR not in fix_features.columns:
+        raise KeyError(f"`fix_features` must contain an '{cnst.EYE_STR}' column to count per eye.")
+    fixs_to_strip = (
+        is_in_strip
+        .groupby(fix_features[cnst.EYE_STR], sort=False, observed=True)
+        .transform(_num_to_next_true)
+        .rename("num_fixs_to_strip")
+    )
     return fixs_to_strip
+
+
+def _num_to_next_true(bools: Sequence[bool]) -> pd.Series:
+    """
+    Distance from each element to the next True, or `inf` where no later True exists.
+    Operates positionally, so callers must pass one contiguous, time-ordered sequence.
+    """
+    bools = pd.Series(np.asarray(bools), dtype=bool)
+    indices = np.arange(len(bools))
+    true_indices = np.flatnonzero(bools.to_numpy())
+    next_true_idx = np.searchsorted(true_indices, indices, side='left')
+    dist_to_true = np.full(len(bools), np.inf)
+    valid = next_true_idx < len(true_indices)
+    dist_to_true[valid] = true_indices[next_true_idx[valid]] - indices[valid]
+    assert (dist_to_true >= 0).all(), "Distances should be non-negative."
+    return pd.Series(dist_to_true, index=bools.index, dtype=float)
 
 
 ### Removing this to postpone the HIT/FA classification out of fixation extraction
