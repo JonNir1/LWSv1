@@ -11,15 +11,26 @@ The flow is worktree -> `dev` -> `origin/dev`, and each arrow needs the user to 
 
 1. **Work on the session's worktree branch.** Small, atomic commits, each standalone where possible. Commit as you
    go rather than batching.
-2. **Rebase onto local `dev`** to pick up the user's changes, not onto `main`. Tag a backup ref first
-   (`backup/pre-<something>`) - a rebase rewrites the branch, and a 30-commit replay can conflict in ways that are
-   tedious to reconstruct.
+2. **Rebase onto local `dev`** to pick up the user's changes, not onto `main`.
 3. **Merge into local `dev` only when the user says so**, and use a merge commit (`--no-ff`) so the branch's shape
    stays visible in the history.
 4. **Push to `origin/dev` only when the user says so**, and only after (3). Never push a worktree branch straight to
    the remote. Never push to `origin/main`.
 
-Run the test suite before any merge, and say plainly if anything fails.
+### Testing cadence
+
+Match the cost of the check to the size of the change:
+
+- **Per commit:** run only the tests covering what you touched - the test file for that module, or the tests you
+  just wrote or edited (`pytest tests/test_<module>.py`, or `-k` on the relevant names). Do not run the full suite
+  for every commit.
+- **Before merging into `dev`:** run the **full** suite, and say plainly if anything fails.
+
+### Backup tags
+
+Tag a backup ref (`backup/<something>`) at meaningful milestones - before a large rebase that will replay many
+commits, or after completing a body of work worth returning to. Not on every merge, and not for small incremental
+changes; a tag per commit is noise that makes the real checkpoints harder to find.
 
 ## What this project is
 
