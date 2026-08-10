@@ -110,14 +110,24 @@ class TestTrialBoundaries:
         gaze = align([Trg.STIMULUS_ON, Trg.STIMULUS_OFF, Trg.NULL, Trg.STIMULUS_ON, Trg.STIMULUS_OFF])
         assert gaze["trial"].dropna().unique().tolist() == [1, 2]
 
-    def test_unclosed_final_trial(self):
-        """Recording stops mid-trial: the last STIMULUS_ON never gets its STIMULUS_OFF.
+    def test_unclosed_final_trial_is_kept(self):
+        """The last STIMULUS_ON never gets its STIMULUS_OFF, but the data is there.
 
-        This is the real case - subjects 38, 42, 43 and 44 each end this way, with no TRIAL_END either.
+        The real case - subjects 38, 42, 43 and 44 - runs a full trial and only loses the closing trigger, so the
+        segment is closed at the last recorded sample rather than discarded.
         """
-        with pytest.warns(RuntimeWarning, match="trailing segment"):
-            gaze = align([Trg.STIMULUS_ON, Trg.STIMULUS_OFF, Trg.NULL, Trg.STIMULUS_ON])
-        assert gaze["trial"].dropna().unique().tolist() == [1]
+        with pytest.warns(RuntimeWarning, match="closing the segment"):
+            gaze = align([Trg.STIMULUS_ON, Trg.STIMULUS_OFF, Trg.NULL, Trg.STIMULUS_ON, Trg.NULL])
+        assert gaze["trial"].dropna().unique().tolist() == [1, 2], "the trailing trial must be recovered"
+
+    def test_unclosed_final_trial_can_be_dropped(self):
+        """`close_trailing=False` keeps the old conservative behaviour for callers that want it."""
+        from data_models.parse.triggers_and_gaze import _is_between_triggers
+
+        trigs = pd.Series([Trg.STIMULUS_ON, Trg.STIMULUS_OFF, Trg.NULL, Trg.STIMULUS_ON])
+        with pytest.warns(RuntimeWarning, match="dropped"):
+            marked = _is_between_triggers(trigs, Trg.STIMULUS_ON, Trg.STIMULUS_OFF, close_trailing=False)
+        assert marked.tolist() == [True, True, False, False]
 
     def test_dropped_end_trigger_does_not_merge_trials(self):
         """A dropped STIMULUS_OFF must not merge two trials into one long one.

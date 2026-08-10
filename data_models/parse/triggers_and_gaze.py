@@ -101,19 +101,30 @@ def _assign_block_numbers(trigs: pd.Series) -> pd.Series:
     return blocks.astype('Int64')
 
 
-def _is_between_triggers(trigs: pd.Series, start: int, end: int) -> pd.Series:
+def _is_between_triggers(
+        trigs: pd.Series, start: int, end: int, close_trailing: bool = True,
+) -> pd.Series:
     """
     Mark every sample from each `start` trigger through the first `end` trigger that follows it.
 
     Pairs by scanning in order rather than positionally, so an unbalanced log degrades gracefully instead of raising
     from `np.vstack` or silently pairing one segment's start with another's end.
 
-    An unclosed `start` is dropped, with a warning. Measured across all 27 raw subject directories (2026-08-06), the
-    only unbalanced case is a **trailing truncated trial**: subjects 38, 42, 43 and 44 each have 60 `STIMULUS_ON` and
-    59 `STIMULUS_OFF`, where recording stopped during trial 60. That trial has no `STIMULUS_OFF` *and no*
-    `TRIAL_END`, so it cannot be closed from the trigger log at all and dropping it is the only correct option - the
-    remaining 59 trials are unaffected. A `start` arriving while another is still open (a genuinely dropped `end`
-    mid-log) does not occur in this dataset; it is handled the same way, defensively.
+    A `start` still open at the end of the log is closed at the last row when `close_trailing` (the default), and
+    dropped otherwise. Closing is right for this dataset: measured across all 27 raw subject directories
+    (2026-08-06), subjects 38, 42, 43 and 44 each have 60 `STIMULUS_ON` and 59 `STIMULUS_OFF`, and the unclosed
+    final segment spans 99.9-103.3% of that subject's median trial duration with ~12,500 gaze samples. The trial ran
+    to completion; only the closing trigger was never written. Dropping it would discard a full trial of real data
+    from each of those subjects.
+
+    The residual cost is that the trial's end time becomes the last recorded sample rather than the true stimulus
+    offset, so `to_trial_end` may be overstated by however long recording continued past offset - bounded by the
+    ~210 ms `STIMULUS_OFF` -> `TRIAL_END` gap seen elsewhere in these logs. That is small against the 1000 ms
+    `not_close_to_trial_end` threshold, but it is why the warning reports the span: a *genuinely* truncated trial
+    would show up there as a short segment and should be excluded.
+
+    A `start` arriving while another is still open (a dropped `end` mid-log) does not occur in this dataset; that
+    segment is dropped, since its extent is unknowable.
     """
     res = pd.Series(False, index=range(len(trigs)))
     codes = trigs.to_numpy()
@@ -131,11 +142,19 @@ def _is_between_triggers(trigs: pd.Series, start: int, end: int) -> pd.Series:
             res.iloc[open_at:pos + 1] = True
             open_at = None
     if open_at is not None:
-        warnings.warn(
-            f"trigger {start} at position {open_at} has no matching {end}; the trailing segment is dropped "
-            f"(recording most likely stopped mid-trial).",
-            RuntimeWarning,
-        )
+        if close_trailing:
+            res.iloc[open_at:] = True
+            warnings.warn(
+                f"trigger {start} at position {open_at} has no matching {end}; closing the segment at the last "
+                f"recorded sample ({len(trigs) - open_at} rows). Check that span against a typical segment - a "
+                f"much shorter one means the recording really was cut short.",
+                RuntimeWarning,
+            )
+        else:
+            warnings.warn(
+                f"trigger {start} at position {open_at} has no matching {end}; the trailing segment is dropped.",
+                RuntimeWarning,
+            )
     return res
 
 
