@@ -11,13 +11,23 @@ def convert_fixations_to_visits(
         visit_merging_time_threshold: float,
 ) -> pd.DataFrame:
     """
-    Groups the provided fixations into discrete target-visits. A target-visit is a sequence of fixations from the same
-    eye that are all on-target (i.e., below the distance threshold), and that the time gap between each fixation and the
-    previous one is below the temporal threshold. So, a new target-visit is initiated when two conditions are met:
+    Groups the provided fixations into discrete target-visits.
+
+    IMPORTANT: visits exist **only for targets**. There is no clustering of fixations in general - a fixation that
+    lands on a distractor, on the background, or on the exemplar strip belongs to no visit at all. The visits table
+    is therefore not a segmentation of the scanpath; it is "episodes of looking at a target". Roughly 10% of
+    fixations are on-target, so the visits table covers about a tenth of the fixation table.
+
+    A target-visit is a sequence of fixations from the same eye that are all on-target (i.e., below the distance
+    threshold), and that the time gap between each fixation and the previous one is below the temporal threshold.
+    So, a new target-visit is initiated when two conditions are met:
     (1) the current fixation is on-target;
     (2) A) the previous fixation was not on-target, OR
         B) the previous fixation ended more than the temporal threshold before the current fixation started.
     NOTE: A fixation may belong to a single visit per target, but could be considered a visit for multiple targets.
+    Measured on the current build, that is rare: of 11,716 on-target fixations only 24 (0.2%) fall within threshold
+    of two targets, because targets are placed far apart. The same would *not* hold for distractors - see
+    `CODE_REVIEW.md` T1 on per-icon visits.
 
     :param all_fixations: pd.DataFrame; fixations to be grouped into visits.
     :param target_distance_threshold_dva: float; the distance threshold in DVA for a fixation to be considered on-target.
@@ -39,6 +49,8 @@ def convert_fixations_to_visits(
     - weighted_distance_dva: float; the weighted average distance from the visit's fixations to the target in DVA (weighted by fixation durations)
     - num_fixs_to_strip: int; the number of fixations from the visit's last fixation until the next visit to the
         bottom-strip, or np.inf if no subsequent fixations were inside the bottom-strip.
+    - num_fixations: int; how many fixations the visit is made of
+    - num_outlier_fixations: int; how many of those carry a non-empty `outlier_reasons`
     """
     visits = []
     for (trial, eye), subset in tqdm(
@@ -49,6 +61,8 @@ def convert_fixations_to_visits(
         if subset.empty:
             continue
         visit_ids = _assign_visit_ids(subset, target_distance_threshold_dva, visit_merging_time_threshold)
+        if visit_ids.empty:
+            continue    # no target had usable distances in this (trial, eye)
         for target_visit_col in visit_ids.columns:
             tgt_vis_ids = visit_ids[target_visit_col]
             if tgt_vis_ids.isna().all():
@@ -118,6 +132,10 @@ def _assign_visit_ids(
         visit_id = np.where(is_on_target, visit_counter, np.nan)
         visit_id = pd.Series(visit_id, index=fixs_subset.index, name=f"{target_name}_{cnst.VISIT_STR}")
         target_visit_ids.append(visit_id)
+    if not target_visit_ids:
+        # every target's distances were all-NaN; `pd.concat([])` would raise, so return an empty frame the caller
+        # can skip over
+        return pd.DataFrame(index=fixs_subset.index)
     visit_ids = pd.concat(target_visit_ids, axis=1)
     return visit_ids
 
@@ -130,6 +148,14 @@ def _extract_visit_features(visit_fixs: pd.DataFrame, visit_idx: int, trial: int
     center_pixel_y = np.nansum(visit_fixs[cnst.Y].values * durations.values) / np.nansum(durations)
     distance_col = f"{target}_{cnst.DISTANCE_STR}_dva"
     weighted_distance = np.nansum(visit_fixs[distance_col].values * durations.values) / np.nansum(durations)
+    # carry the outlier tally so visit-level filtering is possible at read time; a visit made *entirely* of outlier
+    # fixations has no trustworthy sample left, whereas one containing a single sub-threshold blip alongside good
+    # fixations is still a real episode of looking at the target (CODE_REVIEW.md H2 / T2)
+    if "outlier_reasons" in visit_fixs.columns:
+        is_outlier = visit_fixs["outlier_reasons"].map(lambda r: isinstance(r, list) and len(r) > 0)
+        num_outliers = int(is_outlier.sum())
+    else:
+        num_outliers = 0
     return {
         cnst.TRIAL_STR: trial,
         cnst.EYE_STR: eye,
@@ -146,6 +172,8 @@ def _extract_visit_features(visit_fixs: pd.DataFrame, visit_idx: int, trial: int
         f"max_{cnst.DISTANCE_STR}_dva": visit_fixs[distance_col].max(),
         f"weighted_{cnst.DISTANCE_STR}_dva": weighted_distance,
         "num_fixs_to_strip": visit_fixs["num_fixs_to_strip"].iloc[-1],
+        "num_fixations": len(visit_fixs),
+        "num_outlier_fixations": num_outliers,
     }
 
 

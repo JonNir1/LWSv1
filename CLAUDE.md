@@ -92,8 +92,12 @@ Object model (`Subject` -> list of `Trial` -> one `SearchArray` each):
 - `data_models/preprocess/fixations.py` turns detected events into the fixation table, adding per-target distances in
   px and DVA, the closest target, and `num_fixs_to_strip` (how many fixations until the next one lands in the
   exemplar strip; `inf` if never).
-- `data_models/preprocess/visits.py` groups consecutive on-target fixations into *visits*. A fixation can belong to at
-  most one visit per target but may be part of visits to several targets simultaneously.
+- `data_models/preprocess/visits.py` groups consecutive on-target fixations into *visits*. **Visits exist only for
+  targets.** There is no general clustering of fixations: a fixation on a distractor, on the background, or on the
+  exemplar strip belongs to no visit at all. The visits table is not a segmentation of the scanpath - it is
+  "episodes of looking at a target", covering roughly the 10% of fixations that are on-target. A fixation can belong
+  to at most one visit per target, and in principle to visits of several targets at once, though that is rare in
+  practice (0.2% of on-target fixations) because targets are placed far apart.
 - `data_models/preprocess/target_identifications.py` matches each identification action to the nearest gaze sample in
   time, finds the closest target, and labels it hit / repeated_hit / false_alarm; unidentified targets are appended as
   misses with `time = inf`.

@@ -44,6 +44,8 @@ def read_data(
                 # treat None as not-outlier:
                 lambda rsns: (isinstance(rsns, list) and len(rsns) == 0) or rsns is None
         )]
+    if drop_outliers and visits is not None:
+        visits = _drop_outlier_visits(visits)
     return LoadedData(
         targets=targets,
         actions=actions,
@@ -82,6 +84,30 @@ def _load(dir_path: str, name: str, missing: Literal["warn", "ignore", "raise"])
         if missing == "warn":
             warnings.warn(msg)
         return None
+
+
+def _drop_outlier_visits(visits: pd.DataFrame) -> pd.DataFrame:
+    """
+    Drop visits whose fixations are *all* outliers.
+
+    A visit is an episode of looking at a target, built from several fixations. One outlier fixation inside it does
+    not invalidate the episode - and on the current build 99.5% of outliers are sub-50 ms blips, so an "any outlier"
+    rule would discard 12.4% of visits over what is mostly detector noise. Requiring *all* fixations to be outliers
+    drops 1.5% and leaves only visits with no trustworthy sample behind them.
+
+    Visits built before this column existed are kept, with a warning: their outlier composition is unknown, and
+    silently treating them as clean would hide it.
+    """
+    required = {"num_fixations", "num_outlier_fixations"}
+    if not required.issubset(visits.columns):
+        warnings.warn(
+            "visits table predates outlier tracking (no num_outlier_fixations column), so outlier visits cannot be "
+            "dropped; re-run the pipeline to rebuild it.",
+            RuntimeWarning,
+        )
+        return visits
+    all_outliers = visits["num_outlier_fixations"] >= visits["num_fixations"]
+    return visits.loc[~all_outliers]
 
 
 def _drop_bad_eye(events: pd.DataFrame, metadata: pd.DataFrame) -> pd.DataFrame:

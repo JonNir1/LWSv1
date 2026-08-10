@@ -21,7 +21,7 @@ def check_lws_criteria(
 ) -> pd.DataFrame:
     """ Returns a DataFrame aligned to event_data.index with boolean columns for each criterion + `is_lws`. """
     _validate_event_type(event_type)
-    ident_time = _identification_time_lookup(idents)  # Series indexed by (subject, trial, target)
+    ident_time = identification_time_lookup(idents)  # Series indexed by (subject, trial, target)
     criteria_funcs: dict[str, Callable[[], pd.Series]] = {
         "on_target": lambda: is_on_target(event_data, on_target_threshold_dva, event_type),
         "before_identification": lambda: is_before_identification(event_data, ident_time),
@@ -42,7 +42,7 @@ def check_target_return_criteria(
 ) -> pd.DataFrame:
     """ Returns a DataFrame aligned to event_data.index with boolean columns for each criterion + `is_target_return`. """
     _validate_event_type(event_type)
-    ident_time = _identification_time_lookup(idents)
+    ident_time = identification_time_lookup(idents)
     criteria_funcs: dict[str, Callable[[], pd.Series]] = {
         "on_target": lambda: is_on_target(event_data, on_target_threshold_dva, event_type),
         "after_identification": lambda: is_after_identification(event_data, ident_time),
@@ -134,7 +134,7 @@ def _distance_columns(event_data: pd.DataFrame, event_type: Literal["fixation", 
     return dist_cols
 
 
-def _identification_time_lookup(idents: pd.DataFrame) -> pd.Series:
+def identification_time_lookup(idents: pd.DataFrame) -> pd.Series:
     """
     Build a lookup Series mapping (subject, trial, target) -> the time the target was identified.
 
