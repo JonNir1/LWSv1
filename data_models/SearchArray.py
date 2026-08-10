@@ -176,8 +176,13 @@ class SearchArray:
 
     @classmethod
     def is_in_bottom_strip(cls, p: Tuple[float, float]) -> bool:
-        """ Check if a point is within the bottom strip rectangle, containing target exemplars. """
-        return cls._is_in_rectangle(p[0], p[1], cls._BOTTOM_STRIP_TOP_LEFT, cls._BOTTOM_STRIP_BOTTOM_RIGHT)
+        """
+        Check if a point is within the bottom strip rectangle, containing target exemplars.
+
+        The rectangle is inclusive at both edges. `_is_in_rectangle` returns `np.bool_` for scalar input, so cast to
+        a real `bool` to match the annotation.
+        """
+        return bool(cls._is_in_rectangle(p[0], p[1], cls._BOTTOM_STRIP_TOP_LEFT, cls._BOTTOM_STRIP_BOTTOM_RIGHT))
 
     @staticmethod
     def get_path(

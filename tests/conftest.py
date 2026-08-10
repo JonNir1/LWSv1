@@ -35,6 +35,26 @@ def output_dir() -> str:
 
 
 @pytest.fixture(scope="session")
+def stimuli_dir() -> str:
+    """Path to the stimulus `.mat` files, or skip if they are not on this machine."""
+    path = os.path.join(cnfg.SEARCH_ARRAY_PATH, f"generated_stim{cnfg.STIMULI_VERSION}")
+    if not os.path.isdir(path):
+        pytest.skip(f"stimuli not found at {path}")
+    return path
+
+
+@pytest.fixture(scope="session")
+def array_info(stimuli_dir: str) -> dict:
+    """`ArrayInfo.mat` - the stimulus-generation config the search arrays were built from."""
+    from pymatreader import read_mat
+
+    path = os.path.join(stimuli_dir, "ArrayInfo.mat")
+    if not os.path.isfile(path):
+        pytest.skip(f"ArrayInfo.mat not found in {stimuli_dir}")
+    return read_mat(path)["ArrayInfo"]
+
+
+@pytest.fixture(scope="session")
 def loaded(output_dir: str):
     """The six pickles, unfiltered - no eye dropping, no outlier dropping."""
     from analysis.helpers.read_data import read_data
