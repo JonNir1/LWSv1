@@ -1,4 +1,6 @@
+import warnings
 from enum import IntEnum as _IntEnum
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -101,23 +103,39 @@ def _assign_block_numbers(trigs: pd.Series) -> pd.Series:
 
 def _is_between_triggers(trigs: pd.Series, start: int, end: int) -> pd.Series:
     """
-    Returns a boolean series indicating whether the values in the 'trigs' series occur after 'start' and before 'end'.
+    Mark every sample from each `start` trigger through the first `end` trigger that follows it.
 
-    KNOWN LIMITATION (CODE_REVIEW.md H5, deferred): pairs `start` and `end` triggers **positionally**, so it requires
-    equal counts of each. An unbalanced log - a trial truncated by the end of the recording, or a dropped
-    `STIMULUS_OFF` - raises `ValueError` from `np.vstack`; equal-but-misaligned counts silently pair one segment's
-    start with another's end.
+    Pairs by scanning in order rather than positionally, so an unbalanced log degrades gracefully instead of raising
+    from `np.vstack` or silently pairing one segment's start with another's end.
 
-    Deliberately left as-is until the subjects can be re-parsed. The intended fix is to fall back to `TRIAL_END`
-    (~1 s after `STIMULUS_OFF`) when a trial's `STIMULUS_OFF` is missing, which recovers a real boundary instead of
-    either discarding the trial or inventing one - but it can only be validated against raw data.
+    An unclosed `start` is dropped, with a warning. Measured across all 27 raw subject directories (2026-08-06), the
+    only unbalanced case is a **trailing truncated trial**: subjects 38, 42, 43 and 44 each have 60 `STIMULUS_ON` and
+    59 `STIMULUS_OFF`, where recording stopped during trial 60. That trial has no `STIMULUS_OFF` *and no*
+    `TRIAL_END`, so it cannot be closed from the trigger log at all and dropping it is the only correct option - the
+    remaining 59 trials are unaffected. A `start` arriving while another is still open (a genuinely dropped `end`
+    mid-log) does not occur in this dataset; it is handled the same way, defensively.
     """
-    start_idxs = np.nonzero(trigs == start)[0]
-    end_idxs = np.nonzero(trigs == end)[0]
-    start_end_idxs = np.vstack([start_idxs, end_idxs]).T
-    res = pd.Series(np.full_like(trigs, False, dtype=bool))
-    for (start, end) in start_end_idxs:
-        res.iloc[start:end + 1] = True
+    res = pd.Series(False, index=range(len(trigs)))
+    codes = trigs.to_numpy()
+    open_at: Optional[int] = None
+    for pos, code in enumerate(codes):
+        if code == start:
+            if open_at is not None:
+                warnings.warn(
+                    f"trigger {start} at position {pos} while the one at {open_at} is still open; "
+                    f"the {end} trigger appears to be missing, so that segment is dropped.",
+                    RuntimeWarning,
+                )
+            open_at = pos
+        elif code == end and open_at is not None:
+            res.iloc[open_at:pos + 1] = True
+            open_at = None
+    if open_at is not None:
+        warnings.warn(
+            f"trigger {start} at position {open_at} has no matching {end}; the trailing segment is dropped "
+            f"(recording most likely stopped mid-trial).",
+            RuntimeWarning,
+        )
     return res
 
 
@@ -184,9 +202,33 @@ def _read_gaze(gaze_path: str) -> pd.DataFrame:
     return gaze
 
 
+def _drop_empty_trigger_rows(triggers: pd.DataFrame) -> pd.DataFrame:
+    """
+    Drop rows whose trigger code is missing, so `_ExperimentTriggerEnum(nan)` cannot raise.
+
+    E-Prime's export ends several logs with one incomplete line: 7 of the 27 raw subject directories (33, 34, 35, 38,
+    39, 42, 44) carry exactly one NaN code, always the final row. Dropping it is safe - it holds no event. An
+    *interior* NaN would mean a genuinely lost trigger rather than a truncated write, so warn about that case
+    instead of passing over it silently.
+    """
+    is_missing = triggers[cnst.TRIGGER_STR].isna()
+    if not is_missing.any():
+        return triggers
+    positions = np.flatnonzero(is_missing.to_numpy())
+    trailing = set(positions) <= set(range(len(triggers) - len(positions), len(triggers)))
+    if not trailing:
+        warnings.warn(
+            f"trigger log has {len(positions)} missing code(s) away from the end of the file "
+            f"(positions {positions[:5].tolist()}); a trigger was lost mid-recording.",
+            RuntimeWarning,
+        )
+    return triggers.loc[~is_missing].reset_index(drop=True)
+
+
 def _read_triggers(triggers_path: str) -> pd.DataFrame:
     triggers = pd.read_csv(triggers_path, sep="\t")
     triggers.rename(columns=_TRIGGER_FIELD_MAP, inplace=True)
+    triggers = _drop_empty_trigger_rows(triggers)
     triggers[cnst.TRIGGER_STR] = triggers[cnst.TRIGGER_STR].map(lambda trgr: _ExperimentTriggerEnum(trgr))
 
     # add `action` column

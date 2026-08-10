@@ -110,24 +110,21 @@ class TestTrialBoundaries:
         gaze = align([Trg.STIMULUS_ON, Trg.STIMULUS_OFF, Trg.NULL, Trg.STIMULUS_ON, Trg.STIMULUS_OFF])
         assert gaze["trial"].dropna().unique().tolist() == [1, 2]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="H5 (deferred): np.vstack requires equal start/end counts, so a trial truncated by the end of the "
-        "recording raises ValueError. Fix is to fall back to TRIAL_END, which needs raw data to validate.",
-    )
     def test_unclosed_final_trial(self):
-        """Recording stops mid-trial: the last STIMULUS_ON never gets its STIMULUS_OFF."""
-        gaze = align([Trg.STIMULUS_ON, Trg.STIMULUS_OFF, Trg.NULL, Trg.STIMULUS_ON])
+        """Recording stops mid-trial: the last STIMULUS_ON never gets its STIMULUS_OFF.
+
+        This is the real case - subjects 38, 42, 43 and 44 each end this way, with no TRIAL_END either.
+        """
+        with pytest.warns(RuntimeWarning, match="trailing segment"):
+            gaze = align([Trg.STIMULUS_ON, Trg.STIMULUS_OFF, Trg.NULL, Trg.STIMULUS_ON])
         assert gaze["trial"].dropna().unique().tolist() == [1]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="H5 (deferred): pairing is positional, so a dropped STIMULUS_OFF pairs trial 1's start with trial 2's "
-        "end and swallows the gap between them. Fix is to fall back to TRIAL_END (~1 s later), which recovers the "
-        "real boundary rather than discarding the trial or inventing one; needs raw data to validate.",
-    )
     def test_dropped_end_trigger_does_not_merge_trials(self):
-        """A dropped STIMULUS_OFF must not merge two trials into one long one."""
-        gaze = align([Trg.STIMULUS_ON, Trg.NULL, Trg.STIMULUS_ON, Trg.STIMULUS_OFF])
+        """A dropped STIMULUS_OFF must not merge two trials into one long one.
+
+        Does not occur in this dataset (see `_is_between_triggers`); handled defensively.
+        """
+        with pytest.warns(RuntimeWarning, match="still open"):
+            gaze = align([Trg.STIMULUS_ON, Trg.NULL, Trg.STIMULUS_ON, Trg.STIMULUS_OFF])
         in_trial = gaze["trial"].notna().tolist()
         assert in_trial[1] is False, "the gap between the two trials must not be marked as in-trial"
