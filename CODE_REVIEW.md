@@ -85,7 +85,12 @@ Recorded here so they are not re-litigated as defects. These need a research dec
 - **T2. What makes a *visit* an outlier?** Does one outlier fixation (or saccade) inside a visit contaminate the whole
   visit, or only a visit whose fixations are all outliers? Needed before visit-level outlier exclusion can be
   implemented (see H2, which for now must refuse the request rather than ignore it).
-- **T3. What is the longest plausible fixation in this paradigm?** Currently 2500 ms, inherited unexamined from a
+- **T3. What is the longest plausible fixation in this paradigm?** *(RESOLVED 2026-08-06: keep the default.)*
+  The duration distribution was measured over 116,947 fixations and the right tail decays smoothly and
+  monotonically - p99 = 770 ms, p99.9 = 1468 ms, max = 2797 ms, with bin counts falling 1271 -> 1 across
+  500-3000 ms. No secondary mode, so no empirical cut point. The 2500 ms default stands, with a TODO in
+  `config.py` to check the visual-search literature for a principled bound.
+  Original statement: Currently 2500 ms, inherited unexamined from a
   `peyes` default, and it silently removes longer fixations from every analysis (see H7). Long dwells on
   not-yet-identified targets are theoretically the strongest LWS candidates, so this threshold needs the same
   justification treatment as `TIME_TO_TRIAL_END_THRESHOLD` and `FIXATIONS_TO_STRIP_THRESHOLD` in
@@ -1164,18 +1169,14 @@ each of these would have caught a Critical or High issue above:
 Suggested layout: `tests/` at repo root, `pytest` + `pytest-cov`, fixtures building small synthetic trigger/gaze frames
 (no raw data dependency). Add `[tool.pytest.ini_options] testpaths = ["tests"]` to the new `pyproject.toml` (M14).
 
-### L2. No linter/formatter/type-checker configuration
+### L2. ~~No linter/formatter/type-checker configuration~~
 
-**STATUS: DEFERRED by decision** (2026-08-06) — no linter for now. A ruff config was added and then removed
-(`9805560`, reverted in `4a11e53`); it was never installed or run, so it had asserted nothing about the code.
-`pyproject.toml` now holds only the pytest `pythonpath` setting.
-
-Kept as a low-priority note rather than closed, because the underlying observation stands: type hints are
-inconsistent — `_extract_singleton_column(df, col_name)` (no annotations), `_validate_inputs(...)` (no return type),
-`detect_eye_movements(..., detector=_DETECTOR)` (untyped detector). Worth revisiting if the codebase gains other
-contributors, at which point `ruff check` (lint only, no reformatting) is the cheapest first step. Adopting it later
-means absorbing a large one-off diff — mostly import ordering and unused imports — so it is best done deliberately,
-between analyses rather than during one.
+**STATUS: WITHDRAWN** (2026-08-06). No linter for this repo. The evidence is this review itself:
+of the 20+ findings, essentially none would have been caught by `ruff` - not C2's wrong column name
+(a valid string), not M4's falsy-zero guard, not C4's key collision, not H1's cross-eye scan, not
+M17's unbound `del`. It would have flagged three unused imports and one dead function, all
+cosmetic, in exchange for a large one-off reformatting diff and ongoing churn. For a solo research
+pipeline the risk is logic errors, and tests are what catch those.
 
 ### L3. Resource handling and small correctness nits
 
@@ -1261,14 +1262,13 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | --- | --- |
 | **T1** d' denominator | research decision |
 | **T2** what makes a *visit* an outlier | research decision; H2 refuses the request until this is settled |
-| **T3** fixation `max_duration` | research decision; the value is now explicit in `config.py` at its previous 2500 ms |
+| ~~**T3** fixation `max_duration`~~ | resolved - no bump in the tail, so the 2500 ms default stands with a literature TODO |
 | **H5** trigger pairing | unblocked - raw data and stimuli are local; fall back to `TRIAL_END` |
 | **C3 frequency** | unblocked - `SEARCH_ARRAY_PATH` is now local; needs a pipeline re-run |
 | **M10, M11** GAM specification | deferred by decision; accepted as valid, modelling choice pending |
 | **M12** `px2deg` position dependence | deferred by decision; measured median 3.0% / max 9.7% across real targets |
 | **L7** broken cell in `_determine_time_to_trial_end` | pre-existing `KeyError`; fix depends on the intended denominator |
 | ~~**M14** packaging~~ | withdrawn — not a distributable package; the scratchpad import is fixed |
-| **L2** linter | deferred by decision; low priority, revisit if the project gains contributors |
 | **L4** strip geometry validation | unblocked - `Stimuli/` is now local |
 
 **Re-run required.** Every stage-1 fix (C2, C3, C4, H1, H6, M15) changes the pickles, and the caches now

@@ -32,7 +32,11 @@ PUBLICATIONS_PATH = os.path.join(_BASE_PATH, "Publications")
 # fixations, all of them on-target.
 MIN_EVENT_DURATION_MS = 5               # shortest event the detector will emit
 FIXATION_MIN_DURATION_MS = 50
-FIXATION_MAX_DURATION_MS = 2500         # TODO(T3): justify or replace this inherited default
+# Measured 2026-08-06 over 116,947 fixations: the right tail decays smoothly and monotonically with no secondary
+# mode (p99 = 770 ms, p99.9 = 1468 ms, max = 2797 ms; 500-750 ms n=1271 falling to 2750-3000 ms n=1). There is no
+# empirical bump to cut at, so the peyes default is kept rather than replaced by an arbitrary cut.
+# TODO(T3): check the visual-search literature for a principled upper bound on fixation duration and adopt it here.
+FIXATION_MAX_DURATION_MS = 2500
 SACCADE_MIN_DURATION_MS = MIN_EVENT_DURATION_MS
 SACCADE_MAX_DURATION_MS = 200
 
