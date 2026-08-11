@@ -9,7 +9,7 @@ import pytest
 
 import constants as cnst
 from data_models.LWSEnums import SignalDetectionCategoryEnum as SDT
-from data_models.preprocess.target_identifications import (
+from pipeline.align.target_identifications import (
     _append_missed_targets,
     _classify_hits_and_false_alarms,
 )
@@ -20,12 +20,13 @@ ON_TARGET_DVA = 1.75
 def raw_idents(rows: list[tuple[str, float, float]]) -> pd.DataFrame:
     """Build the frame `_classify_hits_and_false_alarms` consumes, from (nearest_target, time, distance_dva)."""
     return pd.DataFrame(
-        [{cnst.TARGET_STR: tgt, cnst.TIME_STR: t, cnst.DISTANCE_DVA_STR: d} for tgt, t, d in rows]
+        [{cnst.SUBJECT_STR: 1, cnst.TRIAL_STR: 1,
+          cnst.TARGET_STR: tgt, cnst.TIME_STR: t, cnst.DISTANCE_DVA_STR: d} for tgt, t, d in rows]
     )
 
 
-def targets_frame(names: list[str]) -> pd.DataFrame:
-    return pd.DataFrame(index=names, data={f"{cnst.TARGET_STR}_x": 0.0, f"{cnst.TARGET_STR}_y": 0.0})
+def target_ids(names: list[str]) -> np.ndarray:
+    return np.array(names)
 
 
 class TestClassification:
@@ -63,7 +64,7 @@ class TestClassification:
 class TestMissedTargets:
     def test_unidentified_targets_appended_with_infinite_time(self):
         idents = _classify_hits_and_false_alarms(raw_idents([("target0", 1000.0, 0.5)]), ON_TARGET_DVA)
-        out = _append_missed_targets(idents, targets_frame(["target0", "target1"]))
+        out = _append_missed_targets(idents, target_ids(["target0", "target1"]))
         missed = out[out[cnst.IDENTIFICATION_CATEGORY_STR] == SDT.MISS]
         assert missed[cnst.TARGET_STR].tolist() == ["target1"]
         assert missed[cnst.TIME_STR].tolist() == [np.inf]
@@ -71,7 +72,7 @@ class TestMissedTargets:
     def test_false_alarm_does_not_suppress_a_miss(self):
         """C4 knock-on: nulling the FA target must not make target0 look identified."""
         idents = _classify_hits_and_false_alarms(raw_idents([("target0", 500.0, 9.0)]), ON_TARGET_DVA)
-        out = _append_missed_targets(idents, targets_frame(["target0"]))
+        out = _append_missed_targets(idents, target_ids(["target0"]))
         missed = out[out[cnst.IDENTIFICATION_CATEGORY_STR] == SDT.MISS]
         assert missed[cnst.TARGET_STR].tolist() == ["target0"], "an un-hit target must still be recorded as a miss"
 
@@ -90,7 +91,7 @@ class TestMissedTargets:
             ]),
             ON_TARGET_DVA,
         )
-        out = _append_missed_targets(idents, targets_frame(["target0", "target1", "target2"]))
+        out = _append_missed_targets(idents, target_ids(["target0", "target1", "target2"]))
         labelled = out[out[cnst.TARGET_STR].notna()]
         assert set(labelled[cnst.TARGET_STR]) == {"target0", "target1", "target2"}, (
             "every target must appear as a hit or a miss"

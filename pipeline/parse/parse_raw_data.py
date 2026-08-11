@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple
 from tqdm import tqdm
 
 from data_models.Subject import Subject
-from pipeline.cache_key import build_cache_key, describe_staleness, is_cache_valid, write_cache_key
+from pipeline.parse.cache_key import build_cache_key, describe_staleness, is_cache_valid, write_cache_key
 
 # Errors that mean "this subject's raw data is unusable" and so justify skipping the subject. Anything else is a bug
 # in the pipeline and must propagate rather than silently reduce N.

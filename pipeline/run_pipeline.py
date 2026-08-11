@@ -9,8 +9,8 @@ import config as cnfg
 from data_models.LWSEnums import SubjectActionCategoryEnum
 from data_models.parse.eye_movements import configure_peyes
 
-from pipeline.parse_raw_data import parse_all_subjects
-from pipeline.build_dataframes import build_dataframes
+from pipeline.parse.parse_raw_data import parse_all_subjects
+from pipeline.parse.build_dataframes import build_dataframes
 
 
 
