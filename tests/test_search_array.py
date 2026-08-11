@@ -68,6 +68,43 @@ class TestGeometryAgainstStimulusConfig:
         assert not inside, f"{len(inside)} icon centre(s) fall inside the exemplar strip: {inside[:3]}"
 
 
+class TestIconAccessor:
+    """The `icons` accessor and its stable identifier, which replaced the positional `target{j}` scheme."""
+
+    @pytest.fixture
+    def array(self, stimuli_dir) -> SearchArray:
+        return SearchArray.from_mat(
+            SearchArray.get_path(cnfg.STIMULI_VERSION, SearchArrayCategoryEnum.COLOR, 1, "mat")
+        )
+
+    def test_returns_every_icon(self, array):
+        assert len(array.icons) == array.num_icons == SearchArray._NUM_ROWS * SearchArray._NUM_COLS
+
+    def test_target_flag_matches_num_targets(self, array):
+        assert sum(is_target for _id, _img, is_target in array.icons) == array.num_targets
+
+    def test_identifier_is_the_flat_row_major_position(self, array):
+        """`icon{i}` must name a position in the array, not a position among the targets."""
+        flat_is_target = array._is_targets.reshape(-1)
+        expected = [f"icon{i}" for i in np.flatnonzero(flat_is_target)]
+        assert [icon_id for icon_id, _img, is_target in array.icons if is_target] == expected
+
+    def test_ids_are_unique_and_ordered(self, array):
+        ids = [icon_id for icon_id, _img, _is_target in array.icons]
+        assert len(set(ids)) == len(ids)
+        assert ids == [f"icon{i}" for i in range(array.num_icons)]
+
+    def test_target_images_agree_with_the_targets_property(self, array):
+        """The two accessors must not drift - `targets` is the `is_target` subset of `icons`."""
+        assert [img for _id, img, is_target in array.icons if is_target] == array.targets
+
+    def test_identity_is_stable_across_arrays_at_the_same_position(self, stimuli_dir):
+        """The same grid position carries the same id in every array - the point of the refactor."""
+        a = SearchArray.from_mat(SearchArray.get_path(cnfg.STIMULI_VERSION, SearchArrayCategoryEnum.COLOR, 1, "mat"))
+        b = SearchArray.from_mat(SearchArray.get_path(cnfg.STIMULI_VERSION, SearchArrayCategoryEnum.BW, 1, "mat"))
+        assert [i for i, _, _ in a.icons] == [i for i, _, _ in b.icons]
+
+
 class TestStripMembership:
     @pytest.mark.parametrize(
         "point, expected",

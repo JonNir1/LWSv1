@@ -101,7 +101,8 @@ def _find_closest_target(identification_gaze: pd.DataFrame, px2deg: float,) -> p
     - The distance to the closest target in pixels
     - The distance to the closest target in degrees of visual angle (DVA)
     """
-    dists = identification_gaze[[col for col in identification_gaze.columns if col.startswith(cnst.TARGET_STR)]].copy()
+    # gaze distance columns are named by the target's stable `icon{i}` identifier (see `Trial._calculate_target_distances`)
+    dists = identification_gaze[[col for col in identification_gaze.columns if col.startswith(cnst.ICON_STR)]].copy()
     closest_target = dists.idxmin(axis=1).rename(cnst.TARGET_STR)
     dists_px = pd.Series(
         dists.to_numpy()[dists.index, dists.columns.get_indexer(closest_target)],

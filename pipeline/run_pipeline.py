@@ -26,7 +26,7 @@ def run_pipeline(
         verbose: bool = True,
         force_reparse: bool = False,
 ) -> (
-        pd.DataFrame,   # targets
+        pd.DataFrame,   # icons
         pd.DataFrame,   # actions
         pd.DataFrame,   # metadata
         pd.DataFrame,   # identifications
@@ -48,7 +48,7 @@ def run_pipeline(
     subjects, bad_subjects = parse_all_subjects(raw_data_path, verbose, force_reparse=force_reparse)
     if not subjects:
         raise RuntimeError(f"No subjects could be parsed from {raw_data_path!r}. Failures: {bad_subjects}")
-    targets, actions, metadata, idents, fixations, visits = build_dataframes(
+    icons, actions, metadata, idents, fixations, visits = build_dataframes(
         subjects,
         identification_actions=identification_actions,
         gaze_to_trigger_time_threshold=gaze_to_trigger_time_threshold,
@@ -62,7 +62,7 @@ def run_pipeline(
             print("Saving data to output path:", save_to)
         if not os.path.exists(save_to):
             os.makedirs(save_to)
-        targets.to_pickle(os.path.join(save_to, 'targets.pkl'))
+        icons.to_pickle(os.path.join(save_to, 'icons.pkl'))
         actions.to_pickle(os.path.join(save_to, 'actions.pkl'))
         metadata.to_pickle(os.path.join(save_to, 'metadata.pkl'))
         idents.to_pickle(os.path.join(save_to, 'idents.pkl'))
@@ -74,7 +74,7 @@ def run_pipeline(
             json.dump({"n_subjects": len(subjects), "failures": bad_subjects}, f, indent=2)
     if verbose:
         print(f"Full pipeline completed in {time() - start_time:.2f} seconds.")
-    return targets, actions, metadata, idents, fixations, visits
+    return icons, actions, metadata, idents, fixations, visits
 
 
 

@@ -122,13 +122,33 @@ class Trial:
         actions = pd.concat([actions, to_trial_end], axis=1)
         return actions
 
+    def get_icons(self) -> pd.DataFrame:
+        """
+        Extracts every icon in the trial's search array: pixel coordinates, jitter angle, category, image sub-path,
+        and whether it is a target.
+
+        Indexed by the stable `icon{i}` identifier (flat row-major position in the array). Columns are prefixed
+        `target_` for backwards compatibility with the consumers of `get_targets()`, which is a filter over this.
+        """
+        icons = self._search_array.icons
+        images = [img for _icon_id, img, _is_tgt in icons]
+        icon_df = pd.DataFrame(images, index=[icon_id for icon_id, _img, _is_tgt in icons])
+        icon_df[cnfg.CATEGORY_STR] = [img.category.name for img in images]
+        icon_df = icon_df.rename(columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False)
+        icon_df["is_target"] = [is_tgt for _icon_id, _img, is_tgt in icons]
+        return icon_df
+
     def get_targets(self) -> pd.DataFrame:
-        """ Extracts the trial's target information: the targets' pixel coordinates, angle, category, and image path. """
-        target_images = self._search_array.targets
-        target_df = pd.DataFrame(target_images, index=[f"{cnfg.TARGET_STR}{i}" for i in range(len(target_images))])
-        target_df[cnfg.CATEGORY_STR] = [img.category.name for img in target_images]
-        target_df = target_df.rename(columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False)
-        return target_df
+        """
+        The target subset of `get_icons()`: pixel coordinates, angle, category, and image path, indexed by the same
+        stable `icon{i}` identifier.
+        """
+        icons = self.get_icons()
+        targets = icons.loc[icons["is_target"]].drop(columns=["is_target"])
+        assert len(targets) == self.num_targets, (
+            f"expected {self.num_targets} targets in trial {self.trial_num}, found {len(targets)}"
+        )
+        return targets
 
     def get_metadata(self, bad_actions: Sequence[SubjectActionCategoryEnum]) -> pd.Series:
         return pd.Series({
@@ -209,13 +229,18 @@ class Trial:
         :param x: 1D array of X coordinates with shape (N,) or (N, 1) or (1, N)
         :param y: 1D array of Y coordinates with shape (N,) or (N, 1) or (1, N)
         :return: a (num_coords, num_targets) DataFrame with the distances from each coordinate to each target.
+
+        Columns are named by the target's stable `icon{i}` identifier, matching `get_icons()` / `get_targets()` and
+        the per-fixation distance columns. They were previously `target{j}` - the target's position *among the
+        targets* - which meant the same physical icon carried different names in different trials.
         """
         if x.shape != y.shape:
             raise ValueError(f"Input arrays must have the same shape. Got {x.shape} and {y.shape}.")
+        targets = [(icon_id, img) for icon_id, img, is_tgt in self._search_array.icons if is_tgt]
         coords = np.column_stack((x, y))                                                            # shape (n_coords, 2)
-        target_coords = np.array([(img.x, img.y) for img in self._search_array.targets])            # shape (n_targets, 2)
+        target_coords = np.array([(img.x, img.y) for _icon_id, img in targets])                     # shape (n_targets, 2)
         dists = np.linalg.norm(coords[:, np.newaxis, :] - target_coords[np.newaxis, :, :], axis=2)  # shape (n_coords, n_targets)
-        dists = pd.DataFrame(dists, columns=[f"{cnfg.TARGET_STR}{i}" for i in range(target_coords.shape[0])])
+        dists = pd.DataFrame(dists, columns=[icon_id for icon_id, _img in targets])
         return dists
 
     def _calculate_gaze_coverage(self, eye: DominantEyeEnum) -> float:

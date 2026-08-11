@@ -9,12 +9,25 @@ from numpy import isnan
 
 @dataclass(frozen=True)
 class LoadedData:
-    targets: Optional[pd.DataFrame]
+    icons: Optional[pd.DataFrame]
     actions: Optional[pd.DataFrame]
     metadata: Optional[pd.DataFrame]
     identifications: Optional[pd.DataFrame]
     fixations: Optional[pd.DataFrame]
     visits: Optional[pd.DataFrame]
+
+    @property
+    def targets(self) -> Optional[pd.DataFrame]:
+        """
+        The target subset of `icons`, with the identifier column renamed to `target`.
+
+        Derived rather than loaded: `targets.pkl` was retired in favour of the full icon table, since a target's
+        identity is just an icon that happens to be a target. Existing consumers keep working unchanged.
+        """
+        if self.icons is None:
+            return None
+        targets = self.icons.loc[self.icons["is_target"]].drop(columns=["is_target"])
+        return targets.rename(columns={"icon": "target"}).reset_index(drop=True)
 
 
 def read_data(
@@ -28,7 +41,7 @@ def read_data(
     Returns a LoadedData object with fields for targets, actions, metadata, identifications, fixations, and visits.
     If a file is missing, the corresponding field will be set to None, and the behavior depends on the `missing` argument.
     """
-    targets = _load(dir_path, "targets", missing)
+    icons = _load(dir_path, "icons", missing)
     actions = _load(dir_path, "actions", missing)
     metadata = _load(dir_path, "metadata", missing)
     idents = _load(dir_path, "idents", missing)
@@ -47,7 +60,7 @@ def read_data(
     if drop_outliers and visits is not None:
         visits = _drop_outlier_visits(visits)
     return LoadedData(
-        targets=targets,
+        icons=icons,
         actions=actions,
         metadata=metadata,
         identifications=idents,

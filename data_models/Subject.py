@@ -210,33 +210,51 @@ class Subject:
         trials = sorted(trials, key=lambda t: t.trial_num)
         return trials
 
-    def get_targets(self) -> pd.DataFrame:
+    def get_icons(self) -> pd.DataFrame:
         """
-        Extract the target information from a subject's trials, returning a DataFrame with the following columns:
+        Extract every search-array icon from a subject's trials, returning a DataFrame with the following columns:
         - trial: int; the trial number
-        - target: str; the name of the target
-        - x: float; the x coordinate of the target in pixels
-        - y: float; the y coordinate of the target in pixels
-        - angle: float; the rotation angle of the target in degrees
-        - category: ImageCategoryEnum; the category of the target
-        - sub_path: str; the path to the target image file, relative to the images directory
+        - icon: str; the stable `icon{i}` identifier (flat row-major position in the array)
+        - x: float; the x coordinate of the icon in pixels
+        - y: float; the y coordinate of the icon in pixels
+        - angle: float; the rotation angle of the icon in degrees
+        - category: str; the name of the icon's ImageCategoryEnum
+        - sub_path: str; the path to the icon image file, relative to the images directory
+        - is_target: bool; whether this icon is one of the trial's targets
+
+        This supersedes the per-target table: `get_targets()` is the `is_target` subset of it.
         """
-        targets = dict()
-        for trial in tqdm(self.get_trials(), desc="Extracting Targets", disable=True):
-            targets[trial.trial_num] = (
-                trial.get_targets()
+        icons = dict()
+        for trial in tqdm(self.get_trials(), desc="Extracting Icons", disable=True):
+            icons[trial.trial_num] = (
+                trial.get_icons()
                 .rename(columns=lambda name: name.replace(f"{cnfg.TARGET_STR}_", ""))
                 .reset_index(drop=False)
-                .rename(columns={"index": cnfg.TARGET_STR, })
-                .sort_values(by=cnfg.TARGET_STR)
+                .rename(columns={"index": cnfg.ICON_STR, })
             )
-        targets = (
-            pd.concat(targets.values(), axis=0, keys=targets.keys())
+        icons = (
+            pd.concat(icons.values(), axis=0, keys=icons.keys())
             .reset_index(drop=False)
             .rename(columns={"level_0": cnfg.TRIAL_STR})
             .drop(columns=["level_1"])
         )
-        return targets
+        # the identifier and the two path-like strings have only a few hundred distinct values across the whole
+        # dataset; storing them as categoricals keeps icons.pkl small (see the plan's storage note)
+        for col in (cnfg.ICON_STR, "sub_path", cnfg.CATEGORY_STR):
+            if col in icons.columns:
+                icons[col] = icons[col].astype("category")
+        return icons
+
+    def get_targets(self) -> pd.DataFrame:
+        """
+        The target subset of `get_icons()`, keyed by the same stable `icon{i}` identifier.
+
+        Kept as a convenience for callers that only care about targets; it is no longer persisted separately.
+        """
+        icons = self.get_icons()
+        targets = icons.loc[icons["is_target"]].drop(columns=["is_target"]).reset_index(drop=True)
+        assert not targets.empty, f"subject {self.id} has no targets in any trial"
+        return targets.rename(columns={cnfg.ICON_STR: cnfg.TARGET_STR})
 
     def get_actions(self) -> pd.DataFrame:
         actions = dict()

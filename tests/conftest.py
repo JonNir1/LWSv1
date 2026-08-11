@@ -31,6 +31,12 @@ def output_dir() -> str:
             f"pickles at {cnfg.OUTPUT_PATH} are unreadable in this environment ({exc}); "
             f"numpy is {np.__version__} - see CODE_REVIEW.md H8"
         )
+    if not os.path.isfile(os.path.join(cnfg.OUTPUT_PATH, "icons.pkl")):
+        # the build predates the icon refactor: it has targets.pkl with positional `target{j}` ids rather than
+        # icons.pkl with stable `icon{i}` ids, so nothing keyed on the identifier can be checked against it
+        pytest.skip(
+            f"build at {cnfg.OUTPUT_PATH} predates the icon refactor (no icons.pkl); re-run the pipeline"
+        )
     return cnfg.OUTPUT_PATH
 
 

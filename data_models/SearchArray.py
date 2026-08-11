@@ -148,7 +148,25 @@ class SearchArray:
         return SearchArray._NUM_ROWS * SearchArray._NUM_COLS
 
     @property
+    def icons(self) -> List[Tuple[str, _SearchArrayImage, bool]]:
+        """
+        Every icon in the array as `(icon_id, image, is_target)`, in row-major order.
+
+        `icon_id` is `icon{i}` for the flat row-major index `i` over the (10, 18) grid, so it identifies a *position
+        in the array* and is stable regardless of how many targets happen to precede it. This is the identity used
+        throughout the pipeline; the older `target{j}` scheme numbered a target by its position among the targets,
+        which shifted with the number of targets in the trial.
+        """
+        flat_images = self._images.reshape(-1)
+        flat_is_target = self._is_targets.reshape(-1)
+        return [
+            (f"{cnfg.ICON_STR}{i}", img, bool(is_tgt))
+            for i, (img, is_tgt) in enumerate(zip(flat_images, flat_is_target))
+        ]
+
+    @property
     def targets(self) -> List[_SearchArrayImage]:
+        """The target icons only, in row-major order. Kept for callers that need images without identities."""
         return self._images[self._is_targets].tolist()
 
     @property
