@@ -78,13 +78,13 @@ def parse_single_subject(
 
     if not force_reparse and stale_reason is None and is_cache_valid(pickle_path, key):
         subj = Subject.from_pickle(path=pickle_path)
-        _fixs = subj.get_fixations(save=True, verbose=False)
+        _events = subj.get_events(save=True, verbose=False)
         return subj
 
     subj = Subject.from_raw(
         exp_name=exp_name, subject_id=subject_id, session=session, data_dir=data_dir, verbose=verbose
     )
     written_path = subj.to_pickle(overwrite=True)
-    _fixs = subj.get_fixations(save=True, verbose=verbose, force_rebuild=True)
+    _events = subj.get_events(save=True, verbose=verbose, force_rebuild=True)
     write_cache_key(written_path, key)
     return subj

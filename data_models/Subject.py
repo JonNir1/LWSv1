@@ -13,8 +13,8 @@ import config as cnfg
 from data_models.parse.subject_info import parse_subject_info
 from data_models.parse.triggers_and_gaze import parse_triggers_and_gaze
 from data_models.preprocess.target_identifications import extract_trial_identifications
-from data_models.preprocess.visits import convert_fixations_to_visits
 from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum, SubjectActionCategoryEnum
+from pipeline.cache_key import build_cache_key, describe_staleness, is_cache_valid, write_cache_key
 
 
 class Subject:
@@ -336,51 +336,45 @@ class Subject:
         )
         return idents
 
-    def get_fixations(self, save: bool = True, verbose: bool = False, force_rebuild: bool = False,) -> pd.DataFrame:
+    def get_events(self, save: bool = True, verbose: bool = False, force_rebuild: bool = False,) -> pd.DataFrame:
         """
-        Extracts the subject's fixations across all trials and returns them as a DataFrame.
-        :param save: bool; if True, saves the fixations DataFrame to a pickle file in the subject's output directory.
-        :param verbose: bool; if True, displays a progress bar for the extraction process and prints messages about the process.
+        Extracts every eye-movement event the subject produced across all trials - fixations, saccades and blinks -
+        and returns them as a DataFrame. `(subject, trial, eye, event)` is unique; `event` is the event's position
+        among all events of that eye in the trial.
 
-        :return: a DataFrame containing the fixations for each trial, with the following columns:
-        - trial: int; the trial number
-        - eye: str; the eye that the fixation belongs to (left or right)
-        - event: int; the number of the fixation among all events from the given eye during the trial
-        - start_time: float; time of the fixation start in ms (relative to trial onset)
-        - end_time: float; time of the fixation end in ms (relative to trial onset)
-        - duration: float; duration of the fixation in ms
-        - to_trial_end: float; time from the end of the fixation to the end of the trial in ms
-        - x: float; x coordinates of the fixation center in pixels
-        - y: float; y coordinates of the fixation center in pixels
-        - outlier_reasons: List[str]; reasons for the fixation to be an outlier
-        - target: str; the name of the closest target to the fixation center at the time of the fixation
-        - target{i}_distance_px: float; the distance between the fixation center and target{i} in pixels (target0, target1, etc.)
-        - target{i}_distance_dva: float; the distance between the fixation center and target{i} in DVA (target0, target1, etc.)
-        - num_fixs_to_strip: int; number of fixations from the current fixation until a visit in the bottom strip of the
-        SearchArray. Value is 0 if he current fixation is in the bottom strip, and np.inf if there are no future fixations
-        in the strip during the trial.
+        This supersedes `get_fixations()`, which kept only the fixations and dropped most feature columns. The
+        fixations are the `event_type == "FIXATION"` subset and are unchanged, `event` values included.
+        See `data_models.preprocess.events.process_trial_events` for the full column list.
+
+        :param save: bool; if True, caches the DataFrame under the subject's output directory (with a cache-key
+            sidecar, so a change to stage-1 code invalidates it rather than silently serving stale rows).
+        :param verbose: bool; if True, displays a progress bar and prints messages about the process.
         """
-        path = os.path.join(self.out_dir, f'{cnfg.FIXATION_STR}_df.pkl')
+        path = os.path.join(self.out_dir, 'eye_movements_df.pkl')
+        key = build_cache_key()
         if not force_rebuild:
-            try:
-                fixations = pd.read_pickle(path)
+            stale_reason = describe_staleness(path, key)
+            if stale_reason and verbose:
+                print(f"Subject {self.id}'s cached eye-movements are stale ({stale_reason}); rebuilding.")
+            if stale_reason is None and is_cache_valid(path, key):
+                events = pd.read_pickle(path)
                 if verbose:
-                    print(f"Subject {self.id}'s fixations DataFrame loaded.")
-                return fixations
-            except FileNotFoundError:
-                if verbose:
-                    print(f"Fixations DataFrame not found for subject {self.id}. Extracting...")
-        fixations = self._process_fixations(verbose)
+                    print(f"Subject {self.id}'s eye-movements DataFrame loaded.")
+                return events
+            if verbose and not stale_reason:
+                print(f"Eye-movements DataFrame not found for subject {self.id}. Extracting...")
+        events = self._process_events(verbose)
         if save:
-            fixations.to_pickle(path)
-        return fixations
+            events.to_pickle(path)
+            write_cache_key(path, key)
+        return events
 
     def get_visits(self, target_distance_threshold_dva: float, visit_merging_time_threshold: float,) -> pd.DataFrame:
-        fixations = self.get_fixations(save=False, verbose=False)
-        return convert_fixations_to_visits(
-            fixations,
-            target_distance_threshold_dva,
-            visit_merging_time_threshold,
+        # `convert_fixations_to_visits` needs the per-target distance columns that `eye_movements.pkl` no longer
+        # carries; it is restored by the deferred `fixations_to_targets()` helper. See CODE_REVIEW.md.
+        raise NotImplementedError(
+            "visit construction needs per-target distances, which were removed from the events table; it is "
+            "restored by the deferred `fixations_to_targets()` helper - see CODE_REVIEW.md"
         )
 
     def to_pickle(self, overwrite: bool = False) -> str:
@@ -412,18 +406,20 @@ class Subject:
             os.makedirs(out_dir, exist_ok=True)
         return os.path.join(out_dir, "Subject.pkl")
 
-    def _process_fixations(self, verbose: bool = True) -> pd.DataFrame:
-        trial_fixations = dict()
-        for trial in tqdm(self.get_trials(), desc=f"Extracting Fixations", disable=not verbose):
-            trial_fixations[trial.trial_num] = trial.process_fixations()
-        fixations = pd.concat(trial_fixations.values(), axis=0, keys=trial_fixations.keys())
-        fixations = (
-            fixations
+    def _process_events(self, verbose: bool = True) -> pd.DataFrame:
+        trial_events = dict()
+        for trial in tqdm(self.get_trials(), desc=f"Extracting Eye Movements", disable=not verbose):
+            trial_events[trial.trial_num] = trial.process_events()
+        events = pd.concat(trial_events.values(), axis=0, keys=trial_events.keys())
+        events = (
+            events
             .reset_index(drop=False)
             .drop(columns=["level_1"])
             .rename(columns={"level_0": cnfg.TRIAL_STR})
         )
-        return fixations
+        # `pd.concat` widens categoricals with differing categories back to object
+        events[f"{cnfg.EVENT_STR}_type"] = events[f"{cnfg.EVENT_STR}_type"].astype("category")
+        return events
 
     def __repr__(self) -> str:
         return f"{self.experiment_name.upper()}-{cnfg.SUBJECT_STR.capitalize()}_{self.id}"
