@@ -82,6 +82,12 @@ def build_event_classification_funnel(
     bad_actions = _bad_actions_as_list(bad_actions)
     loaded = read_data(data_dir, drop_bad_eye=True, drop_outliers=exclude in {"outliers", "both"})
     event_data = loaded.fixations if event_type == "fixation" else loaded.visits
+    if event_data is None:
+        raise NotImplementedError(
+            f"no {event_type} table in {data_dir!r}. Visits are not built at present: they need the per-target "
+            "distances that were removed from the events table, restored by the deferred `fixations_to_targets()` "
+            "helper - see CODE_REVIEW.md"
+        )
     trial_criteria = check_trial_inclusion_criteria(
         loaded.metadata, loaded.fixations, loaded.actions, loaded.identifications,
         min_gaze_coverage=min_gaze_coverage,

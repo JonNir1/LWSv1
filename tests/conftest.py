@@ -31,12 +31,13 @@ def output_dir() -> str:
             f"pickles at {cnfg.OUTPUT_PATH} are unreadable in this environment ({exc}); "
             f"numpy is {np.__version__} - see CODE_REVIEW.md H8"
         )
-    if not os.path.isfile(os.path.join(cnfg.OUTPUT_PATH, "icons.pkl")):
-        # the build predates the icon refactor: it has targets.pkl with positional `target{j}` ids rather than
-        # icons.pkl with stable `icon{i}` ids, so nothing keyed on the identifier can be checked against it
-        pytest.skip(
-            f"build at {cnfg.OUTPUT_PATH} predates the icon refactor (no icons.pkl); re-run the pipeline"
-        )
+    for name, refactor in [("icons.pkl", "icon"), ("eye_movements.pkl", "eye-movements")]:
+        # a build predating either refactor cannot be checked against: the first replaced positional `target{j}`
+        # ids with stable `icon{i}` ones, the second replaced `fixations.pkl` with its event-table superset
+        if not os.path.isfile(os.path.join(cnfg.OUTPUT_PATH, name)):
+            pytest.skip(
+                f"build at {cnfg.OUTPUT_PATH} predates the {refactor} refactor (no {name}); re-run the pipeline"
+            )
     return cnfg.OUTPUT_PATH
 
 
@@ -79,18 +80,20 @@ def make_fixation_row(
     trial: int = 1,
     subject: int = 1,
 ) -> dict:
-    """Build one row shaped like `Subject.get_fixations()` output."""
+    """Build one row shaped like a fixation row of `Subject.get_events()` output."""
     row = {
         "subject": subject,
         "trial": trial,
         "eye": eye,
         "event": event,
+        "event_type": "FIXATION",
         "start_time": start_time,
         "end_time": start_time + duration,
         "duration": duration,
         "to_trial_end": 10_000.0 - (start_time + duration),
         "x": x,
         "y": y,
+        "is_outlier": False,
         "outlier_reasons": [],
     }
     for target, dva in (target_distances_dva or {}).items():
