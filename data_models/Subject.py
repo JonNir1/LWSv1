@@ -323,14 +323,6 @@ class Subject:
             write_cache_key(path, key)
         return events
 
-    def get_visits(self, target_distance_threshold_dva: float, visit_merging_time_threshold: float,) -> pd.DataFrame:
-        # `convert_fixations_to_visits` needs the per-target distance columns that `eye_movements.pkl` no longer
-        # carries; it is restored by the deferred `fixations_to_targets()` helper. See CODE_REVIEW.md.
-        raise NotImplementedError(
-            "visit construction needs per-target distances, which were removed from the events table; it is "
-            "restored by the deferred `fixations_to_targets()` helper - see CODE_REVIEW.md"
-        )
-
     def to_pickle(self, overwrite: bool = False) -> str:
         """
         Saves the Subject object to a pickle file and returns the path to the file, constructed as:
