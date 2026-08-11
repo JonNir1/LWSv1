@@ -17,10 +17,12 @@ the numpy/pandas upgrade. New findings surfaced while building the test suite: *
 `tests/` encodes the findings as executable claims. Each test for an unfixed bug is `xfail(strict=True)`, so the suite
 is green now and turns red the moment a bug is fixed without its marker being removed.
 
-Suite status: **61 passed, 5 xfailed** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6.
+Suite status: **140 passed, 15 skipped** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6 (11 files under `tests/`).
 
-Of the 5 remaining `xfail`s, three are "fixed in code, but the built pickles predate the fix" (C4 frequency, H2
-magnitude, M1 dtypes) and clear on the next `run_pipeline()`. Two are H5, deferred by decision.
+Every skip has the same cause: the built pickles in `OUTPUT_PATH` predate the icon refactor, so nothing keyed on
+the `icon{i}` identifier can be checked against them. They become `xfail`/pass on the next `run_pipeline()`. The
+`xfail`s inside that set are "fixed in code, but the pickles predate the fix" (C4 frequency, H2 magnitude, M1
+dtypes) plus the distance-dependent checks pending T4.
 
 | Finding | Test | Status |
 | --- | --- | --- |
@@ -1240,7 +1242,12 @@ that `pixel_size` agrees with `cnst.PIXEL_SIZE_MM / 10` to within rounding. Add 
 
 ## Low
 
-### L1. No tests
+### L1. ~~No tests~~
+
+**STATUS: FIXED.** 11 test files, 140 tests, all green (15 skips, every one because the built pickles predate the
+icon refactor). Every test in the table below exists, under its own or an equivalent name. `pyproject.toml` carries
+`pythonpath = ["."]` and `testpaths = ["tests"]`; the packaging half of the original suggestion was withdrawn with
+M14. The original entry follows.
 
 There is no test suite, and the pipeline has many pure, easily-testable functions. Minimum set, ordered by value —
 each of these would have caught a Critical or High issue above:
@@ -1267,16 +1274,22 @@ M17's unbound `del`. It would have flagged three unused imports and one dead fun
 cosmetic, in exchange for a large one-off reformatting diff and ongoing churn. For a solo research
 pipeline the risk is logic errors, and tests are what catch those.
 
-### L3. Resource handling and small correctness nits
+### L3. ~~Resource handling and small correctness nits~~
 
-- `parse_subject_info` (`subject_info.py:15-26`) opens the file without a context manager; an exception leaks the
-  handle. Use `with io.open(...) as f:`.
-- `Trial.__eq__` is defined without `__hash__`, making `Trial` unhashable — fine today, surprising later.
-- `calc_aprime_per_trial` (`sdt.py:75`) computes `diff` and never uses it.
-- `size_and_proportion.py:3` imports `numpy` unused.
-- `trial_inclusion.py:50` `all_pass` is dead code.
-- `Subject.get_targets` / `get_actions` / `get_metadata` wrap `tqdm(..., disable=True)` — the progress bar is
-  hardcoded off; either remove it or thread `verbose` through.
+**STATUS: FIXED** (the last two items in `8c4dc1c`; the rest landed with earlier fixes).
+
+- ~~`parse_subject_info` (`subject_info.py:15-26`) opens the file without a context manager~~ — now `with io.open(...)`.
+- ~~`Trial.__eq__` is defined without `__hash__`, making `Trial` unhashable~~ — `__hash__` added over a subset of the
+  fields `__eq__` compares, which satisfies the contract (equal trials agree on every comparison field, so they
+  agree on the subset).
+- ~~`calc_aprime_per_trial` (`sdt.py:75`) computes `diff` and never uses it~~ — `diff` now drives the sign and the
+  numerator.
+- ~~`size_and_proportion.py:3` imports `numpy` unused~~ — the module no longer exists.
+- ~~`trial_inclusion.py:50` `all_pass` is dead code~~ — removed.
+- ~~`Subject.get_targets` / `get_actions` / `get_metadata` wrap `tqdm(..., disable=True)`~~ — the always-off bars are
+  gone from `get_icons` and `get_actions` (`get_metadata` no longer loops with `tqdm` at all). Removed rather than
+  threaded through: `build_dataframes` already shows a per-subject bar around these, and both loops are fast enough
+  that a second, nested bar would be noise.
 
 ### L4. Hardcoded stimulus geometry
 
@@ -1290,7 +1303,15 @@ determines `num_fixs_to_strip` and therefore the `not_before_exemplar_visit` LWS
 `_RESOLUTION` are likewise hardcoded and asserted against the `.mat` contents. Read from the stimulus config, or at
 minimum assert the strip lies inside the screen and document the provenance of the four numbers.
 
-### L7. `_determine_time_to_trial_end.ipynb` indexes a column that does not exist
+### L7. ~~`_determine_time_to_trial_end.ipynb` indexes a column that does not exist~~
+
+**STATUS: FIXED.** The denominator question was settled (2026-08-06): **all target-visits, across all trials,
+included and excluded alike** - the threshold describes the timing of pre-identification visits in general, not
+only in valid trials. Cell 13 now computes the predicate inline via `is_before_identification` and
+`identification_time_lookup` rather than indexing a column that was never there.
+
+Re-running it end to end to confirm the reported percentile still lands on 1000 ms is blocked on **T4**, like the
+rest of the threshold-derivation notebooks: it reads `visits`, which the pipeline does not currently produce.
 
 **Where:** `analysis/helpers/default_value_selection/_determine_time_to_trial_end.ipynb`, cell 12
 
@@ -1321,12 +1342,41 @@ only those in valid trials — a research question, so left alone.
 
 ### L5. Fixation-level and visit-level analyses attribute targets differently
 
-A fixation row carries a single `target` (the closest one, `fixations.py:102-118`), whereas a fixation on-target for two
-targets generates a *visit row per target* (`visits.py:20`). Running the same funnel at `event_type="fixation"` vs
-`"visit"` therefore uses different denominators and different target attribution. Not a bug, but it should be stated
-wherever the two are compared.
+**STATUS: OPEN, and unchanged by the events refactor.** A fixation row still carries exactly one target - now named
+`closest_icon` (`preprocess/events.py` `_closest_target`) rather than `target`, which at least makes the "closest"
+part self-documenting. A visit row still exists per (target, visit) (`visits.py:20`). So the asymmetry survives:
+a fixation within threshold of two targets contributes **one** fixation row and **two** visit rows.
 
-### L6. R script hygiene
+Measured on the current build: 24 of 11,716 on-target fixations (0.2%) fall within threshold of two targets, because
+targets are placed far apart. Small, but it means fixation- and visit-level counts are not comparable denominators,
+and one target's episode can be invisible at fixation level.
+
+Worth being precise about what is *not* wrong here: `is_on_target` tests `.any()` over the per-target distance
+columns while target attribution takes the closest, which looks like it could disagree - but it cannot. The closest
+target is by definition no further than any other, so "within threshold of any" and "the closest is within
+threshold" are the same predicate. The asymmetry is only in row multiplicity, not in the criterion.
+
+**This may dissolve with T4.** If `fixations_to_targets()` returns long format, the fixation path can become one row
+per (fixation, target) exactly as visits are, and the two levels would then attribute targets identically. Worth
+deciding deliberately when T4 lands rather than inheriting the current shape.
+
+### L6. ~~R script hygiene~~
+
+**STATUS: FIXED**, except the `k` choice, which is a modelling decision deferred with M10/M11.
+
+- ~~`set.seed(42)`~~ — removed; no `set.seed` remains in `analysis/R/`.
+- ~~anonymous `Rplots.pdf`~~ — all three scripts now call `open_plot_device()` (`helpers.R:96-104`), which writes to
+  `analysis/R/figures/<name>.pdf` and reports the path.
+- ~~`k = 15` inside `te()`~~ — now `K <- 8` with a comment recording that `k` in `te()` is *per marginal basis*, so
+  the tensor holds ~K² functions. Whether 8 is the right value is a modelling choice, **deferred with M10/M11**.
+- ~~concurvity unchecked~~ — `spatial_gam.R:65` prints `concurvity(interaction_model, full = FALSE)` before the
+  model comparison, with a comment that a global `te(x, y)` and a `by`-factor `te(x, y)` share basis functions.
+- ~~the prediction grid extrapolates into empty screen regions~~ — every grid cell now carries `n_nearby` and
+  `is_supported` (≥ `MIN_NEIGHBOURS` observations within ±`GRID_MASK_RADIUS_PX`), computed with a summed-area table
+  in O(cells + observations); the script reports what fraction of cells is supported so the plotting code can mask
+  the rest.
+
+The original entry follows.
 
 - `set.seed(42)` before a deterministic REML fit does nothing — remove, or move it to whatever is actually stochastic.
 - `gam.check()` and `plot()` inside a script run via `Rscript` silently write `Rplots.pdf`; direct them to a named file.
@@ -1358,8 +1408,12 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | **C3 frequency** | unblocked - `SEARCH_ARRAY_PATH` is now local; needs a pipeline re-run |
 | **M10, M11** GAM specification | deferred by decision; accepted as valid, modelling choice pending |
 | **M12** `px2deg` position dependence | deferred by decision; measured median 3.0% / max 9.7% across real targets |
-| **L7** broken cell in `_determine_time_to_trial_end` | pre-existing `KeyError`; fix depends on the intended denominator |
+| **L5** fixation vs visit target attribution | open by design; may dissolve if T4 returns long format - decide then |
+| ~~**L7** broken cell in `_determine_time_to_trial_end`~~ | fixed; denominator settled as all target-visits across all trials. Re-running it is blocked on T4 |
 | ~~**M14** packaging~~ | withdrawn — not a distributable package; the scratchpad import is fixed |
+| ~~**L1** no tests~~ | fixed - 11 files, 140 tests |
+| ~~**L3** small nits~~ | fixed |
+| ~~**L6** R script hygiene~~ | fixed, except the `k` choice, which is deferred with M10/M11 |
 | **L4** strip geometry validation | unblocked - `Stimuli/` is now local |
 
 **Re-run required.** Every stage-1 fix (C2, C3, C4, H1, H1a, H6, M15) changes the pickles, and the caches now
@@ -1374,16 +1428,18 @@ measurement, H5 and L4 can all proceed. Note the re-run will also pick up the co
 
 ## Fix order
 
-0. ~~H8~~ — resolved by the numpy/pandas upgrade. **H9 now blocks stage 1**: fix it first or no subject can be
-   re-parsed from raw data.
-1. **H3 (cache invalidation) next.** Until per-subject pickles invalidate on code change, you cannot tell whether any
-   later fix took effect.
-2. **C2, C3, C4** — these change the numbers. C4 spans the parser and the funnel, so land it as one change; expect the
-   12 measured mis-timed targets to move between the LWS and target-return categories.
-3. **H1, H2, H4, H5, H6.** H2 is the largest measured effect after C4 (10.1% of fixations vs 0% of visits).
-4. **L1** — the tests exist; remove each `xfail` marker as its fix lands. `strict=True` means a silent fix fails the
-   suite, so the markers cannot rot.
-5. **M1–M17** (M14 withdrawn), then **L3–L6** (L2 deferred). M15 is a one-line fix with no re-run needed; M16 and H7 both set `peyes` global
-   configuration and should land together in one `configure_peyes()`.
+The original ordering (H8/H9 → H3 → C2/C3/C4 → the Highs → L1 → the Mediums → the Lows) is **complete**. Every
+Critical and every High except H5 is fixed, along with every Medium and Low that was not explicitly deferred or
+withdrawn. What remains, in the order it should be done:
 
-Then delete every per-subject pickle and re-run the pipeline once, with the C4 invariant test as the gate.
+1. **Re-run the pipeline.** Nothing downstream can be trusted until this happens: every stage-1 fix changes the
+   pickles, and the current build additionally predates the icon refactor. Delete the per-subject caches (or rely
+   on the H3 sidecars to invalidate them), run once, then remove the stale `fixations.pkl` and `visits.pkl` by
+   hand. Gate on the C4 invariant test and on the three `xfail`s flipping to pass.
+2. **T4 `fixations_to_targets()`.** The only substantial code left, and the blocker for visits, both funnels, all
+   three FVF estimators, and four notebooks. Decide L5 while writing it: long format makes fixation- and
+   visit-level attribution identical, which is probably what you want.
+3. **T1 and T2**, the two research decisions. T1's FVF blocker is resolved; T2 gates whether H2's all-outlier rule
+   is the right one.
+4. **H5, L4** — both unblocked now that raw data and `Stimuli/` are local, neither urgent.
+5. **M10, M11, M12 and the `k` choice in L6** — deferred by decision; reopen when the modelling is revisited.

@@ -295,5 +295,15 @@ class Trial:
             return False
         return True
 
+    def __hash__(self) -> int:
+        """
+        Defining `__eq__` without this sets `__hash__ = None`, making `Trial` unhashable - so it cannot go in a set
+        or be a dict key, which is surprising for a value-like object.
+
+        Hashes a subset of the fields `__eq__` compares. That is the required contract: equal trials agree on every
+        comparison field, so they agree on this subset too. A `Trial` is effectively immutable after `__init__`.
+        """
+        return hash((self.block_num, self.trial_num, self.start_time, self.end_time))
+
     def __repr__(self) -> str:
         return f"Trial {self.trial_num} ({self.trial_category.name})"

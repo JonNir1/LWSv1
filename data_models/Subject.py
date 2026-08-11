@@ -225,7 +225,7 @@ class Subject:
         This supersedes the per-target table: `get_targets()` is the `is_target` subset of it.
         """
         icons = dict()
-        for trial in tqdm(self.get_trials(), desc="Extracting Icons", disable=True):
+        for trial in self.get_trials():
             icons[trial.trial_num] = (
                 trial.get_icons()
                 .rename(columns=lambda name: name.replace(f"{cnfg.TARGET_STR}_", ""))
@@ -258,7 +258,7 @@ class Subject:
 
     def get_actions(self) -> pd.DataFrame:
         actions = dict()
-        for trial in tqdm(self.get_trials(), desc="Extracting Actions", disable=True):
+        for trial in self.get_trials():
             actions[trial.trial_num] = trial.get_actions()
         actions = pd.concat(actions.values(), axis=0, keys=actions.keys())
         actions = (
