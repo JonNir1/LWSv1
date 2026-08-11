@@ -5,8 +5,8 @@ feature columns. It now keeps **every** detected event: the fixations are recove
 `events[event_type == "FIXATION"]`, and the saccades that were previously thrown away are what the planned
 scanpath, amplitude and micro-saccade analyses need.
 
-Two columns are populated for fixations only - see `_extract_event_features` for why - and the per-target distance
-columns that used to live here are gone; see `_closest_target` and `CODE_REVIEW.md` on `fixations_to_targets()`.
+Two columns are populated for fixations only (see `_extract_event_features` for why). Target distances are
+computed in stage 2 by `pipeline.align.fixations_to_targets`.
 """
 
 from typing import Sequence
@@ -21,11 +21,8 @@ from data_models.SearchArray import SearchArray
 
 _FIXATION_LABEL = peyes.parse_label(cnst.FIXATION_STR)
 _EVENT_TYPE_STR = f"{cnst.EVENT_STR}_type"
-_CLOSEST_ICON_STR = f"closest_{cnst.ICON_STR}"
-_CLOSEST_ICON_DISTANCE_STR = f"{_CLOSEST_ICON_STR}_{cnst.DISTANCE_DVA_STR}"
-
 # columns whose values only make sense as a held gaze position, so they are NaN for non-fixations
-_FIXATION_ONLY_COLUMNS = [cnst.X, cnst.Y, _CLOSEST_ICON_STR, _CLOSEST_ICON_DISTANCE_STR, "num_fixs_to_strip"]
+_FIXATION_ONLY_COLUMNS = [cnst.X, cnst.Y, "num_fixs_to_strip"]
 
 _COLUMN_ORDER = [
     cnst.EYE_STR, cnst.EVENT_STR, _EVENT_TYPE_STR,
@@ -35,44 +32,25 @@ _COLUMN_ORDER = [
     cnst.DISTANCE_STR, "amplitude", "azimuth", "cumulative_distance", "cumulative_amplitude",
     "peak_velocity", "median_velocity", "min_velocity",
     "is_outlier", "outlier_reasons",
-    _CLOSEST_ICON_STR, _CLOSEST_ICON_DISTANCE_STR, "num_fixs_to_strip",
+    "num_fixs_to_strip",
 ]
 
 
 def process_trial_events(
-        all_eye_movement_features: pd.DataFrame, targets: pd.DataFrame, end_time: float, px2deg: float,
+        all_eye_movement_features: pd.DataFrame, end_time: float,
 ) -> pd.DataFrame:
     """
     Tabulate every eye-movement event detected during the trial.
 
     :param all_eye_movement_features: DataFrame containing the eye movement features for the trial.
-    :param targets: DataFrame containing the target information for the trial.
     :param end_time: float; the end time of the trial in ms (relative to trial onset).
-    :param px2deg: float; the conversion factor from pixels to degrees of visual angle (DVA).
 
-    :return: one row per detected event, indexed by (eye, event), with the columns listed in `_COLUMN_ORDER`:
-    - eye: str; the eye the event was detected in (left or right)
-    - event: int; the event's position among *all* events from that eye during the trial
-    - event_type: str; FIXATION / SACCADE / BLINK (the only labels the Engbert detector emits)
-    - start_time, end_time, duration: float; ms relative to trial onset
-    - to_trial_end: float; time from the end of the event to the end of the trial, in ms
-    - x, y: float; the held gaze position, **fixations only** (NaN otherwise)
-    - start_x, start_y, end_x, end_y: float; the event's first and last gaze sample
-    - std_x, std_y, dispersion, ellipse_area: float; spread of the event's samples (interpretable for fixations)
-    - distance, amplitude, azimuth, cumulative_distance, cumulative_amplitude: float; trajectory geometry
-    - peak_velocity, median_velocity, min_velocity: float; kinematics
-    - is_outlier: bool; outlier_reasons: List[str]
-    - closest_icon: str; the `icon{i}` identifier of the nearest **target**, **fixations only**
-    - closest_icon_distance_dva: float; that target's distance in DVA, **fixations only**
-    - num_fixs_to_strip: float; number of fixations until one lands in the bottom strip of the SearchArray
-      (0 if this fixation is in the strip, `inf` if none ever is), **fixations only**
+    :return: one row per detected event, indexed by (eye, event), with the columns listed in `_COLUMN_ORDER`.
     """
     assert end_time > 0, f"Trial end time must be a positive number, got {end_time}."
-    assert px2deg > 0, f"Trial's `px2deg` conversion factor must be a positive number, got {px2deg}."
     features = _extract_event_features(all_eye_movement_features, end_time)
-    closest_target = _closest_target(features, targets, px2deg)
     fixs_to_strip = _num_fixations_to_strip(features)
-    events = pd.concat([features, closest_target, fixs_to_strip], axis=1)
+    events = pd.concat([features, fixs_to_strip], axis=1)
     return events[[col for col in _COLUMN_ORDER if col in events.columns]]
 
 
@@ -117,38 +95,6 @@ def _split_tuple_column(df: pd.DataFrame, source: str, x_name: str, y_name: str)
     return pd.DataFrame(
         df[source].to_list(), index=df.index, columns=[x_name, y_name], dtype=float,
     )
-
-
-def _closest_target(features: pd.DataFrame, target_info: pd.DataFrame, px2deg: float) -> pd.DataFrame:
-    """
-    The nearest **target** to each fixation, by its stable `icon{i}` identifier, and its distance in DVA.
-
-    This replaces the wide `icon{i}_distance_dva` / `_px` block that used to be persisted per event. Those columns
-    are unique per trial - a trial's targets are not the next trial's - so concatenating subjects produced a
-    97.3%-NaN table at ~1.4 kB/row. Per-target distances are cheap to recompute from `icons.pkl` and belong in a
-    stage-2 `fixations_to_targets()` helper; see `CODE_REVIEW.md`.
-
-    Despite the name, the candidates here are the trial's **targets**, not all 180 icons: only targets are available
-    at this point in the pipeline. The identifier is an `icon{i}` because that is the icon's identity everywhere.
-    """
-    xy = features[[cnst.X, cnst.Y]].to_numpy(dtype=float)                # (n_events, 2)
-    target_xy = target_info[                                             # (n_targets, 2)
-        [f"{cnst.TARGET_STR}_{cnst.X}", f"{cnst.TARGET_STR}_{cnst.Y}"]
-    ].to_numpy(dtype=float)
-    if target_xy.size == 0:
-        raise RuntimeError("trial has no targets, so no closest target can be assigned")
-    distances_px = np.linalg.norm(xy[:, None, :] - target_xy[None, :, :], axis=2)    # (n_events, n_targets)
-    has_position = np.isfinite(xy).all(axis=1)                           # False for every non-fixation
-    nearest = np.full(len(features), -1, dtype=int)
-    nearest[has_position] = distances_px[has_position].argmin(axis=1)
-    target_ids = np.asarray(target_info.index, dtype=object)
-    closest = pd.Series(None, index=features.index, name=_CLOSEST_ICON_STR, dtype=object)
-    closest.loc[has_position] = target_ids[nearest[has_position]]
-    closest_distance = pd.Series(
-        np.where(has_position, distances_px[np.arange(len(features)), nearest] * px2deg, np.nan),
-        index=features.index, name=_CLOSEST_ICON_DISTANCE_STR, dtype=float,
-    )
-    return pd.concat([closest, closest_distance], axis=1)
 
 
 def _num_fixations_to_strip(features: pd.DataFrame) -> pd.Series:

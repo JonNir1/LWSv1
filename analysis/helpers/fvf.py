@@ -63,11 +63,7 @@ _POOLED = "all"
 
 
 def target_distance_columns(fixations: pd.DataFrame) -> Dict[str, str]:
-    """Map target identifier -> its DVA distance column in the fixations table (e.g. `icon92` -> `icon92_distance_dva`).
-
-    The `icon` prefix is required, not just the suffix: `closest_icon_distance_dva` also ends in `_distance_dva`
-    but is a single nearest-target distance, not a per-target one, and would enter the reshape as a phantom target.
-    """
+    """Map target identifier -> its DVA distance column in the fixations table (e.g. `icon92` -> `icon92_distance_dva`)."""
     suffix = f"_{cnst.DISTANCE_STR}_dva"
     return {
         col[: -len(suffix)]: col for col in fixations.columns

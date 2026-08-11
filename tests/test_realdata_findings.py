@@ -32,9 +32,7 @@ def test_h7_long_fixation_cap_is_immaterial_in_this_dataset(loaded, capsys):
     too_long = fixs["duration"] > PEYES_FIXATION_MAX_DURATION_MS
     flagged = fixs["outlier_reasons"].map(lambda r: isinstance(r, list) and "max_duration" in r)
 
-    # the per-target distance block is gone from the events table; `closest_icon_distance_dva` is the minimum over
-    # it, so "within threshold of the nearest target" is the same test as "within threshold of any"
-    on_target = fixs["closest_icon_distance_dva"].le(cnfg.ON_TARGET_THRESHOLD_DVA)
+    # TODO: restore on-target enrichment check once fixations_to_targets() lands (step 5)
 
     with capsys.disabled():
         print(f"\n--- H7: fixation duration cap ({PEYES_FIXATION_MAX_DURATION_MS} ms) ---")
@@ -44,10 +42,6 @@ def test_h7_long_fixation_cap_is_immaterial_in_this_dataset(loaded, capsys):
         print(f"duration percentiles (ms)      : "
               f"p50={fixs['duration'].quantile(.50):.0f}  p95={fixs['duration'].quantile(.95):.0f}  "
               f"p99={fixs['duration'].quantile(.99):.0f}  max={fixs['duration'].max():.0f}")
-        if too_long.any():
-            print(f"of those over the cap, on-target: {on_target[too_long].sum():,} "
-                  f"({100 * on_target[too_long].mean():.1f}%)")
-        print(f"on-target rate, all fixations  : {100 * on_target.mean():.1f}%")
 
     # the cap and the flag must agree - if they diverge, the flag is being set by something else
     assert flagged.sum() == too_long.sum(), "outlier flag disagrees with the duration cap"
@@ -147,7 +141,7 @@ def test_h2_fixation_funnel_still_accepts_outlier_exclusion(output_dir):
 class TestEventTableInvariants:
     """The properties `eye_movements.pkl` must hold, checked against the real build rather than a fixture."""
 
-    FIXATION_ONLY = ["x", "y", "closest_icon", "closest_icon_distance_dva", "num_fixs_to_strip"]
+    FIXATION_ONLY = ["x", "y", "num_fixs_to_strip"]
 
     def test_the_key_is_unique(self, loaded):
         assert not loaded.eye_movements.duplicated(subset=["subject", "trial", "eye", "event"]).any()

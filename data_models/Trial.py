@@ -179,7 +179,7 @@ class Trial:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             features = self.get_raw_eye_movements()
-        events = process_trial_events(features, self.get_targets(), self.end_time, self.px2deg)
+        events = process_trial_events(features, self.end_time)
         return events
 
     @staticmethod

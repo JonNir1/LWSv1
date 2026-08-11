@@ -13,7 +13,6 @@ import pytest
 import constants as cnst
 from data_models.SearchArray import SearchArray
 from data_models.preprocess.events import (
-    _closest_target,
     _extract_event_features,
     _num_fixations_to_strip,
     process_trial_events,
@@ -170,42 +169,6 @@ class TestEventFeatures:
         assert features["to_trial_end"].tolist() == [9950.0, 9850.0]
 
 
-def target_info(coords: dict[str, tuple[float, float]]) -> pd.DataFrame:
-    return pd.DataFrame(
-        [{f"{cnst.TARGET_STR}_{cnst.X}": x, f"{cnst.TARGET_STR}_{cnst.Y}": y} for x, y in coords.values()],
-        index=list(coords),
-    )
-
-
-class TestClosestTarget:
-    @pytest.fixture
-    def features(self) -> pd.DataFrame:
-        return _extract_event_features(
-            raw_summary([
-                (FIXATION, 1, (100.0, 100.0), (1.0, 1.0)),
-                (SACCADE, 2, (900.0, 900.0), (1.0, 1.0)),
-                (FIXATION, 1, (900.0, 100.0), (1.0, 1.0)),
-            ]),
-            trial_end_time=10_000.0,
-        )
-
-    @pytest.fixture
-    def closest(self, features) -> pd.DataFrame:
-        targets = target_info({"icon7": (110.0, 100.0), "icon92": (900.0, 110.0)})
-        return _closest_target(features, targets, px2deg=0.05)
-
-    def test_picks_the_nearest_target_by_its_icon_id(self, closest):
-        assert closest.loc[[0, 2], "closest_icon"].tolist() == ["icon7", "icon92"]
-
-    def test_distance_is_in_dva(self, closest):
-        assert closest.loc[0, "closest_icon_distance_dva"] == pytest.approx(10.0 * 0.05)
-
-    def test_non_fixations_have_no_closest_target(self, closest):
-        """A saccade has no held position, so any target it is 'nearest' to would be an artefact."""
-        assert pd.isna(closest.loc[1, "closest_icon"])
-        assert np.isnan(closest.loc[1, "closest_icon_distance_dva"])
-
-
 class TestProcessTrialEvents:
     @pytest.fixture
     def events(self) -> pd.DataFrame:
@@ -214,9 +177,7 @@ class TestProcessTrialEvents:
             (SACCADE, 2, (500.0, 500.0), (9.0, 9.0)),
             (FIXATION, 1, IN_STRIP, (1.0, 1.0)),
         ])
-        return process_trial_events(
-            raw, target_info({"icon7": (110.0, 100.0)}), end_time=10_000.0, px2deg=0.05,
-        )
+        return process_trial_events(raw, end_time=10_000.0)
 
     def test_every_event_is_kept(self, events):
         assert len(events) == 3
@@ -228,7 +189,7 @@ class TestProcessTrialEvents:
 
     def test_fixation_only_columns_are_null_for_the_saccade(self, events):
         saccade = events.loc[events["event_type"] == SACCADE].iloc[0]
-        for col in [cnst.X, cnst.Y, "closest_icon", "closest_icon_distance_dva", "num_fixs_to_strip"]:
+        for col in [cnst.X, cnst.Y, "num_fixs_to_strip"]:
             assert pd.isna(saccade[col]), f"{col} should be null for a saccade"
 
     def test_strip_count_skips_the_saccade(self, events):
@@ -239,5 +200,5 @@ class TestProcessTrialEvents:
         with pytest.raises(AssertionError):
             process_trial_events(
                 raw_summary([(FIXATION, 1, (1.0, 1.0), (1.0, 1.0))]),
-                target_info({"icon7": (1.0, 1.0)}), end_time=0.0, px2deg=0.05,
+                end_time=0.0,
             )
