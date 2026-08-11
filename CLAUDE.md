@@ -78,8 +78,49 @@ Two stages, separated by a set of pickled DataFrames on disk.
 
 ### Stage 1: raw data -> tidy DataFrames (`pipeline/`, `data_models/`)
 
-`run_pipeline()` = `parse_all_subjects()` then `build_dataframes()`, saving six pickles to `cnfg.OUTPUT_PATH`:
-`icons.pkl`, `actions.pkl`, `metadata.pkl`, `idents.pkl`, `fixations.pkl`, `visits.pkl`.
+`run_pipeline()` = `parse_all_subjects()` then `build_dataframes()`, saving five pickles to `cnfg.OUTPUT_PATH`:
+`icons.pkl`, `actions.pkl`, `metadata.pkl`, `idents.pkl`, `eye_movements.pkl`.
+
+`fixations.pkl` and `visits.pkl` are gone. The first was replaced by its superset (below); the second is not
+produced at all until `fixations_to_targets()` lands (`CODE_REVIEW.md` T4).
+
+### `eye_movements.pkl` and why fixations are a view
+
+One row per **(subject, trial, eye, event)** - every detected event, not only the fixations. `event` is the
+event's positional rank among *all* events of that eye in the trial, which it always was: the old fixations table
+simply had gaps where the saccades had been removed. That is what makes the fixation subset **bit-identical** to
+the retired `fixations.pkl`, `event` values included, and it is why `LoadedData.fixations` can be a derived
+property (`eye_movements[event_type == "FIXATION"]`) rather than a separate file - exactly as `targets` is derived
+from `icons`.
+
+| group | columns | populated for |
+| --- | --- | --- |
+| keys | `subject`, `trial`, `eye`, `event` | all |
+| type | `event_type` (categorical; only FIXATION / SACCADE / BLINK are reachable with the Engbert detector) | all |
+| timing | `start_time`, `end_time`, `duration`, `to_trial_end` | all |
+| location | `x`, `y` | **fixations only** |
+| saccade geometry | `start_x`, `start_y`, `end_x`, `end_y` | all (only meaningful for saccades) |
+| spread | `std_x`, `std_y`, `dispersion`, `ellipse_area` | all, interpretable for fixations |
+| kinematics | `distance`, `amplitude`, `azimuth`, `cumulative_distance`, `cumulative_amplitude`, `peak_velocity`, `median_velocity`, `min_velocity` | all |
+| quality | `is_outlier`, `outlier_reasons` | all |
+| target proximity | `closest_icon`, `closest_icon_distance_dva` | **fixations only** |
+| strip distance | `num_fixs_to_strip` | **fixations only** |
+
+**`x`/`y` are NaN for non-fixations, deliberately.** They mean "the position the eye was holding". A saccade's
+`center_pixel` is the midpoint of a trajectory the eye crossed at speed and never held; a blink's is the mean of
+missing or interpolated samples. Writing either into `x`/`y` would fabricate a gaze position that downstream code
+has every reason to treat as real, and `closest_icon` computed from it would be actively misleading. The spread
+features are kept for every event instead of nulled - they are measurements, not a fabricated location.
+
+**Anything that counts fixations must filter on `event_type` first.** The table is ~2.1x the rows it used to be
+(subject 12: 11,733 fixations, 12,044 saccades, 891 blinks), so a bare `len()` or `groupby().size()` roughly
+doubles. `has_high_fixation_rate` is the one that bites hardest - it feeds `is_valid_trial` and therefore every
+funnel, figure and GAM. The same applies to anything walking `event ± 1`: that neighbour is now usually a saccade.
+
+Despite its name `closest_icon` ranges over the trial's **targets**, not all 180 icons - only targets are
+available at that point in the pipeline. It is an `icon{i}` because that is the icon's identity everywhere.
+`peyes`' `summary()` omits `start_pixel`/`end_pixel`, so `Trial._summarize_events` reads them off the `Event`
+objects directly; drop that once upstream exposes them.
 
 ### `icons.pkl` and the stable icon identifier
 
@@ -98,17 +139,21 @@ One row per **(subject, trial, icon)** - all 180 icons of the trial's search arr
 **`icon{i}` names a position in the array, not a position among the targets.** The old scheme numbered targets
 `target0…targetN` by their order within the target subset, so the same physical icon carried different names in
 different trials depending only on how many targets preceded it. `icon{i}` is stable by construction, and is the
-identity used everywhere: the per-fixation distance columns (`icon37_distance_dva` / `_px`), the gaze distance
-columns, and the `target` column of `idents` and `visits`.
+identity used everywhere: the gaze distance columns, the `closest_icon` column of `eye_movements`, and the
+`target` column of `idents`.
 
 **`targets.pkl` no longer exists.** Targets are the `is_target` subset of the icon table.
 `read_data(...).targets` still returns it - as a derived property, with the identifier column renamed to `target` -
 so existing consumers are unaffected. The three columns above are stored as categoricals, which keeps the file to
 ~7 MB for 27 subjects (32 MB without).
 
-Adding per-icon *distance* columns to the fixations table would be a mistake: `_find_closest_target` and
-`_assign_visit_ids` both select **every** `*_distance_dva` column, so distractor columns would silently become
-candidate "closest targets" and fabricate distractor visits. Compute icon distances transiently in stage 2 instead.
+**Per-icon or per-target distance columns do not belong in the events table**, and no longer live there. Two
+reasons, and the second is why they were removed outright. Widening it to all 180 icons would break every consumer
+that globs `*_distance_dva` (`_assign_visit_ids`, `_distance_columns`, the FVF estimators), since distractor
+columns would silently become candidate "closest targets" and fabricate distractor visits. And even restricted to
+targets the columns are **unique per trial** under the `icon{i}` scheme, so concatenating subjects produced a
+97.3%-NaN table at ~1.4 kB/row. Compute icon distances transiently in stage 2 - the deferred `fixations_to_targets()`
+helper, tracked as `CODE_REVIEW.md` T4, which returns long format rather than re-creating the sparse block.
 
 Object model (`Subject` -> list of `Trial` -> one `SearchArray` each):
 
@@ -118,11 +163,11 @@ Object model (`Subject` -> list of `Trial` -> one `SearchArray` each):
   collapsed into a `SubjectActionCategoryEnum` per action (mark+confirm, mark-only, attempted-mark, mark+reject).
 - `Trial.__init__` does the heavy preprocessing eagerly: loads the `SearchArray` from its `.mat` file, computes
   per-sample distances to every target, and runs `peyes` Engbert detection **separately for each eye**.
-- `data_models/preprocess/fixations.py` turns detected events into the fixation table, adding per-target distances in
-  px and DVA, the closest target, and `num_fixs_to_strip` (how many fixations until the next one lands in the
-  exemplar strip; `inf` if never).
-- `data_models/preprocess/visits.py` groups consecutive on-target fixations into *visits*. **Visits exist only for
-  targets.** There is no general clustering of fixations: a fixation on a distractor, on the background, or on the
+- `data_models/preprocess/events.py` (was `fixations.py`) tabulates every detected event, adding the closest
+  target, its DVA distance, and `num_fixs_to_strip` (how many **fixations** until one lands in the exemplar strip;
+  `inf` if never, NaN for non-fixations).
+- `data_models/preprocess/visits.py` groups consecutive on-target fixations into *visits*. **Currently raises**
+  pending T4 - it needs the per-target distances. **Visits exist only for targets.** There is no general clustering of fixations: a fixation on a distractor, on the background, or on the
   exemplar strip belongs to no visit at all. The visits table is not a segmentation of the scanpath - it is
   "episodes of looking at a target", covering roughly the 10% of fixations that are on-target. A fixation can belong
   to at most one visit per target, and in principle to visits of several targets at once, though that is rare in
@@ -139,14 +184,24 @@ nothing has to be chosen. Coverage and scanned-icon counts need no visit structu
 only be needed for per-distractor dwell/revisit analyses, and should then use nearest-icon winner-take-all rather
 than the soft rule target-visits use. Target-visits remain the primary construct, unchanged.
 
-Caching is layered: `Subject.pkl` and `fixation_df.pkl` are written per subject under
+Caching is layered: `Subject.pkl` and `eye_movements_df.pkl` are written per subject under
 `OUTPUT_PATH/subjects/<exp>_Subject_NN/`, and `parse_single_subject` prefers the pickle over re-parsing raw data.
-**Changing preprocessing code has no effect until those per-subject pickles are deleted** (see `CODE_REVIEW.md` H3).
+Both now carry a `<name>.cache.json` sidecar keyed on the stage-1 source files, so editing preprocessing code
+invalidates them automatically (`CODE_REVIEW.md` H3). A *new* stage-1 source file must be added to
+`cache_key._STAGE1_SOURCES` by hand - a renamed file that is already listed invalidates correctly, an unlisted one
+never does.
 
 ### Stage 2: funnels and analysis (`analysis/`)
 
-Everything downstream starts from `read_data(dir_path)` (`analysis/helpers/read_data.py`), which loads the six
-pickles into a `LoadedData` dataclass and optionally drops non-dominant-eye rows and outlier fixations.
+Everything downstream starts from `read_data(dir_path)` (`analysis/helpers/read_data.py`), which loads the
+pickles into a `LoadedData` dataclass and optionally drops non-dominant-eye rows and outlier events. Two of its
+attributes are **derived views, not files**: `.targets` (the `is_target` subset of `icons`) and `.fixations` (the
+`event_type == "FIXATION"` subset of `eye_movements`). Note `drop_outliers` now removes outlier saccades and
+blinks too, and tests on the `is_outlier` bool rather than mapping over `outlier_reasons`.
+
+**Several stage-2 entry points currently raise `NotImplementedError`** pending `fixations_to_targets()`
+(`CODE_REVIEW.md` T4): visit construction, both LWS/target-return funnels, and all three FVF estimators. The code
+is intact, not deleted - each raise names what restores it.
 
 The "funnel" is the core abstraction: an ordered list of boolean criteria, converted to **cumulative** pass columns
 (`_convert_criteria_to_funnel`), so each column means "passed this and every earlier criterion". Two entry points in
@@ -189,7 +244,9 @@ Analysis lives in notebooks at `analysis/*.ipynb` (`hit_rate`, `time_on_task`, `
 - Times are ms relative to trial onset; distances exist in both px and DVA (`px2deg` derived per subject from screen
   distance and `TOBII_MONITOR`). `to_trial_end` is time remaining, not elapsed.
 - Both eyes are detected and kept through stage 1; the non-dominant eye is dropped at read time via
-  `read_data(drop_bad_eye=True)`.
+  `read_data(drop_bad_eye=True)`. Anything grouped per eye must **preserve the group's index** if it goes through
+  `groupby.transform` - pandas aligns the returned Series by label, so a callable that rebuilds a fresh
+  `RangeIndex` silently corrupts every group but the first (`CODE_REVIEW.md` H1a).
 - Figures use plotly, with fonts/colors and `get_discrete_color()` defined in `config.py`.
 
 ## Data locations

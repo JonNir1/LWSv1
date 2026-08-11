@@ -95,6 +95,51 @@ Recorded here so they are not re-litigated as defects. These need a research dec
   not-yet-identified targets are theoretically the strongest LWS candidates, so this threshold needs the same
   justification treatment as `TIME_TO_TRIAL_END_THRESHOLD` and `FIXATIONS_TO_STRIP_THRESHOLD` in
   `analysis/helpers/default_value_selection/`.
+- **T4. `fixations_to_targets()` — restore per-target distances in stage 2.** *(opened 2026-08-11 by the events
+  refactor; this one is a scheduled fix, not a research decision.)* See below.
+
+## T4. The deferred `fixations_to_targets()` refactor
+
+**Why the columns went away.** Renaming target identity from positional `target{j}` to the stable `icon{i}`
+(`8d2ecae`) made the per-target distance columns **unique per trial** instead of shared across trials: `target0` is
+every trial's first target, but `icon37` is one specific grid position that most trials do not use as a target. So
+concatenating subjects turned a narrow-dense block into a wide-sparse one.
+
+| | columns | `_distance_dva` cols | bytes/row | NaN in distance cols |
+| --- | --- | --- | --- | --- |
+| before (`target{j}`) | 20 | 3 | 160 | 26.8% |
+| after (`icon{i}`) | 175 | 81 | 1,419 | **97.3%** |
+
+That was 16.6 MB for a *single* subject; across 27 subjects it approaches ~360 columns, and at ~2.1x the rows an
+events table would have landed near a gigabyte. This is a regression I introduced in `8d2ecae` and did not notice
+until sizing the events table — recorded here rather than quietly fixed, because it is the reason the events table
+looks lossy.
+
+**What replaced them.** `eye_movements.pkl` carries two dense columns, `closest_icon` and
+`closest_icon_distance_dva` (fixations only). Measured on subject 12: 24,668 events x 31 columns = **5.7 MB
+(232 B/row)**, against 16.6 MB for 11,733 fixations x 175 columns — a third of the size for 2.1x the rows.
+
+**What is broken until this lands.** Each raises `NotImplementedError` naming `fixations_to_targets()` rather than
+returning a wrong answer, and none of the code was deleted:
+
+| broken | where |
+| --- | --- |
+| visit construction (`visits.pkl` is no longer produced) | `Subject.get_visits`, `preprocess/visits.py` `_assign_visit_ids` |
+| LWS / target-return funnels, both `fixation` and `visit` paths | `funnels/event_classification.py` `_distance_columns` |
+| all three FVF estimators | `analysis/helpers/fvf.py` `per_target_distances` |
+| four threshold-derivation notebooks | `_determine_on_target_threshold`, `_determine_fixs_to_strip`, `_determine_time_to_trial_end`, `_determine_fvf` |
+| `tests/test_realdata_findings.py` on-target computation | already latently broken — it globs `startswith("target")` while builds emit `icon*` |
+
+**Shape of the fix.** A stage-2 helper that takes the fixation subset plus `icons.pkl` and returns the long format
+`(subject, trial, eye, event, icon, distance_px, distance_dva)` — long, not wide, so it never re-creates the sparse
+block. It also lets the same helper serve distractors, which the wide table could not (see the per-icon-visits note
+in `CLAUDE.md`). Two follow-ups belong with it:
+
+- **FVF's "preceding fixation" logic.** `estimate_by_launch_distance` and `estimate_by_selection_hazard` walk
+  `event - 1` to find the launching fixation. In the events table that neighbour is usually a *saccade*, so both
+  must filter to fixations before stepping.
+- **`read_data`'s visit branch** can be deleted rather than restored if visits move to stage 2, which is the
+  current intent.
 
 ---
 
@@ -260,9 +305,10 @@ def _identification_time_lookup(idents: pd.DataFrame) -> pd.Series:
 
 ### H1. `num_fixs_to_strip` is computed across both eyes concatenated
 
-**STATUS: FIXED** (`54362bf`).
+**STATUS: FIXED** (`54362bf`), **but the fix was itself broken until the events refactor** — see the addendum below.
 
-**Where:** `data_models/preprocess/fixations.py:121-146`, called from `process_trial_fixations:53`
+**Where:** `data_models/preprocess/events.py` (was `preprocess/fixations.py:121-146`), called from
+`process_trial_events`
 
 **Description.** `Trial.get_raw_eye_movements()` concatenates left-eye and right-eye events
 (`Trial.py:150-155`), so the frame reaching `_num_fixations_to_strip` is *all left-eye fixations, then all right-eye
@@ -293,6 +339,30 @@ only because `_extract_fixation_features` resets the index; make it explicit.
 first fixation does — assert every left-eye `num_fixs_to_strip` is `inf`. Then, on real data, assert
 `fixations.groupby(["subject","trial","eye"])["num_fixs_to_strip"].last()` is `inf` wherever that eye's last fixations
 are outside the strip.
+
+#### H1a. The per-eye fix silently corrupted the *second* eye (found and fixed 2026-08-11)
+
+**STATUS: FIXED** in the events refactor (`3452cd5`), by making `_num_to_next_true` return on the caller's index.
+
+The H1 fix replaced the flat scan with `is_in_strip.groupby(eye).transform(_num_to_next_true)`. But
+`_num_to_next_true` rebuilt its result on a fresh `RangeIndex(0..n-1)`, and `groupby.transform` aligns the returned
+Series **by label**. The left-eye group's labels happen to start at 0, so it aligned by accident and was correct;
+the right-eye group's labels start partway through the frame, so nothing aligned.
+
+Measured on subject 12 (`fixation_df.pkl` from the current build, 11,733 fixations):
+
+| eye | fixations | wrong | of which `NaN` |
+| --- | --- | --- | --- |
+| left | 5,450 | 0 (0.0%) | 0 |
+| right | 6,283 | 6,239 (**99.3%**) | 5,411 |
+
+Finite counts across the whole subject went from 3,265 to 6,553 once fixed — the old table had lost half its usable
+values. `num_fixs_to_strip` feeds `not_before_exemplar_visit`, an LWS criterion, so **every LWS/target-return number
+computed from a build made between `54362bf` and `3452cd5` is affected for the second eye**, which for a
+right-eye-dominant subject is the eye the analysis actually uses.
+
+Two lessons worth keeping: a `groupby.transform` callable must preserve the group's index, and H1's original
+"make it explicit" note about `is_in_strip`'s index was pointing at exactly this hazard one line too early.
 
 ---
 
@@ -1262,6 +1332,7 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | --- | --- |
 | **T1** d' denominator | research decision |
 | **T2** what makes a *visit* an outlier | research decision; H2 refuses the request until this is settled |
+| **T4** `fixations_to_targets()` | scheduled fix; visits, both funnels and all three FVF estimators raise until it lands |
 | ~~**T3** fixation `max_duration`~~ | resolved - no bump in the tail, so the 2500 ms default stands with a literature TODO |
 | **H5** trigger pairing | unblocked - raw data and stimuli are local; fall back to `TRIAL_END` |
 | **C3 frequency** | unblocked - `SEARCH_ARRAY_PATH` is now local; needs a pipeline re-run |
@@ -1271,9 +1342,11 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | ~~**M14** packaging~~ | withdrawn — not a distributable package; the scratchpad import is fixed |
 | **L4** strip geometry validation | unblocked - `Stimuli/` is now local |
 
-**Re-run required.** Every stage-1 fix (C2, C3, C4, H1, H6, M15) changes the pickles, and the caches now
+**Re-run required.** Every stage-1 fix (C2, C3, C4, H1, H1a, H6, M15) changes the pickles, and the caches now
 invalidate themselves (H3), so the next `run_pipeline()` rebuilds from raw. Until then the built pickles in
-`OUTPUT_PATH` are pre-fix, which is why the three real-data checks remain `xfail`.
+`OUTPUT_PATH` are pre-fix, which is why the three real-data checks remain `xfail`. The re-run also replaces
+`fixations.pkl` + `visits.pkl` with `eye_movements.pkl`; the old two are **not** deleted automatically, so remove
+them by hand once the new build is verified, or `read_data` will keep finding a stale `visits.pkl`.
 
 **No longer blocked.** `SEARCH_ARRAY_PATH` now resolves locally (`<base>\Stimuli`), so the re-run, the C3
 measurement, H5 and L4 can all proceed. Note the re-run will also pick up the corrected TOBII dimensions
