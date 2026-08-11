@@ -97,8 +97,8 @@ Recorded here so they are not re-litigated as defects. These need a research dec
   `analysis/helpers/default_value_selection/`.
 - **T4. `fixations_to_targets()` — restore per-target distances in stage 2.** *(opened 2026-08-11 by the events
   refactor; this one is a scheduled fix, not a research decision.)* See below.
-- **T5. Three gaps to report upstream to `peyes`** *(verified 2026-08-11 against the installed 0.0.9.6; not yet
-  filed — an issue on someone else's repo needs your say-so.)*
+- **T5. Three gaps reported upstream to `peyes`.** *(RESOLVED 2026-08-11: verified against the installed 0.0.9.6
+  and filed on the `peyes` repo.)* Kept here because the workarounds stay until upstream ships fixes.
   1. **`summary()` omits `start_pixel` / `end_pixel`** (`_DataModels/Event.py:135-160`), though both exist as
      properties (`:226-239`). For a saccade those two points *are* the geometry: amplitude and azimuth give
      magnitude and direction but not position, so a landing site cannot be recovered from the summary. Ideally
@@ -1352,7 +1352,7 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | **T1** d' denominator | research decision |
 | **T2** what makes a *visit* an outlier | research decision; H2 refuses the request until this is settled |
 | **T4** `fixations_to_targets()` | scheduled fix; visits, both funnels and all three FVF estimators raise until it lands |
-| **T5** three `peyes` gaps | drafted and verified; filing an issue upstream needs your go-ahead |
+| ~~**T5** three `peyes` gaps~~ | filed upstream; the `start_pixel`/`end_pixel` workaround stays until a fix ships |
 | ~~**T3** fixation `max_duration`~~ | resolved - no bump in the tail, so the 2500 ms default stands with a literature TODO |
 | **H5** trigger pairing | unblocked - raw data and stimuli are local; fall back to `TRIAL_END` |
 | **C3 frequency** | unblocked - `SEARCH_ARRAY_PATH` is now local; needs a pipeline re-run |
