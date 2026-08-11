@@ -4,6 +4,7 @@ import pytest
 
 import constants as cnst
 from pipeline.align.fixations_to_targets import fixations_to_targets
+from pipeline.utils import px2deg as _px2deg
 
 
 def _make_fixations(rows: list[dict]) -> pd.DataFrame:
@@ -16,7 +17,7 @@ def _make_icons(rows: list[dict]) -> pd.DataFrame:
 
 def _make_metadata(subjects_distances: dict[int, float]) -> pd.DataFrame:
     rows = [
-        {cnst.SUBJECT_STR: s, cnst.TRIAL_STR: 1, "screen_distance": d}
+        {cnst.SUBJECT_STR: s, cnst.TRIAL_STR: 1, "px2deg": _px2deg(d)}
         for s, d in subjects_distances.items()
     ]
     return pd.DataFrame(rows)

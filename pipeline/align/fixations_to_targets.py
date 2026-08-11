@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 import constants as cnst
-from pipeline.utils import pixel_distance, px2deg as _px2deg
+from pipeline.utils import pixel_distance
 
 
 def fixations_to_targets(
@@ -21,7 +21,7 @@ def fixations_to_targets(
 
     :param fixations: the fixation subset of eye_movements (event_type == FIXATION).
     :param icons: the full icon table (all 180 icons per trial, with is_target).
-    :param metadata: per (subject, trial) metadata; must contain a `screen_distance` column.
+    :param metadata: per (subject, trial) metadata; must contain a `px2deg` column.
 
     :return: long-format DataFrame with columns:
         subject, trial, eye, event, target, distance_px, distance_dva
@@ -39,8 +39,7 @@ def fixations_to_targets(
     px2deg_lookup = (
         metadata
         .drop_duplicates(subset=[cnst.SUBJECT_STR])
-        .set_index(cnst.SUBJECT_STR)["screen_distance"]
-        .map(_px2deg)
+        .set_index(cnst.SUBJECT_STR)["px2deg"]
     )
 
     results = []
