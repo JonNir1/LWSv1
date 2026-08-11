@@ -79,7 +79,36 @@ Two stages, separated by a set of pickled DataFrames on disk.
 ### Stage 1: raw data -> tidy DataFrames (`pipeline/`, `data_models/`)
 
 `run_pipeline()` = `parse_all_subjects()` then `build_dataframes()`, saving six pickles to `cnfg.OUTPUT_PATH`:
-`targets.pkl`, `actions.pkl`, `metadata.pkl`, `idents.pkl`, `fixations.pkl`, `visits.pkl`.
+`icons.pkl`, `actions.pkl`, `metadata.pkl`, `idents.pkl`, `fixations.pkl`, `visits.pkl`.
+
+### `icons.pkl` and the stable icon identifier
+
+One row per **(subject, trial, icon)** - all 180 icons of the trial's search array, targets and distractors alike:
+
+| column | meaning |
+| --- | --- |
+| `subject`, `trial` | keys |
+| `icon` | stable identifier, `icon{i}` for the flat row-major index over the 10x18 grid (categorical) |
+| `x`, `y` | icon centre in pixels |
+| `angle` | jitter angle in degrees |
+| `sub_path` | image file path, relative to `IMAGE_DIR_PATH` (categorical) |
+| `category` | `ImageCategoryEnum` name, derived from the filename (categorical) |
+| `is_target` | whether this icon is one of the trial's targets |
+
+**`icon{i}` names a position in the array, not a position among the targets.** The old scheme numbered targets
+`target0…targetN` by their order within the target subset, so the same physical icon carried different names in
+different trials depending only on how many targets preceded it. `icon{i}` is stable by construction, and is the
+identity used everywhere: the per-fixation distance columns (`icon37_distance_dva` / `_px`), the gaze distance
+columns, and the `target` column of `idents` and `visits`.
+
+**`targets.pkl` no longer exists.** Targets are the `is_target` subset of the icon table.
+`read_data(...).targets` still returns it - as a derived property, with the identifier column renamed to `target` -
+so existing consumers are unaffected. The three columns above are stored as categoricals, which keeps the file to
+~7 MB for 27 subjects (32 MB without).
+
+Adding per-icon *distance* columns to the fixations table would be a mistake: `_find_closest_target` and
+`_assign_visit_ids` both select **every** `*_distance_dva` column, so distractor columns would silently become
+candidate "closest targets" and fabricate distractor visits. Compute icon distances transiently in stage 2 instead.
 
 Object model (`Subject` -> list of `Trial` -> one `SearchArray` each):
 
@@ -101,6 +130,14 @@ Object model (`Subject` -> list of `Trial` -> one `SearchArray` each):
 - `data_models/preprocess/target_identifications.py` matches each identification action to the nearest gaze sample in
   time, finds the closest target, and labels it hit / repeated_hit / false_alarm; unidentified targets are appended as
   misses with `time = inf`.
+
+**Why there are no per-icon visits.** A visit is a temporal *partition* of fixations, and a partition forces each
+fixation onto exactly one icon - which is where clutter bites: the on-target radius is 68 px against 76 px icon
+spacing (ratio 0.90), so an all-within-threshold rule over 180 icons would claim ~2-3 icons per fixation with no
+principled tiebreak. A one-to-many mapping sidesteps the problem entirely: a fixation *covers a set* of icons and
+nothing has to be chosen. Coverage and scanned-icon counts need no visit structure at all. Per-icon visits would
+only be needed for per-distractor dwell/revisit analyses, and should then use nearest-icon winner-take-all rather
+than the soft rule target-visits use. Target-visits remain the primary construct, unchanged.
 
 Caching is layered: `Subject.pkl` and `fixation_df.pkl` are written per subject under
 `OUTPUT_PATH/subjects/<exp>_Subject_NN/`, and `parse_single_subject` prefers the pickle over re-parsing raw data.
