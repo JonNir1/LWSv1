@@ -165,8 +165,8 @@ class Trial:
 
     def get_raw_eye_movements(self) -> pd.DataFrame:
         """ Returns a DataFrame summarizing the eye movements detected during the trial. """
-        left = peyes.summarize_events(self._left_events)
-        right = peyes.summarize_events(self._right_events)
+        left = self._summarize_events(self._left_events)
+        right = self._summarize_events(self._right_events)
         df = pd.concat(
             [left, right],
             keys=[cnfg.LEFT_STR, cnfg.RIGHT_STR],
@@ -174,13 +174,31 @@ class Trial:
         )
         return df
 
-    def process_fixations(self) -> pd.DataFrame:
-        from data_models.preprocess.fixations import process_trial_fixations
+    def process_events(self) -> pd.DataFrame:
+        from data_models.preprocess.events import process_trial_events
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             features = self.get_raw_eye_movements()
-        fixations = process_trial_fixations(features, self.get_targets(), self.end_time, self.px2deg)
-        return fixations
+        events = process_trial_events(features, self.get_targets(), self.end_time, self.px2deg)
+        return events
+
+    @staticmethod
+    def _summarize_events(events: Sequence) -> pd.DataFrame:
+        """
+        `peyes.summarize_events`, plus the two endpoint columns it omits.
+
+        `peyes`' `BaseEvent.summary()` reports `center_pixel` but neither `start_pixel` nor `end_pixel`, although
+        both exist as properties on the event. For a saccade those two points *are* the geometry - where the
+        movement began and where it landed - and amplitude and azimuth give magnitude and direction but not
+        position, so a landing site cannot be recovered from the summary alone. Read them off the `Event` objects
+        while we still hold them; drop this once upstream exposes them (feature request filed against `peyes`).
+        """
+        summary = peyes.summarize_events(events)
+        endpoints = pd.DataFrame(
+            [(*ev.start_pixel, *ev.end_pixel) for ev in events],
+            columns=["start_x", "start_y", "end_x", "end_y"], index=summary.index, dtype=float,
+        )
+        return pd.concat([summary, endpoints], axis=1)
 
     def _create_search_array(self) -> SearchArray:
         search_array_type = SearchArrayCategoryEnum[_extract_singleton_column(self._gaze, cnfg.CONDITION_STR).upper()]

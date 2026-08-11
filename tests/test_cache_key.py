@@ -37,7 +37,7 @@ class TestCodeHash:
         before = ck.stage1_code_hash()
         fake_root = tmp_path / "repo"
         (fake_root / "data_models" / "preprocess").mkdir(parents=True)
-        (fake_root / "data_models" / "preprocess" / "fixations.py").write_text("# edited", encoding="utf-8")
+        (fake_root / "data_models" / "preprocess" / "events.py").write_text("# edited", encoding="utf-8")
         monkeypatch.setattr(ck, "_REPO_ROOT", str(fake_root))
         assert ck.stage1_code_hash() != before
 

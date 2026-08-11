@@ -1,6 +1,6 @@
 """Cache invalidation for the per-subject pickles.
 
-`Subject.pkl` and `fixation_df.pkl` are written per subject and preferred over re-parsing the raw data. Neither
+`Subject.pkl` and `eye_movements_df.pkl` are written per subject and preferred over re-parsing the raw data. Neither
 recorded what produced them, so a change to any preprocessing code left the caches silently stale: results became a
 mixture of old and new code, with nothing in the output to say so (CODE_REVIEW H3).
 
@@ -32,7 +32,7 @@ _STAGE1_SOURCES = (
     os.path.join("data_models", "parse", "eye_movements.py"),
     os.path.join("data_models", "parse", "subject_info.py"),
     os.path.join("data_models", "parse", "triggers_and_gaze.py"),
-    os.path.join("data_models", "preprocess", "fixations.py"),
+    os.path.join("data_models", "preprocess", "events.py"),
     os.path.join("data_models", "preprocess", "target_identifications.py"),
     os.path.join("data_models", "preprocess", "visits.py"),
 )
