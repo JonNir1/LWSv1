@@ -94,6 +94,49 @@ class TestAssertIsCumulative:
         assert_is_cumulative(funnel, columns=[c for c in ordered if c in funnel.columns])
 
 
+class TestHasHighFixationRate:
+    """The criterion counts *fixations*, and it is now handed the full eye-movement table.
+
+    This is the biggest bit-exactness hazard in the events refactor: Engbert alternates fixation and saccade, so
+    counting rows roughly doubles the rate. `has_high_fixation_rate` feeds `is_valid_trial`, which gates every
+    funnel, figure and GAM - a trial that should be excluded for sparse fixations would silently pass.
+    """
+
+    @staticmethod
+    def events(n_fixations: int, n_saccades: int) -> pd.DataFrame:
+        rows = [{"subject": 1, "trial": 1, "eye": "right", "event_type": "FIXATION"} for _ in range(n_fixations)]
+        rows += [{"subject": 1, "trial": 1, "eye": "right", "event_type": "SACCADE"} for _ in range(n_saccades)]
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def metadata(duration_ms: float) -> pd.DataFrame:
+        return pd.DataFrame([{"subject": 1, "trial": 1, "duration": duration_ms}])
+
+    def test_saccades_do_not_count_towards_the_rate(self):
+        from analysis.helpers.funnels.trial_inclusion import has_high_fixation_rate
+
+        # 2 fixations in 1 s = 2 Hz, below a 3 Hz bar; the 8 saccades must not rescue the trial
+        rate = has_high_fixation_rate(self.events(2, 8), self.metadata(1000.0), min_rate=3.0)
+        assert not rate.iloc[0], "saccades were counted as fixations"
+
+    def test_a_genuinely_dense_trial_still_passes(self):
+        from analysis.helpers.funnels.trial_inclusion import has_high_fixation_rate
+
+        assert has_high_fixation_rate(self.events(10, 9), self.metadata(1000.0), min_rate=3.0).iloc[0]
+
+    def test_a_fixation_only_frame_is_unchanged(self):
+        """The old fixations table had no `event_type`; the filter must be a no-op on frames that lack it."""
+        from analysis.helpers.funnels.trial_inclusion import has_high_fixation_rate
+
+        with_col = self.events(10, 0)
+        without_col = with_col.drop(columns=["event_type"])
+        meta = self.metadata(1000.0)
+        assert (
+            has_high_fixation_rate(with_col, meta, min_rate=3.0).iloc[0]
+            == has_high_fixation_rate(without_col, meta, min_rate=3.0).iloc[0]
+        )
+
+
 class TestInclusionNaNHandling:
     def test_missing_trial_in_a_criterion_fails_that_trial(self):
         """M6, at the source: `reindex` inserts NaN for trials a criterion never saw."""
