@@ -17,12 +17,12 @@ the numpy/pandas upgrade. New findings surfaced while building the test suite: *
 `tests/` encodes the findings as executable claims. Each test for an unfixed bug is `xfail(strict=True)`, so the suite
 is green now and turns red the moment a bug is fixed without its marker being removed.
 
-Suite status: **140 passed, 15 skipped** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6 (11 files under `tests/`).
+Suite status: **155 passed, 15 skipped** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6 (13 files under `tests/`).
 
 Every skip has the same cause: the built pickles in `OUTPUT_PATH` predate the icon refactor, so nothing keyed on
 the `icon{i}` identifier can be checked against them. They become `xfail`/pass on the next `run_pipeline()`. The
 `xfail`s inside that set are "fixed in code, but the pickles predate the fix" (C4 frequency, H2 magnitude, M1
-dtypes) plus the distance-dependent checks pending T4.
+dtypes).
 
 | Finding | Test | Status |
 | --- | --- | --- |
@@ -97,8 +97,9 @@ Recorded here so they are not re-litigated as defects. These need a research dec
   not-yet-identified targets are theoretically the strongest LWS candidates, so this threshold needs the same
   justification treatment as `TIME_TO_TRIAL_END_THRESHOLD` and `FIXATIONS_TO_STRIP_THRESHOLD` in
   `analysis/helpers/default_value_selection/`.
-- **T4. `fixations_to_targets()` — restore per-target distances in stage 2.** *(opened 2026-08-11 by the events
-  refactor; this one is a scheduled fix, not a research decision.)* See below.
+- ~~**T4. `fixations_to_targets()` -- restore per-target distances in stage 2.**~~ *(RESOLVED 2026-08-11:
+  implemented as `pipeline/align/fixations_to_targets.py` returning long-format distances; visits and identifications
+  also moved to stage 2 as `pipeline/align/build_visits.py` and `pipeline/align/target_identifications.py`.)* See below.
 - **T5. Three gaps reported upstream to `peyes`.** *(RESOLVED 2026-08-11: verified against the installed 0.0.9.6
   and filed on the `peyes` repo.)* Kept here because the workarounds stay until upstream ships fixes.
   1. **`summary()` omits `start_pixel` / `end_pixel`** (`_DataModels/Event.py:135-160`), though both exist as
@@ -119,7 +120,7 @@ Recorded here so they are not re-litigated as defects. These need a research dec
   `configure_peyes()` at import) gets `peyes`' defaults instead of this project's. That cost an hour during the
   events verification: 93 fixations gained a spurious `min_duration` flag.
 
-## T4. The deferred `fixations_to_targets()` refactor
+## ~~T4. The deferred `fixations_to_targets()` refactor~~ (RESOLVED)
 
 **Why the columns went away.** Renaming target identity from positional `target{j}` to the stable `icon{i}`
 (`8d2ecae`) made the per-target distance columns **unique per trial** instead of shared across trials: `target0` is
@@ -1310,8 +1311,8 @@ included and excluded alike** - the threshold describes the timing of pre-identi
 only in valid trials. Cell 13 now computes the predicate inline via `is_before_identification` and
 `identification_time_lookup` rather than indexing a column that was never there.
 
-Re-running it end to end to confirm the reported percentile still lands on 1000 ms is blocked on **T4**, like the
-rest of the threshold-derivation notebooks: it reads `visits`, which the pipeline does not currently produce.
+Re-running it end to end to confirm the reported percentile still lands on 1000 ms is now unblocked (T4 resolved).
+The notebook needs updating to use `align_data()` instead of `loaded_data.visits`.
 
 **Where:** `analysis/helpers/default_value_selection/_determine_time_to_trial_end.ipynb`, cell 12
 
@@ -1356,9 +1357,8 @@ columns while target attribution takes the closest, which looks like it could di
 target is by definition no further than any other, so "within threshold of any" and "the closest is within
 threshold" are the same predicate. The asymmetry is only in row multiplicity, not in the criterion.
 
-**This may dissolve with T4.** If `fixations_to_targets()` returns long format, the fixation path can become one row
-per (fixation, target) exactly as visits are, and the two levels would then attribute targets identically. Worth
-deciding deliberately when T4 lands rather than inheriting the current shape.
+**Dissolved by T4.** `fixations_to_targets()` returns long format, so the fixation path is one row per
+(fixation, target) exactly as visits are, and the two levels attribute targets identically.
 
 ### L6. ~~R script hygiene~~
 
@@ -1401,17 +1401,17 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | --- | --- |
 | **T1** d' denominator | research decision |
 | **T2** what makes a *visit* an outlier | research decision; H2 refuses the request until this is settled |
-| **T4** `fixations_to_targets()` | scheduled fix; visits, both funnels and all three FVF estimators raise until it lands |
+| ~~**T4** `fixations_to_targets()`~~ | resolved; long-format distances in `pipeline/align/`, visits and identifications moved to stage 2 |
 | ~~**T5** three `peyes` gaps~~ | filed upstream; the `start_pixel`/`end_pixel` workaround stays until a fix ships |
 | ~~**T3** fixation `max_duration`~~ | resolved - no bump in the tail, so the 2500 ms default stands with a literature TODO |
 | **H5** trigger pairing | unblocked - raw data and stimuli are local; fall back to `TRIAL_END` |
 | **C3 frequency** | unblocked - `SEARCH_ARRAY_PATH` is now local; needs a pipeline re-run |
 | **M10, M11** GAM specification | deferred by decision; accepted as valid, modelling choice pending |
 | **M12** `px2deg` position dependence | deferred by decision; measured median 3.0% / max 9.7% across real targets |
-| **L5** fixation vs visit target attribution | open by design; may dissolve if T4 returns long format - decide then |
-| ~~**L7** broken cell in `_determine_time_to_trial_end`~~ | fixed; denominator settled as all target-visits across all trials. Re-running it is blocked on T4 |
+| ~~**L5** fixation vs visit target attribution~~ | dissolved by T4; long format makes both levels identical |
+| ~~**L7** broken cell in `_determine_time_to_trial_end`~~ | fixed; denominator settled as all target-visits across all trials. Re-running is now unblocked (T4 resolved) |
 | ~~**M14** packaging~~ | withdrawn — not a distributable package; the scratchpad import is fixed |
-| ~~**L1** no tests~~ | fixed - 11 files, 140 tests |
+| ~~**L1** no tests~~ | fixed - 13 files, 155 tests |
 | ~~**L3** small nits~~ | fixed |
 | ~~**L6** R script hygiene~~ | fixed, except the `k` choice, which is deferred with M10/M11 |
 | **L4** strip geometry validation | unblocked - `Stimuli/` is now local |
@@ -1436,9 +1436,9 @@ withdrawn. What remains, in the order it should be done:
    pickles, and the current build additionally predates the icon refactor. Delete the per-subject caches (or rely
    on the H3 sidecars to invalidate them), run once, then remove the stale `fixations.pkl` and `visits.pkl` by
    hand. Gate on the C4 invariant test and on the three `xfail`s flipping to pass.
-2. **T4 `fixations_to_targets()`.** The only substantial code left, and the blocker for visits, both funnels, all
-   three FVF estimators, and four notebooks. Decide L5 while writing it: long format makes fixation- and
-   visit-level attribution identical, which is probably what you want.
+2. ~~**T4 `fixations_to_targets()`.**~~ Resolved: `pipeline/align/fixations_to_targets.py` returns long format;
+   `build_visits.py` and `target_identifications.py` also moved to stage 2. L5 dissolves: long format makes
+   fixation- and visit-level attribution identical.
 3. **T1 and T2**, the two research decisions. T1's FVF blocker is resolved; T2 gates whether H2's all-outlier rule
    is the right one.
 4. **H5, L4** — both unblocked now that raw data and `Stimuli/` are local, neither urgent.
