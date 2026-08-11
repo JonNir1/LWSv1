@@ -97,6 +97,25 @@ Recorded here so they are not re-litigated as defects. These need a research dec
   `analysis/helpers/default_value_selection/`.
 - **T4. `fixations_to_targets()` — restore per-target distances in stage 2.** *(opened 2026-08-11 by the events
   refactor; this one is a scheduled fix, not a research decision.)* See below.
+- **T5. Three gaps to report upstream to `peyes`** *(verified 2026-08-11 against the installed 0.0.9.6; not yet
+  filed — an issue on someone else's repo needs your say-so.)*
+  1. **`summary()` omits `start_pixel` / `end_pixel`** (`_DataModels/Event.py:135-160`), though both exist as
+     properties (`:226-239`). For a saccade those two points *are* the geometry: amplitude and azimuth give
+     magnitude and direction but not position, so a landing site cannot be recovered from the summary. Ideally
+     pre-split as `start_x`/`start_y`/`end_x`/`end_y` so the frame stays float64 — the same object-dtype problem
+     `center_pixel` and `pixel_std` already have. **Worked around** in `Trial._summarize_events`, which reads them
+     off the `Event` objects; delete that once upstream lands.
+  2. **`get_outlier_reasons` is duration- and screen-bounds-only** (`Event.py:119-133`), carrying an unimplemented
+     `# TODO: check min, max velocity, acceleration, dispersion`. This is why M15's wrong `pixel_size` turned out
+     to be inert — no velocity or dispersion check ever consumed it.
+  3. **`summarize_events([])` returns a column-less `DataFrame`** (verified: shape `(0, 0)`, no columns;
+     `_base/postprocess_events.py:10-17`), so an eye with zero detected events contributes no columns to a concat
+     rather than an empty frame with the right schema.
+
+  Also worth knowing rather than reporting: `summary()` re-derives `outlier_reasons` from **mutable global config**
+  at call time, so a script that touches events without importing `data_models.parse.eye_movements` (which calls
+  `configure_peyes()` at import) gets `peyes`' defaults instead of this project's. That cost an hour during the
+  events verification: 93 fixations gained a spurious `min_duration` flag.
 
 ## T4. The deferred `fixations_to_targets()` refactor
 
@@ -1333,6 +1352,7 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | **T1** d' denominator | research decision |
 | **T2** what makes a *visit* an outlier | research decision; H2 refuses the request until this is settled |
 | **T4** `fixations_to_targets()` | scheduled fix; visits, both funnels and all three FVF estimators raise until it lands |
+| **T5** three `peyes` gaps | drafted and verified; filing an issue upstream needs your go-ahead |
 | ~~**T3** fixation `max_duration`~~ | resolved - no bump in the tail, so the 2500 ms default stands with a literature TODO |
 | **H5** trigger pairing | unblocked - raw data and stimuli are local; fall back to `TRIAL_END` |
 | **C3 frequency** | unblocked - `SEARCH_ARRAY_PATH` is now local; needs a pipeline re-run |
