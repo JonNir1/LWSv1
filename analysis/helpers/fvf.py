@@ -63,9 +63,16 @@ _POOLED = "all"
 
 
 def target_distance_columns(fixations: pd.DataFrame) -> Dict[str, str]:
-    """Map target identifier -> its DVA distance column in the fixations table (e.g. `icon92` -> `icon92_distance_dva`)."""
+    """Map target identifier -> its DVA distance column in the fixations table (e.g. `icon92` -> `icon92_distance_dva`).
+
+    The `icon` prefix is required, not just the suffix: `closest_icon_distance_dva` also ends in `_distance_dva`
+    but is a single nearest-target distance, not a per-target one, and would enter the reshape as a phantom target.
+    """
     suffix = f"_{cnst.DISTANCE_STR}_dva"
-    return {col[: -len(suffix)]: col for col in fixations.columns if col.endswith(suffix)}
+    return {
+        col[: -len(suffix)]: col for col in fixations.columns
+        if col.endswith(suffix) and col.startswith(cnst.ICON_STR)
+    }
 
 
 def per_target_distances(fixations: pd.DataFrame, on_target_threshold_dva: float) -> pd.DataFrame:
@@ -76,7 +83,12 @@ def per_target_distances(fixations: pd.DataFrame, on_target_threshold_dva: float
     """
     dist_cols = target_distance_columns(fixations)
     if not dist_cols:
-        raise ValueError("no `*_distance_dva` columns found in the fixations table")
+        raise NotImplementedError(
+            "no `*_distance_dva` columns found in the fixations table: they were removed from the persisted events "
+            "table and are restored by the deferred `fixations_to_targets()` helper - see CODE_REVIEW.md. "
+            "Note that all three estimators also need their 'preceding fixation' logic revisited, since the table "
+            "now interleaves saccades and blinks between fixations."
+        )
     keep = [c for c in [cnst.SUBJECT_STR, cnst.TRIAL_STR, cnst.EYE_STR, cnst.EVENT_STR, cnst.START_TIME_STR]
             if c in fixations.columns]
     long = fixations.melt(

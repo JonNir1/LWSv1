@@ -123,9 +123,15 @@ VISIT_DISTANCE_COLUMN = "weighted_distance_dva"
 
 def _distance_columns(event_data: pd.DataFrame, event_type: Literal["fixation", "visit"]) -> list[str]:
     if event_type == "fixation":
-        # e.g. target0_distance_dva, target1_distance_dva, ... one per target, and the event is on-target if it is
+        # e.g. icon37_distance_dva, icon92_distance_dva, ... one per target, and the event is on-target if it is
         # within threshold of any of them
-        dist_cols = [c for c in event_data.columns if c.startswith("target") and c.endswith("distance_dva")]
+        dist_cols = [c for c in event_data.columns if c.startswith(cnst.ICON_STR) and c.endswith("distance_dva")]
+        if not dist_cols:
+            raise NotImplementedError(
+                "the per-target distance columns were removed from the events table (they were unique per trial, "
+                "so concatenating subjects produced a 97%-NaN frame). LWS / target-return classification is "
+                "restored by the deferred `fixations_to_targets()` helper - see CODE_REVIEW.md"
+            )
     else:
         # a visit already belongs to exactly one target, so there is a single distance to test
         dist_cols = [c for c in event_data.columns if c == VISIT_DISTANCE_COLUMN]

@@ -68,8 +68,16 @@ def has_gaze_coverage(metadata: pd.DataFrame, min_percent: int | float) -> pd.Se
 
 
 def has_high_fixation_rate(fixations: pd.DataFrame, metadata: pd.DataFrame, min_rate: float) -> pd.Series:
-    """True iff trial has a high enough fixation rate (fixations per second)."""
+    """
+    True iff trial has a high enough fixation rate (fixations per second).
+
+    The count is of **fixations**, so the frame is filtered by `event_type` first: it is now the full eye-movement
+    table, and counting its rows would roughly double the rate (Engbert alternates fixation and saccade), flipping
+    `is_valid_trial` for trials that should be excluded.
+    """
     assert min_rate >= 0.0, "min_rate must be non-negative."
+    if "event_type" in fixations.columns:
+        fixations = fixations.loc[fixations["event_type"] == "FIXATION"]
     fix_count = (
         fixations
         .groupby(["subject", "trial", "eye"]).size()

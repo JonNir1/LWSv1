@@ -54,8 +54,14 @@ class TestReshaping:
         assert cols == {"icon10": "icon10_distance_dva"}
 
     def test_raises_when_no_distance_columns(self):
-        with pytest.raises(ValueError, match="no `\\*_distance_dva` columns"):
+        """The persisted events table no longer carries them, so the raise names what restores them."""
+        with pytest.raises(NotImplementedError, match="fixations_to_targets"):
             per_target_distances(pd.DataFrame({"subject": [1], "trial": [1]}), THRESHOLD)
+
+    def test_the_nearest_target_column_is_not_mistaken_for_a_target(self):
+        """`closest_icon_distance_dva` ends in the same suffix but is one distance, not one per target."""
+        fixations = synthetic_fixations(n_trials=2).assign(closest_icon_distance_dva=1.0)
+        assert target_distance_columns(fixations) == {"icon10": "icon10_distance_dva"}
 
     def test_long_format_marks_on_target(self):
         long = per_target_distances(synthetic_fixations(n_trials=5), THRESHOLD)

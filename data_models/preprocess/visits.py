@@ -112,10 +112,15 @@ def _assign_visit_ids(
 
     # assign visit IDs per target
     dist_dva_suffix = f"_{cnst.DISTANCE_STR}_dva"
-    dist_dva_cols = [col for col in fixs_subset.columns if col.endswith(dist_dva_suffix)]
+    dist_dva_cols = [
+        col for col in fixs_subset.columns
+        if col.endswith(dist_dva_suffix) and col.startswith(cnst.ICON_STR)
+    ]
     if len(dist_dva_cols) == 0:
-        raise RuntimeError(
-            f"Fixation subset from trial {trials[0]} and eye {eyes[0]} does not contain DVA distances."
+        raise NotImplementedError(
+            f"Fixation subset from trial {trials[0]} and eye {eyes[0]} does not contain per-target DVA distances. "
+            "They were removed from the persisted events table and are restored by the deferred "
+            "`fixations_to_targets()` helper - see CODE_REVIEW.md"
         )
     target_visit_ids = []
     for col in dist_dva_cols:
