@@ -12,7 +12,7 @@ from tqdm import tqdm
 import config as cnfg
 from data_models.parse.subject_info import parse_subject_info
 from data_models.parse.triggers_and_gaze import parse_triggers_and_gaze
-from data_models.preprocess.target_identifications import extract_trial_identifications
+
 from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum, SubjectActionCategoryEnum
 from pipeline.cache_key import build_cache_key, describe_staleness, is_cache_valid, write_cache_key
 
@@ -289,52 +289,6 @@ class Subject:
         res["hand"] = self.hand
         res["dominant_eye"] = self.eye
         return res
-
-    def get_target_identifications(
-            self,
-            identification_actions: Union[Sequence[SubjectActionCategoryEnum], SubjectActionCategoryEnum],
-            temporal_matching_threshold: float,
-            on_target_threshold_dva: float,
-            verbose: bool = False,
-    ) -> pd.DataFrame:
-        """
-        Extracts the target identification behavior of a subject across all trials.
-        :param identification_actions: action(s) that indicate the subject has identified a target.
-        :param temporal_matching_threshold: temporal threshold (in ms) for matching gaze samples to identification actions.
-        :param on_target_threshold_dva: the distance in DVA from the target to consider the identification as a hit.
-        :param verbose: if True, displays a progress bar for the extraction process.
-
-        :return: a DataFrame containing the target identification behavior for each trial, with the following columns:
-        - trial: int; the trial number
-        - target: str; the name of the closest target to the subject's gaze at the time of identification
-        - time: float; the time of the identification action in ms (relative to trial onset)
-        - distance_px: float; the distance between the subject's gaze and the closest target, in pixels
-        - distance_dva: float; the distance between the subject's gaze and the closest target, in DVA
-        - left_x, left_y, right_x, right_y: float; the x and y coordinates of the subject's left and right eye gaze at the time of identification
-        - left_pupil, right_pupil: float; the pupil size of the subject's left and right eye at the time of identification
-        """
-        trial_idents = dict()
-        for trial in tqdm(self.get_trials(), desc="Target Identifications", disable=not verbose):
-            trial_idents[trial.trial_num] = extract_trial_identifications(
-                trial=trial,
-                identification_actions=identification_actions,
-                gaze_to_trigger_matching_threshold=temporal_matching_threshold,
-                on_target_threshold_dva=on_target_threshold_dva,
-            )
-        idents = pd.concat(trial_idents.values(), axis=0, keys=trial_idents.keys())
-        idents = (
-            idents
-            .reset_index(drop=False)
-            .drop(
-                columns=["target_sub_path", "level_1", "left_label", "right_label", ],
-                inplace=False,
-                errors='ignore'
-            )
-            .rename(columns={"level_0": cnfg.TRIAL_STR})
-            .sort_values(by=[cnfg.TRIAL_STR, cnfg.TARGET_STR])
-            .reset_index(drop=True)
-        )
-        return idents
 
     def get_events(self, save: bool = True, verbose: bool = False, force_rebuild: bool = False,) -> pd.DataFrame:
         """
