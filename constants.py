@@ -17,6 +17,7 @@ TOBII_MONITOR = _Monitor(
 )
 TOBII_MISSING_VALUES = [-1, "-1", "-1.#IND0", np.nan, pd.NA, MISSING_VALUE]
 PIXEL_SIZE_MM = np.mean([TOBII_MONITOR.width_mm / TOBII_MONITOR.width, TOBII_MONITOR.height_mm / TOBII_MONITOR.height,])
+PIXEL_SIZE_CM = PIXEL_SIZE_MM / 10  # `peyes` and the DVA conversions work in cm; keep the unit in the name
 
 ## STRINGS ##
 SUBJECT_STR, SESSION_STR = "subject", "session"
@@ -41,6 +42,7 @@ RIGHT_X_STR, RIGHT_Y_STR, RIGHT_PUPIL_STR = f"{RIGHT_STR}_{X}", f"{RIGHT_STR}_{Y
 LEFT_LABEL_STR, RIGHT_LABEL_STR = f"{LEFT_STR}_{LABEL_STR}", f"{RIGHT_STR}_{LABEL_STR}"
 LEFT_EVENT_STR, RIGHT_EVENT_STR = f"{LEFT_STR}_{EVENT_STR}", f"{RIGHT_STR}_{EVENT_STR}"
 
+ICON_STR = "icon"
 TARGET_STR = "target"
 TARGET_DISTANCE_STR = f"{TARGET_STR}_{DISTANCE_STR}"
 TARGET_TIME_STR = f"{TARGET_STR}_{TIME_STR}"

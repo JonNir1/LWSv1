@@ -2,6 +2,7 @@
 .Rproj.user
 LWSv1.Rproj
 *.csv
+analysis/R/figures/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

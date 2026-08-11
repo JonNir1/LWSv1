@@ -101,7 +101,8 @@ def _find_closest_target(identification_gaze: pd.DataFrame, px2deg: float,) -> p
     - The distance to the closest target in pixels
     - The distance to the closest target in degrees of visual angle (DVA)
     """
-    dists = identification_gaze[[col for col in identification_gaze.columns if col.startswith(cnst.TARGET_STR)]].copy()
+    # gaze distance columns are named by the target's stable `icon{i}` identifier (see `Trial._calculate_target_distances`)
+    dists = identification_gaze[[col for col in identification_gaze.columns if col.startswith(cnst.ICON_STR)]].copy()
     closest_target = dists.idxmin(axis=1).rename(cnst.TARGET_STR)
     dists_px = pd.Series(
         dists.to_numpy()[dists.index, dists.columns.get_indexer(closest_target)],
@@ -132,6 +133,12 @@ def _classify_hits_and_false_alarms(idents: pd.DataFrame, on_target_threshold_dv
     is_hit = idents_copy[cnst.IDENTIFICATION_CATEGORY_STR] == SignalDetectionCategoryEnum.HIT
     is_repeated_hit = idents_copy.loc[is_hit, cnst.TARGET_STR].duplicated(keep="first")
     idents_copy.loc[is_hit & is_repeated_hit, cnst.IDENTIFICATION_CATEGORY_STR] = SignalDetectionCategoryEnum.REPEATED_HIT
+    # a false alarm identifies no target: it lands outside the on-target threshold, so the nearest target assigned by
+    # `_find_closest_target` is not an identification of it. Keep the distances (they record how near the miss was),
+    # but clear the target, or downstream lookups keyed on (subject, trial, target) will read the FA time as that
+    # target's identification time.
+    is_false_alarm = idents_copy[cnst.IDENTIFICATION_CATEGORY_STR] == SignalDetectionCategoryEnum.FALSE_ALARM
+    idents_copy.loc[is_false_alarm, cnst.TARGET_STR] = None
     return idents_copy
 
 

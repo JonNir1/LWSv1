@@ -50,6 +50,26 @@ def build_event_classification_funnel(
     on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
     exclude: Literal["none", "invalid_trials", "outliers", "both"] = "both",
 ) -> pd.DataFrame:
+    """
+    Build a per-event funnel classifying each event as LWS or as a target-return.
+
+    Returns `event_data` with one **cumulative** boolean column per criterion appended, plus `trial_category`,
+    `target_category` and `target_angle`. Each criterion column means "passed this criterion *and every earlier
+    one*", so `on_target` is not "this event is on target" but "this event is in a valid trial and is on target".
+    The final column (`is_lws` / `is_target_return`) is the full conjunction.
+
+    IMPORTANT - `event_type` changes the unit of analysis *and* how targets are attributed, so fixation-level and
+    visit-level results are not directly comparable:
+
+    - `"fixation"`: one row per fixation, carrying a single `target` - the **closest** one. A fixation within
+      threshold of two targets is attributed only to the nearer.
+    - `"visit"`: one row per (target, visit). The same fixation can belong to visits to several targets at once, so
+      it contributes a row per target. Visit counts are therefore not fixation counts, and the denominator of any
+      proportion differs between the two.
+
+    Prefer visits when the question is about episodes of looking at a target, and fixations when it is about
+    individual fixations; do not mix them within one comparison.
+    """
     funnel_type = funnel_type.lower()
     event_type = event_type.lower()
     exclude = exclude.lower()
@@ -62,6 +82,12 @@ def build_event_classification_funnel(
     bad_actions = _bad_actions_as_list(bad_actions)
     loaded = read_data(data_dir, drop_bad_eye=True, drop_outliers=exclude in {"outliers", "both"})
     event_data = loaded.fixations if event_type == "fixation" else loaded.visits
+    if event_data is None:
+        raise NotImplementedError(
+            f"no {event_type} table in {data_dir!r}. Visits are not built at present: they need the per-target "
+            "distances that were removed from the events table, restored by the deferred `fixations_to_targets()` "
+            "helper - see CODE_REVIEW.md"
+        )
     trial_criteria = check_trial_inclusion_criteria(
         loaded.metadata, loaded.fixations, loaded.actions, loaded.identifications,
         min_gaze_coverage=min_gaze_coverage,
@@ -158,27 +184,58 @@ def _join_trial_and_event_criteria(
 
 
 def _convert_criteria_to_funnel(criteria_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Turn standalone criterion columns into cumulative funnel columns, renamed so the two cannot be confused.
+
+    Column `i` of the result is the AND of criteria `0..i`, named `upto_<criterion>` (terminal columns such as
+    `is_lws` keep their name - see `funnel_config.cumulative_name`). The result is verified to be row-wise monotone:
+    a True in any column guarantees True in every column before it.
+    """
     funnel_df = pd.DataFrame(index=criteria_df.index)
     cumulative = pd.Series(True, index=criteria_df.index)
     for col in criteria_df.columns:
         cumulative &= criteria_df[col].fillna(False).astype(bool)
-        funnel_df[col] = cumulative
+        funnel_df[fcfg.cumulative_name(col)] = cumulative
+    assert_is_cumulative(funnel_df)
     return funnel_df
+
+
+def assert_is_cumulative(funnel_df: pd.DataFrame, columns: Optional[list[str]] = None) -> None:
+    """
+    Verify the defining property of a funnel: passing step `i` implies passing every earlier step.
+
+    Cheap enough to run on every build, and it is the one invariant that makes the cumulative column names
+    trustworthy. Exported so notebooks can re-check a funnel they have filtered or merged.
+
+    :raises ValueError: if any row passes a step without passing an earlier one.
+    """
+    columns = list(columns) if columns is not None else list(funnel_df.columns)
+    for earlier, later in zip(columns, columns[1:]):
+        violations = funnel_df[later].fillna(False) & ~funnel_df[earlier].fillna(False)
+        if violations.any():
+            raise ValueError(
+                f"funnel is not cumulative: {int(violations.sum())} row(s) pass {later!r} but fail the earlier "
+                f"{earlier!r}. First offending index: {funnel_df.index[violations][0]!r}."
+            )
 
 
 def _coerce_column_types(data: pd.DataFrame) -> pd.DataFrame:
     base_types = {"subject": "category", "trial": int, "target": "category", "target_angle": float}
     data = data.astype({col: typ for col, typ in base_types.items() if col in data.columns})
+    # NOTE: build the categorical from the *values*, not via `from_codes` on the enum members. `from_codes` treats the
+    # enum value as a position in the categories list, which only works while the enums stay zero-based and
+    # contiguous; a gap or a non-zero start would either raise or silently mislabel every row.
     if "trial_category" in data.columns:
-        data["trial_category"] = pd.Categorical.from_codes(
-            data["trial_category"].map(lambda val: SearchArrayCategoryEnum[val]),
-            categories=[cat.name for cat in SearchArrayCategoryEnum],
-            ordered=True,
-        ).remove_unused_categories()
+        data["trial_category"] = _as_ordered_categorical(data["trial_category"], SearchArrayCategoryEnum)
     if "target_category" in data.columns:
-        data["target_category"] = pd.Categorical.from_codes(
-            data["target_category"].map(lambda val: ImageCategoryEnum[val]),
-            categories=[cat.name for cat in ImageCategoryEnum],
-            ordered=True,
-        ).remove_unused_categories()
+        data["target_category"] = _as_ordered_categorical(data["target_category"], ImageCategoryEnum)
     return data
+
+
+def _as_ordered_categorical(values: pd.Series, enum_cls) -> pd.Categorical:
+    """Categorical over `enum_cls`'s member names, ordered by the enum's declaration order."""
+    categories = [member.name for member in enum_cls]
+    unknown = set(values.dropna().unique()) - set(categories)
+    if unknown:
+        raise ValueError(f"values not in {enum_cls.__name__}: {sorted(unknown)}")
+    return pd.Categorical(values, categories=categories, ordered=True).remove_unused_categories()

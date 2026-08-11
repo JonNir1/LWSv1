@@ -4,6 +4,8 @@ from typing import List, Union, Literal
 import pandas as pd
 from tqdm import tqdm
 
+import config as cnfg
+
 from data_models.Subject import Subject
 from data_models.LWSEnums import SubjectActionCategoryEnum
 
@@ -13,22 +15,24 @@ def build_dataframes(
         identification_actions: Union[List[SubjectActionCategoryEnum], SubjectActionCategoryEnum],
         gaze_to_trigger_time_threshold: float,
         on_target_threshold_dva: float,
-        visit_merging_time_threshold: float,
         verbose=False,
 ) -> (
-        pd.DataFrame,   # targets
+        pd.DataFrame,   # icons
         pd.DataFrame,   # actions
         pd.DataFrame,   # metadata
         pd.DataFrame,   # identifications
-        pd.DataFrame,   # fixations
-        pd.DataFrame,   # visits
+        pd.DataFrame,   # eye movements
 ):
     start_time = time()
     bad_actions = [
         act for act in SubjectActionCategoryEnum if
         act not in identification_actions and act != SubjectActionCategoryEnum.NO_ACTION
     ]
-    targets = _concat_subject_results(subjects, "target", verbose=verbose)
+    icons = _concat_subject_results(subjects, "icon", verbose=verbose)
+    # `pd.concat` widens categoricals with differing categories back to object; re-apply so icons.pkl stays small
+    for col in (cnfg.ICON_STR, "sub_path", cnfg.CATEGORY_STR):
+        if col in icons.columns:
+            icons[col] = icons[col].astype("category")
     actions = _concat_subject_results(subjects, "action", verbose=verbose)
     metadata = _concat_subject_results(subjects, "metadata", bad_actions=bad_actions, verbose=verbose,)
     idents = _concat_subject_results(
@@ -39,29 +43,24 @@ def build_dataframes(
         on_target_threshold_dva=on_target_threshold_dva,
         verbose=verbose,
     )
-    fixations = _concat_subject_results(subjects, "fixation", verbose=verbose,)
-    visits = _concat_subject_results(
-        subjects,
-        "visit",
-        on_target_threshold_dva=on_target_threshold_dva,
-        visit_merging_time_threshold=visit_merging_time_threshold,
-        verbose=verbose,
-    )
+    eye_movements = _concat_subject_results(subjects, "event", verbose=verbose,)
+    # `pd.concat` widens categoricals with differing categories back to object; re-apply so the pickle stays small
+    eye_movements[f"{cnfg.EVENT_STR}_type"] = eye_movements[f"{cnfg.EVENT_STR}_type"].astype("category")
     if verbose:
         print(f"Data extraction completed in {time() - start_time:.2f} seconds.")
-    return targets, actions, metadata, idents, fixations, visits
+    return icons, actions, metadata, idents, eye_movements
 
 
 def _concat_subject_results(
         subjects: List[Subject],
-        to_concat: Literal["target", "action", "metadata", "identification", "fixation", "visit"],
+        to_concat: Literal["icon", "action", "metadata", "identification", "event"],
         verbose: bool = True,
         **kwargs
 ) -> pd.DataFrame:
     results = dict()
     for subj in tqdm(subjects, desc=f"Extracting {to_concat} data", disable=not verbose):
-        if to_concat == "target":
-            subj_res = subj.get_targets()
+        if to_concat == "icon":
+            subj_res = subj.get_icons()
         elif to_concat == "action":
             subj_res = subj.get_actions()
         elif to_concat == "metadata":
@@ -80,16 +79,8 @@ def _concat_subject_results(
             subj_res = subj.get_target_identifications(
                 identification_actions, gaze_to_trigger_match_threshold, on_target_threshold_dva, verbose=False,
             )
-        elif to_concat == "fixation":
-            subj_res = subj.get_fixations(save=True, verbose=verbose)
-        elif to_concat == "visit":
-            on_target_threshold_dva = kwargs.get("on_target_threshold_dva", None)
-            assert on_target_threshold_dva and on_target_threshold_dva > 0, \
-                f"Must specify positive `on_target_threshold_dva` for `{to_concat}` concatenation."
-            visit_merging_time_threshold = kwargs.get("visit_merging_time_threshold", None)
-            assert visit_merging_time_threshold and visit_merging_time_threshold > 0, \
-                f"Must specify positive `visit_merging_time_threshold` for `{to_concat}` concatenation."
-            subj_res = subj.get_visits(on_target_threshold_dva, visit_merging_time_threshold,)
+        elif to_concat == "event":
+            subj_res = subj.get_events(save=True, verbose=verbose)
         else:
             raise ValueError(f"Unknown type: {to_concat}")
         results[subj.id] = subj_res

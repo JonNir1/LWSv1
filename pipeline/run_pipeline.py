@@ -1,3 +1,4 @@
+import json
 import os
 from time import time
 from typing import List, Union
@@ -6,12 +7,15 @@ import pandas as pd
 
 import config as cnfg
 from data_models.LWSEnums import SubjectActionCategoryEnum
+from data_models.parse.eye_movements import configure_peyes
 
 from pipeline.parse_raw_data import parse_all_subjects
 from pipeline.build_dataframes import build_dataframes
 
 MAX_GAZE_TO_TRIGGER_TIME_DIFF = 5   # max ms between gaze and trigger events for them to be considered the same event
-VISIT_MERGING_TIME_THRESHOLD = 100  # max ms between two visits for them to be merged into one visit (to account for brief data loss)
+# max ms between two visits for them to be merged into one visit (to account for brief data loss). Visits are not
+# built by the pipeline at present - see `Subject.get_visits` and CODE_REVIEW.md on `fixations_to_targets()`.
+VISIT_MERGING_TIME_THRESHOLD = 100
 
 
 def run_pipeline(
@@ -19,16 +23,15 @@ def run_pipeline(
         identification_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]] = cnfg.IDENTIFICATION_ACTIONS,
         gaze_to_trigger_time_threshold: float = MAX_GAZE_TO_TRIGGER_TIME_DIFF,
         on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
-        visit_merging_time_threshold: float = VISIT_MERGING_TIME_THRESHOLD,
         save: bool = True,
         verbose: bool = True,
+        force_reparse: bool = False,
 ) -> (
-        pd.DataFrame,   # targets
+        pd.DataFrame,   # icons
         pd.DataFrame,   # actions
         pd.DataFrame,   # metadata
         pd.DataFrame,   # identifications
-        pd.DataFrame,   # fixations
-        pd.DataFrame,   # visits
+        pd.DataFrame,   # eye movements
 ):
     start_time = time()
     if isinstance(identification_actions, SubjectActionCategoryEnum):
@@ -39,15 +42,15 @@ def run_pipeline(
         raise ValueError(f"`gaze_to_trigger_time_threshold` must be non-negative.")
     if on_target_threshold_dva < 0:
         raise ValueError(f"`on_target_threshold_dva` must be non-negative.")
-    if visit_merging_time_threshold < 0:
-        raise ValueError(f"`visit_merging_time_threshold` must be non-negative.")
-    subjects = parse_all_subjects(raw_data_path, verbose)
-    targets, actions, metadata, idents, fixations, visits = build_dataframes(
+    configure_peyes()   # explicit at the entry point, rather than only as an import side effect
+    subjects, bad_subjects = parse_all_subjects(raw_data_path, verbose, force_reparse=force_reparse)
+    if not subjects:
+        raise RuntimeError(f"No subjects could be parsed from {raw_data_path!r}. Failures: {bad_subjects}")
+    icons, actions, metadata, idents, eye_movements = build_dataframes(
         subjects,
         identification_actions=identification_actions,
         gaze_to_trigger_time_threshold=gaze_to_trigger_time_threshold,
         on_target_threshold_dva=on_target_threshold_dva,
-        visit_merging_time_threshold=visit_merging_time_threshold,
         verbose=False,
     )
     if save:
@@ -56,15 +59,18 @@ def run_pipeline(
             print("Saving data to output path:", save_to)
         if not os.path.exists(save_to):
             os.makedirs(save_to)
-        targets.to_pickle(os.path.join(save_to, 'targets.pkl'))
+        icons.to_pickle(os.path.join(save_to, 'icons.pkl'))
         actions.to_pickle(os.path.join(save_to, 'actions.pkl'))
         metadata.to_pickle(os.path.join(save_to, 'metadata.pkl'))
         idents.to_pickle(os.path.join(save_to, 'idents.pkl'))
-        fixations.to_pickle(os.path.join(save_to, 'fixations.pkl'))
-        visits.to_pickle(os.path.join(save_to, 'visits.pkl'))
+        eye_movements.to_pickle(os.path.join(save_to, 'eye_movements.pkl'))
+        # record which subjects were skipped and why, so a reduced N is visible in the output rather than only in
+        # whatever console the pipeline happened to run in
+        with open(os.path.join(save_to, 'parse_failures.json'), 'w', encoding='utf-8') as f:
+            json.dump({"n_subjects": len(subjects), "failures": bad_subjects}, f, indent=2)
     if verbose:
         print(f"Full pipeline completed in {time() - start_time:.2f} seconds.")
-    return targets, actions, metadata, idents, fixations, visits
+    return icons, actions, metadata, idents, eye_movements
 
 
 

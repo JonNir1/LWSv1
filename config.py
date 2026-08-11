@@ -22,44 +22,35 @@ PUBLICATIONS_PATH = os.path.join(_BASE_PATH, "Publications")
 
 
 ## Analysis Parameters ##
+### Eye-Movement Detection Parameters ###
+# Duration bounds (ms) for `peyes` event detection. Events outside these bounds are flagged as outliers and are
+# dropped by `read_data(drop_outliers=True)`, so these sit directly on the dependent variable.
+# NOTE: the values below reproduce what the pipeline used implicitly before they were made explicit - the min values
+# were set in code, the max values were inherited from `peyes` defaults and never chosen for this paradigm.
+# FIXATION_MAX_DURATION_MS in particular is an open question (see CODE_REVIEW.md T3): long dwells on a not-yet
+# identified target are theoretically the strongest LWS candidates, and 2500 ms currently removes 6 of ~117k
+# fixations, all of them on-target.
+MIN_EVENT_DURATION_MS = 5               # shortest event the detector will emit
+FIXATION_MIN_DURATION_MS = 50
+# Measured 2026-08-06 over 116,947 fixations: the right tail decays smoothly and monotonically with no secondary
+# mode (p99 = 770 ms, p99.9 = 1468 ms, max = 2797 ms; 500-750 ms n=1271 falling to 2750-3000 ms n=1). There is no
+# empirical bump to cut at, so the peyes default is kept rather than replaced by an arbitrary cut.
+# TODO(T3): check the visual-search literature for a principled upper bound on fixation duration and adopt it here.
+FIXATION_MAX_DURATION_MS = 2500
+SACCADE_MIN_DURATION_MS = MIN_EVENT_DURATION_MS
+SACCADE_MAX_DURATION_MS = 200
+
 ### Pre-Processing Pipeline Parameters ###
 ON_TARGET_THRESHOLD_DVA = 1.75          # threshold to determine if a gaze/fixation is on-target
 IDENTIFICATION_ACTIONS = [     # list of subject-actions indicating target identification
     SubjectActionCategoryEnum.MARK_AND_CONFIRM,
     # SubjectActionCategoryEnum.MARK_ONLY    # uncomment this to include marking-only actions
 ]
-BAD_ACTIONS = [
-    act for act in SubjectActionCategoryEnum if
-    act != SubjectActionCategoryEnum.NO_ACTION and act not in IDENTIFICATION_ACTIONS
-]
 
-### Funnel Analysis Parameters ###
-GAZE_COVERAGE_PERCENT_THRESHOLD = 80    # minimum percent of trial time that gaze data must cover to be included in analysis
-TIME_TO_TRIAL_END_THRESHOLD = 1000      # fixations/visits ending within this time from the trial end are considered not-LWS.
-FIXATIONS_TO_STRIP_THRESHOLD = 3        # fixations/visits whose following number of fixations fall in the bottom strip are not considered LWS.
-
-_ANY_FUNNEL_STEPS = [
-    # sequence of steps to determine if a fixation/visit is valid (valid trial, valid fixation) and on-target
-    "all",
-    "trial_gaze_coverage",
-    # "trial_has_actions",    # uncomment to exclude trials with no subject-actions
-    "trial_no_bad_action",
-    "trial_no_miss_with_false_alarm",
-    "instance_not_outlier",
-    "instance_on_target",
-]
-LWS_FUNNEL_STEPS = _ANY_FUNNEL_STEPS + [
-    # additional steps to determine if a valid & on-target fixation/visit is a Looking-without-Seeing (LWS) instance
-    "instance_before_identification",
-    "instance_not_close_to_trial_end",
-    "not_before_exemplar_visit",  # fixations/visits that precede exemplar section (bottom-strip) visits are not LWS
-    "final"
-]
-TARGET_RETURN_FUNNEL_STEPS = _ANY_FUNNEL_STEPS + [
-    # additional steps to determine if a valid & on-target fixation/visit is a target-return instance
-    "instance_after_identification",
-    "final"
-]
+# NOTE: funnel behaviour lives in `analysis/helpers/funnels/funnel_config.py`, not here. This file previously also
+# carried GAZE_COVERAGE_PERCENT_THRESHOLD, TIME_TO_TRIAL_END_THRESHOLD, FIXATIONS_TO_STRIP_THRESHOLD, BAD_ACTIONS and
+# the *_FUNNEL_STEPS lists, none of which the funnel code read - two sources of truth describing different pipelines.
+# They now live in funnel_config.py as DEFAULT_* constants and the criteria lists.
 
 
 ## VISUALIZATION CONFIGURATION ##

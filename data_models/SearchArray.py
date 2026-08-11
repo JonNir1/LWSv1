@@ -148,7 +148,25 @@ class SearchArray:
         return SearchArray._NUM_ROWS * SearchArray._NUM_COLS
 
     @property
+    def icons(self) -> List[Tuple[str, _SearchArrayImage, bool]]:
+        """
+        Every icon in the array as `(icon_id, image, is_target)`, in row-major order.
+
+        `icon_id` is `icon{i}` for the flat row-major index `i` over the (10, 18) grid, so it identifies a *position
+        in the array* and is stable regardless of how many targets happen to precede it. This is the identity used
+        throughout the pipeline; the older `target{j}` scheme numbered a target by its position among the targets,
+        which shifted with the number of targets in the trial.
+        """
+        flat_images = self._images.reshape(-1)
+        flat_is_target = self._is_targets.reshape(-1)
+        return [
+            (f"{cnfg.ICON_STR}{i}", img, bool(is_tgt))
+            for i, (img, is_tgt) in enumerate(zip(flat_images, flat_is_target))
+        ]
+
+    @property
     def targets(self) -> List[_SearchArrayImage]:
+        """The target icons only, in row-major order. Kept for callers that need images without identities."""
         return self._images[self._is_targets].tolist()
 
     @property
@@ -161,11 +179,11 @@ class SearchArray:
 
     @property
     def mat_path(self) -> str:
-        return self._get_path(self._version, self._array_type, self._num, "mat")
+        return self.get_path(self._version, self._array_type, self._num, "mat")
 
     @property
     def image_path(self) -> str:
-        return self._get_path(self._version, self._array_type, self._num, "bmp")
+        return self.get_path(self._version, self._array_type, self._num, "bmp")
 
     def get_categories(self) -> npt_.NDArray[ImageCategoryEnum]:
         """
@@ -176,17 +194,29 @@ class SearchArray:
 
     @classmethod
     def is_in_bottom_strip(cls, p: Tuple[float, float]) -> bool:
-        """ Check if a point is within the bottom strip rectangle, containing target exemplars. """
-        return cls._is_in_rectangle(p[0], p[1], cls._BOTTOM_STRIP_TOP_LEFT, cls._BOTTOM_STRIP_BOTTOM_RIGHT)
+        """
+        Check if a point is within the bottom strip rectangle, containing target exemplars.
+
+        The rectangle is inclusive at both edges. `_is_in_rectangle` returns `np.bool_` for scalar input, so cast to
+        a real `bool` to match the annotation.
+        """
+        return bool(cls._is_in_rectangle(p[0], p[1], cls._BOTTOM_STRIP_TOP_LEFT, cls._BOTTOM_STRIP_BOTTOM_RIGHT))
 
     @staticmethod
-    def _get_path(
+    def get_path(
             arr_version: int, arr_type: SearchArrayCategoryEnum, arr_num: int, file_type: str
     ) -> str:
+        """
+        Path to a stimulus file, e.g. `<SEARCH_ARRAY_PATH>/generated_stim1/color/image_12.mat`.
+
+        The category directory is the bare category name. `from_mat` parses it back with
+        `SearchArrayCategoryEnum[dir_name.upper()]`, so an `array_` prefix here would make the two disagree and
+        every path this returns point at a file that does not exist.
+        """
         return os.path.join(
             cnfg.SEARCH_ARRAY_PATH,
             f"generated_stim{arr_version}",
-            f"array_{arr_type.name.lower()}",
+            arr_type.name.lower(),
             f"image_{arr_num}.{file_type}",
         )
 

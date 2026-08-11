@@ -1,4 +1,6 @@
+import warnings
 from enum import IntEnum as _IntEnum
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -82,36 +84,85 @@ def parse_triggers_and_gaze(triggers_path, gaze_path) -> (pd.DataFrame, pd.DataF
     return triggers, gaze
 
 
+def _assign_block_numbers(trigs: pd.Series) -> pd.Series:
+    """
+    Assign a block number to each sample, starting at the first trigger of each block and running to the end of the
+    recording (a later block trigger overwrites it). Samples before the first block trigger are NA.
+    """
+    blocks = pd.Series(np.nan, index=trigs.index)
+    for trg in _ExperimentTriggerEnum:
+        if not trg.name.startswith("BLOCK_"):
+            continue
+        is_block_start = trigs.eq(trg)
+        if not is_block_start.any():
+            continue
+        first_pos = int(np.flatnonzero(is_block_start.to_numpy())[0])
+        blocks.iloc[first_pos:] = int(trg.name.split("_")[-1])
+    return blocks.astype('Int64')
+
+
+def _is_between_triggers(
+        trigs: pd.Series, start: int, end: int, close_trailing: bool = True,
+) -> pd.Series:
+    """
+    Mark every sample from each `start` trigger through the first `end` trigger that follows it.
+
+    Pairs by scanning in order rather than positionally, so an unbalanced log degrades gracefully instead of raising
+    from `np.vstack` or silently pairing one segment's start with another's end.
+
+    A `start` still open at the end of the log is closed at the last row when `close_trailing` (the default), and
+    dropped otherwise. Closing is right for this dataset: measured across all 27 raw subject directories
+    (2026-08-06), subjects 38, 42, 43 and 44 each have 60 `STIMULUS_ON` and 59 `STIMULUS_OFF`, and the unclosed
+    final segment spans 99.9-103.3% of that subject's median trial duration with ~12,500 gaze samples. The trial ran
+    to completion; only the closing trigger was never written. Dropping it would discard a full trial of real data
+    from each of those subjects.
+
+    The residual cost is that the trial's end time becomes the last recorded sample rather than the true stimulus
+    offset, so `to_trial_end` may be overstated by however long recording continued past offset - bounded by the
+    ~210 ms `STIMULUS_OFF` -> `TRIAL_END` gap seen elsewhere in these logs. That is small against the 1000 ms
+    `not_close_to_trial_end` threshold, but it is why the warning reports the span: a *genuinely* truncated trial
+    would show up there as a short segment and should be excluded.
+
+    A `start` arriving while another is still open (a dropped `end` mid-log) does not occur in this dataset; that
+    segment is dropped, since its extent is unknowable.
+    """
+    res = pd.Series(False, index=range(len(trigs)))
+    codes = trigs.to_numpy()
+    open_at: Optional[int] = None
+    for pos, code in enumerate(codes):
+        if code == start:
+            if open_at is not None:
+                warnings.warn(
+                    f"trigger {start} at position {pos} while the one at {open_at} is still open; "
+                    f"the {end} trigger appears to be missing, so that segment is dropped.",
+                    RuntimeWarning,
+                )
+            open_at = pos
+        elif code == end and open_at is not None:
+            res.iloc[open_at:pos + 1] = True
+            open_at = None
+    if open_at is not None:
+        if close_trailing:
+            res.iloc[open_at:] = True
+            warnings.warn(
+                f"trigger {start} at position {open_at} has no matching {end}; closing the segment at the last "
+                f"recorded sample ({len(trigs) - open_at} rows). Check that span against a typical segment - a "
+                f"much shorter one means the recording really was cut short.",
+                RuntimeWarning,
+            )
+        else:
+            warnings.warn(
+                f"trigger {start} at position {open_at} has no matching {end}; the trailing segment is dropped.",
+                RuntimeWarning,
+            )
+    return res
+
+
 def _align_triggers_and_gaze(triggers, gaze) -> (pd.DataFrame, pd.DataFrame):
     merged = pd.merge(gaze, triggers, how='outer', on=[cnst.TIME_STR])  # merge on time
 
     # add block column
-    merged[cnst.BLOCK_STR] = np.nan
-    for trg in _ExperimentTriggerEnum:
-        name = trg.name
-        if not name.startswith("BLOCK_"):
-            continue
-        block_num = int(name.split("_")[-1])
-        is_block_start = merged[cnst.TRIGGER_STR].eq(trg)
-        if not is_block_start.any():
-            # no such block trigger - skip
-            continue
-        start_idx = is_block_start.idxmax()  # find the first occurrence of the block trigger
-        merged.loc[merged.index[start_idx:], cnst.BLOCK_STR] = block_num
-    merged[cnst.BLOCK_STR] = merged[cnst.BLOCK_STR].astype('Int64')
-    del trg, name, block_num, is_block_start, start_idx
-
-    def _is_between_triggers(trigs: pd.Series, start: int, end: int) -> pd.Series:
-        """
-        Returns a boolean series indicating whether the values in the 'trigs' series occur after 'start' and before 'end'.
-        """
-        start_idxs = np.nonzero(trigs == start)[0]
-        end_idxs = np.nonzero(trigs == end)[0]
-        start_end_idxs = np.vstack([start_idxs, end_idxs]).T
-        res = pd.Series(np.full_like(trigs, False, dtype=bool))
-        for (start, end) in start_end_idxs:
-            res.iloc[start:end + 1] = True
-        return res
+    merged[cnst.BLOCK_STR] = _assign_block_numbers(merged[cnst.TRIGGER_STR])
 
     # add trial column
     is_trial = _is_between_triggers(
@@ -135,8 +186,11 @@ def _align_triggers_and_gaze(triggers, gaze) -> (pd.DataFrame, pd.DataFrame):
     merged = merged[cols_ord]
 
     # split out the triggers
-    triggers = merged.loc[merged[cnst.TRIGGER_STR].notna(), _MUTUAL_COLUMNS + _TRIGGER_COLUMNS]
-    triggers.loc[:, _TRIGGER_COLUMNS] = triggers[_TRIGGER_COLUMNS].fillna(0).astype('Int64')
+    triggers = merged.loc[merged[cnst.TRIGGER_STR].notna(), _MUTUAL_COLUMNS + _TRIGGER_COLUMNS].copy()
+    for col in _TRIGGER_COLUMNS:
+        # assign column-wise: a frame-wide `.loc[:, cols] = <Int64 frame>` over the mixed float64/Int64 pair the
+        # outer merge leaves behind raises `AttributeError: '_hasna'` on pandas 3.
+        triggers[col] = triggers[col].fillna(0).astype('Int64')
     triggers[cnst.ACTION_STR] = triggers[cnst.ACTION_STR].map(lambda act: SubjectActionCategoryEnum(act))
 
     # split out the gaze data
@@ -167,25 +221,52 @@ def _read_gaze(gaze_path: str) -> pd.DataFrame:
     return gaze
 
 
+def _drop_empty_trigger_rows(triggers: pd.DataFrame) -> pd.DataFrame:
+    """
+    Drop rows whose trigger code is missing, so `_ExperimentTriggerEnum(nan)` cannot raise.
+
+    E-Prime's export ends several logs with one incomplete line: 7 of the 27 raw subject directories (33, 34, 35, 38,
+    39, 42, 44) carry exactly one NaN code, always the final row. Dropping it is safe - it holds no event. An
+    *interior* NaN would mean a genuinely lost trigger rather than a truncated write, so warn about that case
+    instead of passing over it silently.
+    """
+    is_missing = triggers[cnst.TRIGGER_STR].isna()
+    if not is_missing.any():
+        return triggers
+    positions = np.flatnonzero(is_missing.to_numpy())
+    trailing = set(positions) <= set(range(len(triggers) - len(positions), len(triggers)))
+    if not trailing:
+        warnings.warn(
+            f"trigger log has {len(positions)} missing code(s) away from the end of the file "
+            f"(positions {positions[:5].tolist()}); a trigger was lost mid-recording.",
+            RuntimeWarning,
+        )
+    return triggers.loc[~is_missing].reset_index(drop=True)
+
+
 def _read_triggers(triggers_path: str) -> pd.DataFrame:
     triggers = pd.read_csv(triggers_path, sep="\t")
     triggers.rename(columns=_TRIGGER_FIELD_MAP, inplace=True)
+    triggers = _drop_empty_trigger_rows(triggers)
     triggers[cnst.TRIGGER_STR] = triggers[cnst.TRIGGER_STR].map(lambda trgr: _ExperimentTriggerEnum(trgr))
 
     # add `action` column
     triggers[cnst.ACTION_STR] = SubjectActionCategoryEnum.NO_ACTION
     start_identify_idx = None
-    for idx, series in triggers.iterrows():
-        trg = series[cnst.TRIGGER_STR]
+    # iterate the trigger column directly: `iterrows()` coerces each row to a common dtype, which turns the trigger
+    # into a float and makes `trg.name` unavailable in the assertion messages below.
+    for idx, code in triggers[cnst.TRIGGER_STR].items():
+        trg = _ExperimentTriggerEnum(code)
 
         if trg == _ExperimentTriggerEnum.SPACE_NO_ACT:
-            # subject attempted to mark target but failed
-            triggers.loc[start_identify_idx, cnst.ACTION_STR] = SubjectActionCategoryEnum.ATTEMPTED_MARK
+            # subject pressed space but E-Prime rejected the mark; this is an event in its own right and does not
+            # belong to any pending mark, so record it on its own row
+            triggers.loc[idx, cnst.ACTION_STR] = SubjectActionCategoryEnum.ATTEMPTED_MARK
             continue
 
         if trg == _ExperimentTriggerEnum.SPACE_ACT:
             # subject marks target
-            assert not start_identify_idx, f"{trg.name} follows previous {trg.name} (idx: {idx})"
+            assert start_identify_idx is None, f"{trg.name} follows previous {trg.name} (idx: {idx})"
             start_identify_idx = idx
             continue
 
@@ -194,7 +275,7 @@ def _read_triggers(triggers_path: str) -> pd.DataFrame:
             _ExperimentTriggerEnum.NOT_CONFIRM_ACT,
         ]:
             # subject performed an action after marking target
-            assert start_identify_idx and start_identify_idx < idx,\
+            assert start_identify_idx is not None and start_identify_idx < idx,\
                 f"{trg.name} not follows a previous {_ExperimentTriggerEnum.SPACE_ACT.name} (idx: {idx})"
             if trg == _ExperimentTriggerEnum.CONFIRM_ACT:
                 # subject confirms the identified target
@@ -205,14 +286,14 @@ def _read_triggers(triggers_path: str) -> pd.DataFrame:
             start_identify_idx = None
             continue
 
-        if start_identify_idx and trg in [
+        if start_identify_idx is not None and trg in [
             _ExperimentTriggerEnum.ABORT_TRIAL,
             _ExperimentTriggerEnum.STIMULUS_OFF,
             _ExperimentTriggerEnum.TRIAL_END,
         ]:
             # subject ran out of time before confirming target
             assert start_identify_idx < idx, f"{trg.name} not follows a previous {_ExperimentTriggerEnum.SPACE_ACT.name} (idx: {idx})"
-            triggers.loc[start_identify_idx, 'subj_action'] = SubjectActionCategoryEnum.MARK_ONLY
+            triggers.loc[start_identify_idx, cnst.ACTION_STR] = SubjectActionCategoryEnum.MARK_ONLY
             start_identify_idx = None
             continue
     triggers[cnst.ACTION_STR] = triggers[cnst.ACTION_STR].astype('Int64')

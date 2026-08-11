@@ -20,7 +20,14 @@ def check_trial_inclusion_criteria(
         bad_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]],
         require_actions: bool,
 ) -> pd.DataFrame:
-    """ Returns a DataFrame indexed by (subject, trial) with boolean columns for each criterion and `is_valid_trial`. """
+    """
+    Returns a DataFrame indexed by (subject, trial) with boolean columns for each criterion and `is_valid_trial`.
+
+    These columns are **standalone**: each reports only its own criterion. This is the opposite of the identically
+    named columns in funnel output, which `_convert_criteria_to_funnel` makes cumulative ("passed this and every
+    earlier criterion"). Both meanings exist in memory, so mind which function produced the frame you are reading.
+    `is_valid_trial` is the conjunction either way.
+    """
     meta_idx = metadata.set_index(_SUBJECT_TRIAL_COLS).index
     # criterion registry: each callable returns a boolean Series indexed by (subject, trial)
     criteria_functions: dict[str, Callable[[], pd.Series]] = {
@@ -40,16 +47,14 @@ def check_trial_inclusion_criteria(
     inclusion_df = (
         pd.concat(ordered_components, axis=1)
         .reindex(meta_idx)  # ensure same order / includes duplicates if any
+        # a trial missing from any criterion's index becomes NaN here, and NaN is truthy - it would silently *pass*
+        # the criterion it was never evaluated against. Treat an unevaluated criterion as failed.
+        .fillna(False)
+        .astype(bool)
         .assign(is_valid_trial=lambda df: df.all(axis=1))
         .sort_index(level=_SUBJECT_TRIAL_COLS)
-        .astype(bool)
     )
     return inclusion_df
-
-
-def all_pass(trial_indices: pd.MultiIndex) -> pd.Series:
-    """ Dummy inclusion criterion that all trials pass. """
-    return pd.Series(True, index=trial_indices, name="all")
 
 
 def has_gaze_coverage(metadata: pd.DataFrame, min_percent: int | float) -> pd.Series:
@@ -63,8 +68,16 @@ def has_gaze_coverage(metadata: pd.DataFrame, min_percent: int | float) -> pd.Se
 
 
 def has_high_fixation_rate(fixations: pd.DataFrame, metadata: pd.DataFrame, min_rate: float) -> pd.Series:
-    """True iff trial has a high enough fixation rate (fixations per second)."""
+    """
+    True iff trial has a high enough fixation rate (fixations per second).
+
+    The count is of **fixations**, so the frame is filtered by `event_type` first: it is now the full eye-movement
+    table, and counting its rows would roughly double the rate (Engbert alternates fixation and saccade), flipping
+    `is_valid_trial` for trials that should be excluded.
+    """
     assert min_rate >= 0.0, "min_rate must be non-negative."
+    if "event_type" in fixations.columns:
+        fixations = fixations.loc[fixations["event_type"] == "FIXATION"]
     fix_count = (
         fixations
         .groupby(["subject", "trial", "eye"]).size()

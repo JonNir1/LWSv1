@@ -17,6 +17,31 @@ DEFAULT_BAD_ACTIONS = tuple(
 DEFAULT_MIN_MS_BEFORE_TRIAL_END = 1000
 DEFAULT_MIN_FIXATIONS_FROM_STRIP = 3
 
+# Funnel Column Naming
+# -------------------------
+# A funnel column is *cumulative*: it means "passed this criterion and every criterion before it". The standalone
+# criterion of the same name - what `check_trial_inclusion_criteria` / `check_lws_criteria` return - means only
+# itself. Naming them identically made the two indistinguishable in a saved CSV, so funnel columns carry a prefix.
+#
+# `upto_` was chosen to read as "up to and including this step". It cannot be misread as "passed only this step",
+# which is the objection to a bare `passed_` prefix.
+CUMULATIVE_PREFIX = "upto_"
+
+# Columns that are conjunctions *by definition*, so cumulative and standalone coincide in meaning. They keep their
+# names: `upto_is_lws` would be noise, and these are the columns downstream analyses actually select on.
+TERMINAL_COLUMNS = frozenset({"is_valid_trial", "is_lws", "is_target_return"})
+
+
+def cumulative_name(criterion: str) -> str:
+    """Funnel column name for a criterion. Terminal columns are returned unchanged."""
+    return criterion if criterion in TERMINAL_COLUMNS else f"{CUMULATIVE_PREFIX}{criterion}"
+
+
+def cumulative_names(criteria: Sequence[str]) -> list:
+    """Map a criteria list (e.g. IS_LWS_CRITERIA) onto the funnel's column names."""
+    return [cumulative_name(crit) for crit in criteria]
+
+
 # Funnel Criteria Sequences
 # -------------------------
 TRIAL_INCLUSION_CRITERIA = [

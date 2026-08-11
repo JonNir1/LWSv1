@@ -72,7 +72,6 @@ def calc_aprime_per_trial(metadata: pd.DataFrame, idents: pd.DataFrame) -> pd.Da
     """ Calculate A' (A-prime) for each subject-trial pair. """
     hit_rate = calc_sdt_class_per_trial(metadata, idents, "hit")["rate"].rename("h")
     fa_rate = calc_sdt_class_per_trial(metadata, idents, "false_alarm")["rate"].rename("fa")
-    diff = (hit_rate - fa_rate).rename("diff")
     a_prime = (
         pd.concat([hit_rate, fa_rate], axis=1)
         .apply(lambda row: _calc_aprime(row["h"], row["fa"]), axis=1)
@@ -115,6 +114,16 @@ def calc_sdt_class_per_trial(
     subject-trial values, based on the trial's metadata (number of targets/distractors) and the subject's
     identification data (performing hits, misses, or false alarms).
     Returns a DataFrame with the subject, trial category, count of the classification, and the rate of the classification.
+
+    NOTE on the denominator (CODE_REVIEW.md T1): false alarms and correct rejections are divided by
+    `num_distractors` - *every* non-target icon, ~177 per trial - which treats each one as an independent
+    opportunity to respond, including the majority the subject never looked at. That makes the FA rate very small
+    and d' correspondingly large. This is a known limitation, kept deliberately for now; prefer A' when reporting
+    sensitivity.
+    TODO(T1): compute each subject's functional visual field (FVF), then use the number of items falling within it
+      along the scanpath as the denominator, giving an FVF-based d' that conditions on the item having plausibly
+      been inspected. This needs distractor positions in the pipeline - `SearchArray` has every icon and the
+      `is_targets` mask, but only target positions are currently written to `targets.pkl`.
     """
     # classify identifications from the provided SDT class
     if sdt_class == "correct_reject":
