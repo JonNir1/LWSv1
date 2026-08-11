@@ -12,8 +12,10 @@ import config as cnfg
 from analysis.helpers.fvf import (
     estimate_by_foveation_falloff,
     estimate_by_launch_distance,
+    estimate_by_selection_hazard,
     estimate_fvf,
     per_target_distances,
+    selection_opportunities,
     target_distance_columns,
 )
 
@@ -127,10 +129,45 @@ class TestLaunchDistance:
             estimate_by_launch_distance(fixations)
 
 
+class TestSelectionHazard:
+    """Estimator C - P(next saccade lands on the target | current distance), per fixation."""
+
+    def test_recovers_a_known_radius(self):
+        _per_subject, pooled, _curve = estimate_by_selection_hazard(synthetic_fixations())
+        assert pooled == pytest.approx(TRUE_FVF, abs=0.5)
+
+    def test_tracks_a_larger_field(self):
+        _p, narrow, _c = estimate_by_selection_hazard(synthetic_fixations(true_fvf=3.0))
+        _p, wide, _c = estimate_by_selection_hazard(synthetic_fixations(true_fvf=7.0))
+        assert wide > narrow + 2.0
+
+    def test_hazard_decreases_with_distance(self):
+        _p, _pooled, curve = estimate_by_selection_hazard(synthetic_fixations())
+        assert curve["rate"].iloc[0] > curve["rate"].iloc[-1]
+
+    def test_opportunities_exclude_post_foveation_fixations(self):
+        """Only fixations before a target's first on-target fixation are opportunities to select it."""
+        opportunities = selection_opportunities(synthetic_fixations(n_trials=20))
+        assert (opportunities["distance_dva"] > THRESHOLD).all(), "an opportunity cannot already be on target"
+
+    def test_exactly_one_selection_per_foveated_target(self):
+        """The launching fixation is unique: one selection per (trial, target) that ended up foveated."""
+        opportunities = selection_opportunities(synthetic_fixations(n_trials=50))
+        per_target = opportunities.groupby(["subject", "trial", "target"], observed=True)["selected"].sum()
+        assert set(per_target.unique()) <= {0, 1}
+
+    def test_does_not_saturate(self):
+        """C's defining advantage over A: most opportunities are declined, so the curve has room to fall."""
+        opportunities = selection_opportunities(synthetic_fixations())
+        assert opportunities["selected"].mean() < 0.5
+
+
 class TestCombinedTable:
     def test_reports_both_estimators_and_the_threshold(self):
         table = estimate_fvf(synthetic_fixations())
-        assert list(table.columns) == ["foveation_falloff", "launch_distance", "on_target_threshold"]
+        assert list(table.columns) == [
+            "foveation_falloff", "launch_distance", "selection_hazard", "on_target_threshold"
+        ]
         assert "all" in table.index, "the pooled row must be present"
         assert (table["on_target_threshold"] == THRESHOLD).all()
 
@@ -145,3 +182,10 @@ class TestCombinedTable:
         pooled = estimate_fvf(synthetic_fixations()).loc["all"]
         assert pooled["foveation_falloff"] > THRESHOLD
         assert pooled["launch_distance"] > THRESHOLD
+        assert pooled["selection_hazard"] > THRESHOLD
+
+    def test_all_three_agree_on_synthetic_data(self):
+        """On clean data all three measure the same thing; they diverge only on the real scanpaths."""
+        pooled = estimate_fvf(synthetic_fixations()).loc["all"]
+        for name in ("foveation_falloff", "launch_distance", "selection_hazard"):
+            assert pooled[name] == pytest.approx(TRUE_FVF, abs=0.6), f"{name} missed the true radius"

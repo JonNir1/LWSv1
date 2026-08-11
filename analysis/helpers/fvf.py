@@ -25,22 +25,28 @@ distribution.
 Neither is authoritative. `_determine_fvf.ipynb` compares them against each other and against
 `ON_TARGET_THRESHOLD_DVA`; substantial disagreement is itself a finding.
 
-**MEASURED ON THE LWS-v1 DATA (2026-08-06): BOTH ESTIMATORS FAIL, FOR OPPOSITE REASONS.** Recorded here so the
-numbers are not mistaken for usable estimates.
+**C - selection hazard** (`estimate_by_selection_hazard`). For every fixation at which a target was still
+unfoveated, `P(the next saccade lands on that target | current distance to it)`. A discrete-time hazard rather than
+a per-target outcome, so it does not aggregate over the trial.
 
-*A is saturated.* Its predictor - the closest a subject came to a target without foveating it, taken over the whole
-trial - has almost no spread: p50 2.04, p95 3.54, p99 4.93 DVA. With ~195 fixations per trial over a ~34 x 19 DVA
-array, essentially every target is approached closely at some point regardless of whether it was detected. So
-`P(foveated)` only descends from 0.96 to 0.82 across the range and never reaches half its asymptote; the estimator
-now returns NaN there rather than the edge of the data.
+**MEASURED ON THE LWS-v1 DATA (2026-08-06): USE C. A AND B BOTH FAIL, FOR OPPOSITE REASONS.**
 
-*B is measuring the wrong thing.* It returns ~13 DVA pooled, which is implausible for a field on an array only
-~19 DVA tall. The fixation preceding a target's first on-target fixation is often just wherever the subject
-happened to be scanning, so B is closer to the 95th percentile of saccade amplitude than to a detection radius.
+*A is saturated.* Its predictor - the closest a subject came to a target without foveating it, over the whole trial
+- has almost no spread: p50 2.04, p95 3.54, p99 4.93 DVA. With ~195 fixations per trial over a ~34 x 19 DVA array,
+essentially every target is approached closely at some point regardless of whether it was detected. `P(foveated)`
+descends only from 0.96 to 0.82 and never reaches half its asymptote, so the estimator returns NaN rather than the
+edge of the data.
 
-The fix is to stop aggregating over the trial and model **selection per fixation**: for each fixation at distance
-`d` from a not-yet-foveated target, `P(the next saccade lands on that target | d)`. That does not saturate, because
-most fixations at any distance do not trigger a saccade to the target. Not implemented - see `CODE_REVIEW.md`.
+*B measures the wrong thing.* It returns ~13.4 DVA pooled - implausible on an array only ~19 DVA tall. The fixation
+preceding a target's first on-target fixation is usually just wherever the subject was scanning, so B approximates
+the 95th percentile of saccade amplitude rather than a detection radius.
+
+*C works.* Pooled **4.34 DVA**, per subject 4.11-5.53 - a tight spread, against A's 2.76-4.87 and B's 10.3-16.6.
+The hazard falls monotonically from 0.204 to 0.005 over 2.9-14.5 DVA, a 40x range, so the half-point is real rather
+than censored. The estimate is 2.5x `ON_TARGET_THRESHOLD_DVA` (1.75), which is the expected relationship: the field
+from which a target can be *detected* must exceed the radius within which gaze counts as *on* it, but stay the same
+order of magnitude. All three estimators recover a known radius from synthetic data (true 4.0 -> A 3.9, B 3.8,
+C 3.9), so the divergence is a property of the real scanpaths, not of the implementations.
 """
 
 import warnings
@@ -159,26 +165,114 @@ def estimate_by_launch_distance(
     return per_subject.sort_index(), pooled, launch_df
 
 
+def selection_opportunities(
+        fixations: pd.DataFrame,
+        on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
+) -> pd.DataFrame:
+    """
+    One row per (fixation, not-yet-foveated target) pair - the opportunities from which a target could be selected.
+
+    For each (trial, eye, target), every fixation *before* the target's first on-target fixation is an opportunity;
+    the last of them is the one the subject actually launched from, and is marked `selected`. Targets never
+    foveated contribute opportunities that were all declined.
+
+    This is the unit estimator C needs: it does not aggregate over the trial, so it cannot saturate the way A's
+    "closest approach over the whole trial" does.
+
+    :return: columns subject, trial, target, distance_dva, selected.
+    """
+    long = per_target_distances(fixations, on_target_threshold_dva)
+    group_keys = [cnst.SUBJECT_STR, cnst.TRIAL_STR, cnst.EYE_STR, cnst.TARGET_STR]
+    if cnst.EVENT_STR not in long.columns:
+        raise ValueError("fixations table must carry an `event` column to order fixations within a trial")
+    long = long.sort_values(group_keys + [cnst.EVENT_STR])
+
+    parts = []
+    for (subject, trial, _eye, target), grp in long.groupby(group_keys, observed=True):
+        on = grp["on_target"].to_numpy()
+        distances = grp[cnst.DISTANCE_DVA_STR].to_numpy()
+        foveated_at = np.flatnonzero(on)
+        first = int(foveated_at[0]) if foveated_at.size else len(on)
+        if first == 0:
+            continue                                    # on target from the first fixation; nothing was selected
+        selected = np.zeros(first, dtype=bool)
+        if foveated_at.size:
+            selected[first - 1] = True                  # the launching fixation
+        parts.append(pd.DataFrame({
+            cnst.SUBJECT_STR: subject, cnst.TRIAL_STR: trial, cnst.TARGET_STR: target,
+            cnst.DISTANCE_DVA_STR: distances[:first], "selected": selected,
+        }))
+    if not parts:
+        raise ValueError("no selection opportunities found - check the on-target threshold")
+    return pd.concat(parts, ignore_index=True)
+
+
+def estimate_by_selection_hazard(
+        fixations: pd.DataFrame,
+        on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
+        n_bins: int = 12,
+        max_distance_dva: float = 15.0,
+        hazard_fraction: float = 0.5,
+) -> Tuple[pd.Series, float, pd.DataFrame]:
+    """
+    Estimator C. `P(the next saccade lands on this target | current distance to it)`, over every fixation at which
+    the target was still unfoveated.
+
+    A discrete-time hazard rather than a per-target outcome. Because most opportunities at any distance are
+    declined, the curve has room to fall, which is what A lacks: A asks whether a target was *ever* approached
+    closely, and with ~195 fixations per trial the answer is almost always yes.
+
+    FVF is the distance at which the hazard falls to `hazard_fraction` of its near-fovea value.
+
+    :return: (per-subject FVF Series, pooled FVF, the binned hazard curve).
+    """
+    opportunities = selection_opportunities(fixations, on_target_threshold_dva)
+    opportunities = opportunities[opportunities[cnst.DISTANCE_DVA_STR] <= max_distance_dva]
+
+    curve = _binned_curve(opportunities, cnst.DISTANCE_DVA_STR, "selected", n_bins)
+    pooled = _falloff_point(curve, hazard_fraction)
+    per_subject = {}
+    for subject, grp in opportunities.groupby(cnst.SUBJECT_STR, observed=True):
+        if len(grp) < n_bins * 10:
+            continue
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)     # per-subject censoring is reported via NaN
+            per_subject[subject] = _falloff_point(
+                _binned_curve(grp, cnst.DISTANCE_DVA_STR, "selected", n_bins), hazard_fraction
+            )
+    return pd.Series(per_subject, name="fvf_dva").sort_index(), pooled, curve
+
+
 def estimate_fvf(
         fixations: pd.DataFrame,
         on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
 ) -> pd.DataFrame:
     """
-    Run both estimators and return a per-subject comparison table, with the pooled values in an `"all"` row.
+    Run all three estimators and return a per-subject comparison table, with the pooled values in an `"all"` row.
 
-    Columns: `foveation_falloff`, `launch_distance`, and `on_target_threshold` for reference. Neither estimator is
-    authoritative - the point is to see whether they agree with each other and with the a-priori threshold.
+    Columns: `foveation_falloff` (A), `launch_distance` (B), `selection_hazard` (C), and `on_target_threshold` for
+    reference. On the LWS-v1 data only C is usable - see the module docstring for why A and B fail.
     """
-    falloff_by_subject, falloff_pooled, _curve = estimate_by_foveation_falloff(
-        fixations, on_target_threshold_dva=on_target_threshold_dva
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)     # A's censoring is expected here; it surfaces as NaN
+        falloff_by_subject, falloff_pooled, _curve = estimate_by_foveation_falloff(
+            fixations, on_target_threshold_dva=on_target_threshold_dva
+        )
     launch_by_subject, launch_pooled, _launches = estimate_by_launch_distance(
         fixations, on_target_threshold_dva=on_target_threshold_dva
     )
-    out = pd.concat(
-        [falloff_by_subject.rename("foveation_falloff"), launch_by_subject.rename("launch_distance")], axis=1
+    hazard_by_subject, hazard_pooled, _hazard_curve = estimate_by_selection_hazard(
+        fixations, on_target_threshold_dva=on_target_threshold_dva
     )
-    out.loc[_POOLED] = [falloff_pooled, launch_pooled]
+    out = pd.concat(
+        [
+            falloff_by_subject.rename("foveation_falloff"),
+            launch_by_subject.rename("launch_distance"),
+            hazard_by_subject.rename("selection_hazard"),
+        ],
+        axis=1,
+    )
+    out.loc[_POOLED] = [falloff_pooled, launch_pooled, hazard_pooled]
     out["on_target_threshold"] = on_target_threshold_dva
     out.index.name = cnst.SUBJECT_STR
     return out
