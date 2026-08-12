@@ -14,7 +14,7 @@ from pipeline.stage1_parse.build_dataframes import build_dataframes
 
 
 
-def run_pipeline(
+def run_stage1(
         raw_data_path: str = cnfg.RAW_DATA_PATH,
         identification_actions: Union[SubjectActionCategoryEnum, List[SubjectActionCategoryEnum]] = cnfg.IDENTIFICATION_ACTIONS,
         save: bool = True,
@@ -53,7 +53,7 @@ def run_pipeline(
         with open(os.path.join(save_to, 'parse_failures.json'), 'w', encoding='utf-8') as f:
             json.dump({"n_subjects": len(subjects), "failures": bad_subjects}, f, indent=2)
     if verbose:
-        print(f"Full pipeline completed in {time() - start_time:.2f} seconds.")
+        print(f"Stage 1 (parse) completed in {time() - start_time:.2f} seconds.")
     return icons, actions, metadata, eye_movements
 
 

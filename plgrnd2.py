@@ -11,7 +11,7 @@ pio.renderers.default = "browser"
 
 # %%
 # ##  Run Pipeline
-# from pipeline.run_pipeline import run_pipeline
+# from pipeline.stage1_parse.run_stage1 import run_stage1
 # targets, actions, metadata, idents, fixations, visits = run_pipeline(
 #     # raw_data_path=cnfg.RAW_DATA_PATH,
 #     # identification_actions=cnfg.IDENTIFICATION_ACTIONS,
