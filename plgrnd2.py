@@ -39,7 +39,7 @@ visits = data.visits
 
 # %%
 from pipeline.stage3_classify.build_funnels import build_trial_inclusion_funnel, build_event_classification_funnel
-from analysis.helpers.funnels.size_and_proportion import calculate_step_sizes
+from analysis.helpers.visualizations.funnel.size_and_proportion import calculate_step_sizes
 from pipeline.config import (
     TRIAL_INCLUSION_CRITERIA, IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA, cumulative_names,
 )
