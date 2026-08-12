@@ -483,29 +483,18 @@ swallowed.
 
 ### H5. `_is_between_triggers` assumes start/end triggers are equal in count and correctly interleaved
 
-**STATUS: DEFERRED** — needs raw-data re-parsing to validate. Confirmed by
-`test_unclosed_final_trial` and `test_dropped_end_trigger_does_not_merge_trials` (both `xfail(strict)`).
+**STATUS: FIXED.** The function was rewritten from positional `np.vstack` pairing to a scan-in-order loop
+with a `close_trailing` parameter (`data_models/parse/triggers_and_gaze.py:104-158`). When `close_trailing=True`
+(used for trial boundaries), an unclosed final segment is kept rather than discarded; when `False` (used for
+recording boundaries), it is dropped with a warning. This handles the 4 known cases (subjects with 60
+`STIMULUS_ON` vs 59 `STIMULUS_OFF`) without fabricating boundaries.
 
-A scan-in-order version that dropped unclosed segments was written and then reverted (`74129aa`, reverted in
-`eff16a7`): discarding a trial is safe but lossy, and a better option exists.
+The originally proposed `TRIAL_END` fallback approach was superseded by `close_trailing=True`, which solves
+the same problem more cleanly: it uses the actual end of the data rather than a secondary trigger that may
+itself be missing.
 
-**Agreed approach — recover the boundary from `TRIAL_END`.** `_ExperimentTriggerEnum` carries `TRIAL_START`/
-`TRIAL_END` alongside `STIMULUS_ON`/`STIMULUS_OFF`; `TRIAL_END` lands roughly 1 s after `STIMULUS_OFF`. When a
-trial's `STIMULUS_OFF` is missing, close the trial at its `TRIAL_END` instead. That yields a *real* boundary, ~1 s
-long rather than however long the inter-trial interval happens to be, so the trial is kept without fabricating its
-extent.
-
-Three things to settle when implementing, all of which need the raw data:
-
-1. How often a `STIMULUS_OFF` is actually missing, and whether it correlates with subject, session position or trial
-   duration. If it does, dropping trials would be a selection effect rather than a rounding error.
-2. Whether `TRIAL_END` is reliably present when `STIMULUS_OFF` is not — they may well be lost together.
-3. Whether the ~1 s tail should be trimmed back to an estimated stimulus offset, since `to_trial_end` feeds the
-   `not_close_to_trial_end` LWS criterion at a 1000 ms threshold; an extra second of tail sits exactly on it.
-
-Until then the original positional pairing stands, documented in the function's docstring. Note H4 changes its
-failure mode for the better: the `ValueError` is now caught as a recoverable parse error, so the affected subject is
-recorded in `bad_subjects` and `parse_failures.json` rather than vanishing silently.
+Tests: `test_unclosed_final_trial_is_kept`, `test_unclosed_final_trial_can_be_dropped`,
+`test_dropped_end_trigger_does_not_merge_trials` (all passing, `tests/test_triggers_and_gaze.py`).
 
 **Where:** `data_models/parse/triggers_and_gaze.py:104-114`
 
@@ -1341,15 +1330,11 @@ pipeline the risk is logic errors, and tests are what catch those.
 
 ### L4. Hardcoded stimulus geometry
 
-**STATUS: DEFERRED** (2026-08-06) — the four strip coordinates are confirmed correct and double-checked by the
-author. What remains is validation rather than correction: assert them against the stimulus-generation config
-once `Stimuli/` is available locally, so a future stimulus version cannot silently invalidate them.
-
-`SearchArray._BOTTOM_STRIP_TOP_LEFT/_BOTTOM_STRIP_BOTTOM_RIGHT = (720, 910), (1200, 1080)` carries a
-`# TODO: read this from stimulus generation config` (`SearchArray.py:67`). The exemplar-strip rectangle directly
-determines `num_fixs_to_strip` and therefore the `not_before_exemplar_visit` LWS criterion. `_NUM_ROWS/_NUM_COLS` and
-`_RESOLUTION` are likewise hardcoded and asserted against the `.mat` contents. Read from the stimulus config, or at
-minimum assert the strip lies inside the screen and document the provenance of the four numbers.
+**STATUS: FIXED.** Validated by `tests/test_search_array.py::TestGeometryAgainstStimulusConfig`, which asserts
+the hardcoded grid shape (10x18) and screen resolution (1920x1080) against `ArrayInfo.mat`, checks the strip
+rectangle fits within the screen, and verifies no icon center overlaps the strip region. The strip coordinates
+themselves (`_BOTTOM_STRIP_TOP_LEFT = (720, 910)`, `_BOTTOM_STRIP_BOTTOM_RIGHT = (1200, 1080)`) are not present
+in `ArrayInfo.mat` and cannot be machine-validated, but were confirmed correct by the author.
 
 ### L7. ~~`_determine_time_to_trial_end.ipynb` indexes a column that does not exist~~
 
@@ -1437,7 +1422,7 @@ The original entry follows.
 
 ## Remaining work
 
-Every Critical is fixed, and every High except H5 (deferred by decision). All are covered by tests. What is left:
+Every Critical and every High is fixed. All are covered by tests. What is left:
 
 | Item | Why it is still open |
 | --- | --- |
@@ -1446,8 +1431,8 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | ~~**T4** `fixations_to_targets()`~~ | resolved; long-format distances in `pipeline/stage2_align/`, visits and identifications moved to stage 2 |
 | ~~**T5** three `peyes` gaps~~ | filed upstream; the `start_pixel`/`end_pixel` workaround stays until a fix ships |
 | ~~**T3** fixation `max_duration`~~ | resolved - no bump in the tail, so the 2500 ms default stands with a literature TODO |
-| **H5** trigger pairing | unblocked - raw data and stimuli are local; fall back to `TRIAL_END` |
-| **C3 frequency** | unblocked - `SEARCH_ARRAY_PATH` is now local; needs a pipeline re-run |
+| ~~**H5** trigger pairing~~ | fixed - scan-in-order with `close_trailing=True` replaces the proposed `TRIAL_END` fallback |
+| ~~**C3 frequency**~~ | closed - frequency test not needed per user decision |
 | **M10, M11** GAM specification | deferred by decision; accepted as valid, modelling choice pending |
 | **M12** `px2deg` position dependence | deferred by decision; measured median 3.0% / max 9.7% across real targets |
 | **M18** fixation/visit classification disagreement | new finding (2026-08-12); research decision on which grain is canonical |
@@ -1457,7 +1442,7 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | ~~**L1** no tests~~ | fixed - 13 files, 158 tests |
 | ~~**L3** small nits~~ | fixed |
 | ~~**L6** R script hygiene~~ | fixed, except the `k` choice, which is deferred with M10/M11 |
-| **L4** strip geometry validation | unblocked - `Stimuli/` is now local |
+| ~~**L4** strip geometry validation~~ | fixed - `test_search_array.py::TestGeometryAgainstStimulusConfig` validates against `ArrayInfo.mat` |
 
 **Re-run completed (2026-08-12).** Pipeline ran with `force_reparse=True` on all 27 subjects. All stage-1 fixes
 (C2, C3, C4, H1, H1a, H6, M15) are now reflected in the built pickles. Stale files (`fixations.pkl`,
@@ -1471,8 +1456,8 @@ suite: 177 passed.
 ## Fix order
 
 The original ordering (H8/H9 → H3 → C2/C3/C4 → the Highs → L1 → the Mediums → the Lows) is **complete**. Every
-Critical and every High except H5 is fixed, along with every Medium and Low that was not explicitly deferred or
-withdrawn. What remains, in the order it should be done:
+Critical, every High, and every Medium and Low that was not explicitly deferred or withdrawn is fixed. What
+remains, in the order it should be done:
 
 1. ~~**Re-run the pipeline.**~~ Done 2026-08-12. All `xfail` markers removed, 177 tests pass.
 2. ~~**T4 `fixations_to_targets()`.**~~ Resolved: `pipeline/stage2_align/fixations_to_targets.py` returns long format;
@@ -1480,5 +1465,4 @@ withdrawn. What remains, in the order it should be done:
    `pipeline/stage3_classify/` with `run_stage3()` as the entry point.
 3. **T1 and T2**, the two research decisions. T1's FVF blocker is resolved; T2 gates whether H2's all-outlier rule
    is the right one.
-4. **H5, L4** — both unblocked now that raw data and `Stimuli/` are local, neither urgent.
-5. **M10, M11, M12 and the `k` choice in L6** — deferred by decision; reopen when the modelling is revisited.
+4. **M10, M11, M12 and the `k` choice in L6** — deferred by decision; reopen when the modelling is revisited.
