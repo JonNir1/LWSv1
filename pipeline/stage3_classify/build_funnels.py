@@ -6,7 +6,9 @@ import pandas as pd
 
 import pipeline.config as pcfg
 from pipeline.stage3_classify.trial_inclusion import check_trial_inclusion_criteria
-from pipeline.stage3_classify.event_classification import check_lws_criteria, check_target_return_criteria
+from pipeline.stage3_classify.event_classification import (
+    assign_fixation_targets, check_lws_criteria, check_target_return_criteria,
+)
 from data_models.LWSEnums import SearchArrayCategoryEnum, ImageCategoryEnum
 
 if TYPE_CHECKING:
@@ -81,7 +83,12 @@ def build_event_classification_funnel(
     if exclude not in {"none", "invalid_trials"}:
         raise ValueError("`exclude` must be 'none' or 'invalid_trials'.")
     bad_actions = _bad_actions_as_list(bad_actions)
-    event_data = data.fixations if event_type == "fixation" else data.visits
+    if event_type == "fixation":
+        event_data = assign_fixation_targets(
+            data.fixations, data.fixation_target_dists, data.on_target_threshold_dva,
+        )
+    else:
+        event_data = data.visits
     if event_data is None or (hasattr(event_data, 'empty') and event_data.empty):
         raise ValueError(f"no {event_type} data available")
     trial_criteria = check_trial_inclusion_criteria(

@@ -109,17 +109,6 @@ def test_drop_outliers_reaches_the_event_table(output_dir, capsys):
     assert (len(kept.eye_movements) - len(dropped.eye_movements)) > (len(kept.fixations) - len(dropped.fixations))
 
 
-# --- broken by the eye_movements refactor, pending `fixations_to_targets()` --------------------------------------
-# These are `strict` so they turn red - and the markers come off - the moment the helper lands.
-
-_PENDING_DISTANCES = pytest.mark.xfail(
-    strict=True, raises=NotImplementedError,
-    reason="the per-target distance columns were removed from the events table; restored by the deferred "
-           "`fixations_to_targets()` helper - see CODE_REVIEW.md",
-)
-
-
-@_PENDING_DISTANCES
 def test_h2_visit_funnel_with_outliers_dropped(data_store):
     """H2: visit-level outlier exclusion (via load_data) produces a non-empty funnel."""
     from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
@@ -128,7 +117,6 @@ def test_h2_visit_funnel_with_outliers_dropped(data_store):
     assert len(funnel) > 0
 
 
-@_PENDING_DISTANCES
 def test_h2_fixation_funnel_with_outliers_dropped(data_store):
     """Fixation-level funnel with outliers dropped (via load_data) works."""
     from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
