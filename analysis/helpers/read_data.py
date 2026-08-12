@@ -6,7 +6,7 @@ from typing import Optional, Literal
 import pandas as pd
 from numpy import isnan
 
-import config as cnfg
+import pipeline.config as pcfg
 from pipeline.stage2_align.fixations_to_targets import fixations_to_targets
 from pipeline.stage2_align.build_visits import build_visits
 from pipeline.stage2_align.target_identifications import build_identifications
@@ -53,13 +53,13 @@ def load_data(
         drop_bad_eye: bool = True,
         drop_outliers: bool = True,
         missing: Literal["warn", "ignore", "raise"] = "warn",
-        on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
-        visit_merging_time_threshold: float = 100.0,
+        on_target_threshold_dva: float = pcfg.ON_TARGET_THRESHOLD_DVA,
+        visit_merging_time_threshold: float = pcfg.VISIT_MERGING_TIME_THRESHOLD,
         identification_actions=None,
 ) -> DataStore:
     """Load stage-1 pickles and compute stage-2 alignment in one step."""
     if identification_actions is None:
-        identification_actions = cnfg.IDENTIFICATION_ACTIONS
+        identification_actions = pcfg.IDENTIFICATION_ACTIONS
 
     icons = _load(dir_path, "icons", missing)
     actions = _load(dir_path, "actions", missing)
