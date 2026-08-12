@@ -203,6 +203,11 @@ Two things to keep in mind when reading funnel output:
 - **`event_type` changes target attribution.** A fixation row carries only its *closest* target; a visit row exists
   per (target, visit), so one fixation can contribute to several. Fixation- and visit-level counts are not
   comparable denominators.
+- **Fixation- and visit-level `is_lws`/`is_target_return` can disagree for fixations inside a visit.** Each grain
+  evaluates `before_identification`/`after_identification` against its own `start_time`/`end_time`, so a visit
+  classified `identification` (its span contains `ident_time`) can still have its first fixation independently
+  classified `is_lws` at the fixation level, since that one fixation ends before `ident_time`. Not a bug — each
+  grain is internally consistent — but a trap when the two are combined or compared. See `CODE_REVIEW.md` M18.
 
 Every target has an identification time by construction: the first hit, or `inf` if it was never identified (so
 every on-target event on a missed target is pre-identification). A missing time is a data error and raises.

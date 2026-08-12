@@ -1241,6 +1241,53 @@ that `pixel_size` agrees with `cnst.PIXEL_SIZE_MM / 10` to within rounding. Add 
 
 ---
 
+### M18. Fixation-level and visit-level LWS/target-return classification can disagree for fixations inside the same visit
+
+**STATUS: OPEN** — flagged 2026-08-12, not yet measured or fixed. Found while scoping which tables to hand a
+thesis student for pre-visit gaze analysis.
+
+**Where:** `pipeline/stage3_classify/event_classification.py`, `pipeline/stage3_classify/build_funnels.py`
+(`event_funnels["lws_fixation"]`/`["target_return_fixation"]` vs `["lws_visit"]`/`["target_return_visit"]`)
+
+**Description.** `build_event_classification_funnel` computes `is_lws`/`is_target_return` independently per
+`event_type`. Both grains apply the same `is_before_identification`/`is_after_identification` predicates, but
+each row supplies its own `start_time`/`end_time`: a visit's are its first and last fixation; a fixation's are its
+own. A visit spans multiple fixations, so a fixation near `ident_time` can land on the opposite side of it from the
+visit it belongs to.
+
+Concretely: a visit classified `identification` (its `[start_time, end_time]` span contains `ident_time`, by
+construction of `build_visits`) necessarily has a first fixation that **ends before** `ident_time`. That fixation
+independently evaluates `before_identification = True` under the fixation-level funnel, and — if it also clears
+`not_close_to_trial_end` and `not_before_exemplar_visit` — gets `is_lws = True`. So the same physical fixation is
+"the identification fixation" by visit membership and "an LWS fixation" by its own fixation-level label. Neither
+grain is wrong on its own terms; nothing currently checks or documents that they can disagree.
+
+Related to **L5** (fixation- and visit-level analyses attribute *targets* differently) but distinct: L5 is about
+which target a row is assigned to, this is about the identification/LWS/target-return *label* disagreeing for the
+same fixation depending which grain computed it.
+
+**Outcome.** Anyone joining fixation-level and visit-level classification, or using one to explain/validate the
+other, can hit rows that look contradictory and mistake it for a bug rather than a designed consequence of
+independent per-row evaluation. A likely trap for downstream analyses that want single-fixation resolution near an
+identification (e.g. "the pre-identification fixation") but source it from the fixation-level funnel rather than
+from visit membership.
+
+**Fix — research decision, not obviously a bug. Options:**
+1. Treat visit-level classification as canonical; derive fixation-level labels by broadcasting the visit's class to
+   its member fixations (`visits.event` already lists them), rather than computing fixation-level LWS/target-return
+   independently. Consistent by construction; loses independent fixation-level resolution right at the boundary.
+2. Keep both computed independently (current behaviour), but document the boundary-fixation caveat everywhere both
+   grains are used together, and add a diagnostic (count/flag disagreeing fixations) so it is visible per-analysis.
+3. Leave as-is and treat `is_lws`/`is_target_return` as meaningful only within one chosen grain, never joined
+   across grains.
+
+**Validate.** Once a resolution is chosen: unit test with a synthetic `identification`-class visit spanning ≥2
+fixations; assert the first fixation's fixation-level classification matches whatever the resolution defines. On
+real data: count identification visits with >1 fixation, and measure how often the first fixation's independent
+fixation-level label disagrees with the visit's.
+
+---
+
 ## Low
 
 ### L1. ~~No tests~~
@@ -1403,6 +1450,7 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | **C3 frequency** | unblocked - `SEARCH_ARRAY_PATH` is now local; needs a pipeline re-run |
 | **M10, M11** GAM specification | deferred by decision; accepted as valid, modelling choice pending |
 | **M12** `px2deg` position dependence | deferred by decision; measured median 3.0% / max 9.7% across real targets |
+| **M18** fixation/visit classification disagreement | new finding (2026-08-12); research decision on which grain is canonical |
 | ~~**L5** fixation vs visit target attribution~~ | partially dissolved by T4 and stage-3 refactor; both levels use the same long-format distance table |
 | ~~**L7** broken cell in `_determine_time_to_trial_end`~~ | fixed; denominator settled as all target-visits across all trials. Re-running is now unblocked (T4 resolved) |
 | ~~**M14** packaging~~ | withdrawn — not a distributable package; the scratchpad import is fixed |
