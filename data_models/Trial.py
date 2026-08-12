@@ -174,7 +174,7 @@ class Trial:
         return df
 
     def process_events(self) -> pd.DataFrame:
-        from data_models.preprocess.events import process_trial_events
+        from data_models.parse.eye_movements import process_trial_events
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             features = self.get_raw_eye_movements()

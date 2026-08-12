@@ -12,7 +12,7 @@ import pytest
 
 import constants as cnst
 from data_models.SearchArray import SearchArray
-from data_models.preprocess.events import (
+from data_models.parse.eye_movements import (
     _extract_event_features,
     _num_fixations_to_strip,
     process_trial_events,
