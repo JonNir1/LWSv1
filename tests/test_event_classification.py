@@ -10,7 +10,7 @@ import pytest
 
 from conftest import make_fixation_row, make_idents
 
-from analysis.helpers.funnels.event_classification import (
+from pipeline.stage3_classify.event_classification import (
     identification_time_lookup,
     is_after_identification,
     is_before_identification,

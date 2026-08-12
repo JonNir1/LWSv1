@@ -123,7 +123,7 @@ _PENDING_DISTANCES = pytest.mark.xfail(
 @pytest.mark.parametrize("exclude", ["outliers", "both"])
 def test_h2_visit_funnel_accepts_outlier_exclusion(output_dir, exclude):
     """H2: visit-level outlier exclusion is implemented (all-outlier rule), so it must not raise."""
-    from analysis.helpers.funnels.build_funnels import build_event_classification_funnel
+    from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
 
     funnel = build_event_classification_funnel(output_dir, "lws", "visit", exclude=exclude)
     assert len(funnel) > 0
@@ -132,7 +132,7 @@ def test_h2_visit_funnel_accepts_outlier_exclusion(output_dir, exclude):
 @_PENDING_DISTANCES
 def test_h2_fixation_funnel_still_accepts_outlier_exclusion(output_dir):
     """The refusal must be scoped to visits - fixation-level exclusion works and must keep working."""
-    from analysis.helpers.funnels.build_funnels import build_event_classification_funnel
+    from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
 
     funnel = build_event_classification_funnel(output_dir, "lws", "fixation", exclude="both")
     assert len(funnel) > 0

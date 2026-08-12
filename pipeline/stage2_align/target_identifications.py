@@ -14,7 +14,7 @@ import pandas as pd
 
 import constants as cnst
 from data_models.LWSEnums import SubjectActionCategoryEnum, SignalDetectionCategoryEnum
-from pipeline.utils import pixel_distance
+from utils.distances import pixel_distance
 
 
 def build_identifications(

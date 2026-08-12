@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import analysis.helpers.funnels.funnel_config as fcfg
-from analysis.helpers.funnels.build_funnels import _convert_criteria_to_funnel, assert_is_cumulative
+import pipeline.config as pcfg
+from pipeline.stage3_classify.build_funnels import _convert_criteria_to_funnel, assert_is_cumulative
 
 
 def criteria(**columns: list) -> pd.DataFrame:
@@ -50,18 +50,18 @@ class TestCumulativeNaming:
         assert funnel.columns.tolist() == ["upto_on_target", "upto_before_identification"]
         assert "on_target" not in funnel.columns, "the standalone name must not survive into funnel output"
 
-    @pytest.mark.parametrize("terminal", sorted(fcfg.TERMINAL_COLUMNS))
+    @pytest.mark.parametrize("terminal", sorted(pcfg.TERMINAL_COLUMNS))
     def test_terminal_columns_keep_their_names(self, terminal):
         """These are conjunctions by definition, so both readings coincide and a prefix would be noise."""
-        assert fcfg.cumulative_name(terminal) == terminal
+        assert pcfg.cumulative_name(terminal) == terminal
 
     def test_cumulative_names_maps_a_criteria_list(self):
-        assert fcfg.cumulative_names(["on_target", "is_lws"]) == ["upto_on_target", "is_lws"]
+        assert pcfg.cumulative_names(["on_target", "is_lws"]) == ["upto_on_target", "is_lws"]
 
     def test_every_configured_criterion_maps_to_a_distinct_column(self):
-        all_criteria = fcfg.TRIAL_INCLUSION_CRITERIA + fcfg.IS_LWS_CRITERIA + fcfg.IS_TARGET_RETURN_CRITERIA
+        all_criteria = pcfg.TRIAL_INCLUSION_CRITERIA + pcfg.IS_LWS_CRITERIA + pcfg.IS_TARGET_RETURN_CRITERIA
         for crit in all_criteria:
-            assert fcfg.cumulative_name(crit) != crit, f"{crit!r} would collide with its standalone column"
+            assert pcfg.cumulative_name(crit) != crit, f"{crit!r} would collide with its standalone column"
 
 
 class TestAssertIsCumulative:
@@ -87,10 +87,10 @@ class TestAssertIsCumulative:
         assert_is_cumulative(frame, columns=["a", "b"])   # ignores the interleaved non-funnel column
 
     def test_a_real_funnel_satisfies_the_invariant(self, output_dir):
-        from analysis.helpers.funnels.build_funnels import build_event_classification_funnel
+        from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
 
         funnel = build_event_classification_funnel(output_dir, "lws", "visit", exclude="invalid_trials")
-        ordered = fcfg.cumulative_names(fcfg.TRIAL_INCLUSION_CRITERIA + fcfg.IS_LWS_CRITERIA + ["is_lws"])
+        ordered = pcfg.cumulative_names(pcfg.TRIAL_INCLUSION_CRITERIA + pcfg.IS_LWS_CRITERIA + ["is_lws"])
         assert_is_cumulative(funnel, columns=[c for c in ordered if c in funnel.columns])
 
 
@@ -113,20 +113,20 @@ class TestHasHighFixationRate:
         return pd.DataFrame([{"subject": 1, "trial": 1, "duration": duration_ms}])
 
     def test_saccades_do_not_count_towards_the_rate(self):
-        from analysis.helpers.funnels.trial_inclusion import has_high_fixation_rate
+        from pipeline.stage3_classify.trial_inclusion import has_high_fixation_rate
 
         # 2 fixations in 1 s = 2 Hz, below a 3 Hz bar; the 8 saccades must not rescue the trial
         rate = has_high_fixation_rate(self.events(2, 8), self.metadata(1000.0), min_rate=3.0)
         assert not rate.iloc[0], "saccades were counted as fixations"
 
     def test_a_genuinely_dense_trial_still_passes(self):
-        from analysis.helpers.funnels.trial_inclusion import has_high_fixation_rate
+        from pipeline.stage3_classify.trial_inclusion import has_high_fixation_rate
 
         assert has_high_fixation_rate(self.events(10, 9), self.metadata(1000.0), min_rate=3.0).iloc[0]
 
     def test_a_fixation_only_frame_is_unchanged(self):
         """The old fixations table had no `event_type`; the filter must be a no-op on frames that lack it."""
-        from analysis.helpers.funnels.trial_inclusion import has_high_fixation_rate
+        from pipeline.stage3_classify.trial_inclusion import has_high_fixation_rate
 
         with_col = self.events(10, 0)
         without_col = with_col.drop(columns=["event_type"])
@@ -140,7 +140,7 @@ class TestHasHighFixationRate:
 class TestInclusionNaNHandling:
     def test_missing_trial_in_a_criterion_fails_that_trial(self):
         """M6, at the source: `reindex` inserts NaN for trials a criterion never saw."""
-        from analysis.helpers.funnels.trial_inclusion import _SUBJECT_TRIAL_COLS
+        from pipeline.stage3_classify.trial_inclusion import _SUBJECT_TRIAL_COLS
 
         idx = pd.MultiIndex.from_tuples([(1, 1), (1, 2)], names=_SUBJECT_TRIAL_COLS)
         partial = pd.Series([True], index=pd.MultiIndex.from_tuples([(1, 1)], names=_SUBJECT_TRIAL_COLS), name="c")

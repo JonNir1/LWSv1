@@ -4,7 +4,7 @@ import pytest
 
 import constants as cnst
 from pipeline.stage2_align.fixations_to_targets import fixations_to_targets
-from pipeline.utils import px2deg as _px2deg
+from utils.distances import px2deg as _px2deg
 
 
 def _make_fixations(rows: list[dict]) -> pd.DataFrame:

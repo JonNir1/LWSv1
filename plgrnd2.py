@@ -39,9 +39,9 @@ del loaded_data    # free up memory by deleting the loaded_data object
 
 
 # %%
-from analysis.helpers.funnels.build_funnels import build_trial_inclusion_funnel, build_event_classification_funnel
+from pipeline.stage3_classify.build_funnels import build_trial_inclusion_funnel, build_event_classification_funnel
 from analysis.helpers.funnels.size_and_proportion import calculate_step_sizes
-from analysis.helpers.funnels.funnel_config import (
+from pipeline.config import (
     TRIAL_INCLUSION_CRITERIA, IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA, cumulative_names,
 )
 

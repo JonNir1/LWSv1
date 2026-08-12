@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 import constants as cnst
-from pipeline.utils import pixel_distance
+from utils.distances import pixel_distance
 
 
 def fixations_to_targets(

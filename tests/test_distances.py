@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from pipeline.utils import pixel_distance, px2deg
+from utils.distances import pixel_distance, px2deg
 import constants as cnst
 
 

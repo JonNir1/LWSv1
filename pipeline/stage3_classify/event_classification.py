@@ -4,7 +4,7 @@ from typing import Literal, Callable
 import pandas as pd
 
 import constants as cnst
-from analysis.helpers.funnels.funnel_config import IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA
+from pipeline.config import IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA
 from data_models.LWSEnums import SignalDetectionCategoryEnum
 
 # identification categories that count as "the subject identified this target"
