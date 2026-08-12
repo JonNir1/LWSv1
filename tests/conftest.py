@@ -63,10 +63,10 @@ def array_info(stimuli_dir: str) -> dict:
 
 @pytest.fixture(scope="session")
 def loaded(output_dir: str):
-    """The six pickles, unfiltered - no eye dropping, no outlier dropping."""
-    from analysis.helpers.read_data import read_data
+    """All tables, unfiltered: no eye dropping, no outlier dropping."""
+    from analysis.helpers.read_data import load_data
 
-    return read_data(output_dir, drop_bad_eye=False, drop_outliers=False, missing="raise")
+    return load_data(output_dir, drop_bad_eye=False, drop_outliers=False, missing="raise")
 
 
 def make_fixation_row(

@@ -26,9 +26,9 @@ pio.renderers.default = "browser"
 # %%
 # ##  Load Data
 
-from analysis.helpers.read_data import read_data
+from analysis.helpers.read_data import load_data
 
-loaded_data = read_data(cnfg.OUTPUT_PATH, drop_bad_eye=True, drop_outliers=True)
+loaded_data = load_data(cnfg.OUTPUT_PATH, drop_bad_eye=True, drop_outliers=True)
 targets = loaded_data.targets
 actions = loaded_data.actions
 metadata = loaded_data.metadata

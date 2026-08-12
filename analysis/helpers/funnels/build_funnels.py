@@ -4,7 +4,7 @@ import pandas as pd
 
 import config as cnfg
 import analysis.helpers.funnels.funnel_config as fcfg
-from analysis.helpers.read_data import read_data, align_data
+from analysis.helpers.read_data import load_data
 from analysis.helpers.funnels.trial_inclusion import check_trial_inclusion_criteria
 from analysis.helpers.funnels.event_classification import check_lws_criteria, check_target_return_criteria
 from data_models.LWSEnums import SearchArrayCategoryEnum, ImageCategoryEnum
@@ -18,10 +18,9 @@ def build_trial_inclusion_funnel(
     require_actions: bool = False,
 ) -> pd.DataFrame:
     bad_actions = _bad_actions_as_list(bad_actions)
-    loaded = read_data(data_dir, drop_bad_eye=True)
-    aligned = align_data(loaded, on_target_threshold_dva=cnfg.ON_TARGET_THRESHOLD_DVA)
+    data = load_data(data_dir, drop_bad_eye=True)
     trial_criteria = check_trial_inclusion_criteria(
-        loaded.metadata, loaded.fixations, loaded.actions, aligned.identifications,
+        data.metadata, data.fixations, data.actions, data.identifications,
         min_gaze_coverage=min_gaze_coverage,
         min_fixation_rate=min_fixation_rate,
         bad_actions=bad_actions,
@@ -32,7 +31,7 @@ def build_trial_inclusion_funnel(
         trial_funnel
         .reset_index(drop=False)
         .merge(
-            loaded.metadata[["subject", "trial", "trial_category"]],
+            data.metadata[["subject", "trial", "trial_category"]],
             on=["subject", "trial"],
             how="left"
         )
@@ -81,13 +80,15 @@ def build_event_classification_funnel(
     if exclude not in {"none", "invalid_trials", "outliers", "both"}:
         raise ValueError("`exclude` must be 'none', 'invalid_trials', 'outliers', or 'both'.")
     bad_actions = _bad_actions_as_list(bad_actions)
-    loaded = read_data(data_dir, drop_bad_eye=True, drop_outliers=exclude in {"outliers", "both"})
-    aligned = align_data(loaded, on_target_threshold_dva=on_target_threshold_dva)
-    event_data = aligned.fixations if event_type == "fixation" else aligned.visits
+    data = load_data(
+        data_dir, drop_bad_eye=True, drop_outliers=exclude in {"outliers", "both"},
+        on_target_threshold_dva=on_target_threshold_dva,
+    )
+    event_data = data.fixations if event_type == "fixation" else data.visits
     if event_data is None or (hasattr(event_data, 'empty') and event_data.empty):
         raise ValueError(f"no {event_type} data available in {data_dir!r}")
     trial_criteria = check_trial_inclusion_criteria(
-        loaded.metadata, loaded.fixations, loaded.actions, aligned.identifications,
+        data.metadata, data.fixations, data.actions, data.identifications,
         min_gaze_coverage=min_gaze_coverage,
         min_fixation_rate=min_fixation_rate,
         bad_actions=bad_actions,
@@ -97,7 +98,7 @@ def build_event_classification_funnel(
         funnel_type=funnel_type,
         event_type=event_type,
         event_data=event_data,
-        idents=aligned.identifications,
+        idents=data.identifications,
         on_target_threshold_dva=on_target_threshold_dva,
     )
     # build a joint funnel table aligned to event_data rows
@@ -110,12 +111,12 @@ def build_event_classification_funnel(
     out = (
         pd.concat([event_data, funnel_df], axis=1)
         .merge(
-            loaded.metadata[["subject", "trial", "trial_category"]],
+            data.metadata[["subject", "trial", "trial_category"]],
             on=["subject", "trial"],
             how="left"
         )
         .merge(
-            loaded.targets[["subject", "trial", "target", "category", "angle"]],
+            data.targets[["subject", "trial", "target", "category", "angle"]],
             on=["subject", "trial", "target"],
             how="left"
         )

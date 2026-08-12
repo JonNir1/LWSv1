@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 import config as cnfg
-from analysis.helpers.read_data import read_data
+from analysis.helpers.read_data import load_data
 from data_models.LWSEnums import SignalDetectionCategoryEnum
 
 pytestmark = pytest.mark.realdata
@@ -93,8 +93,8 @@ def test_c4_false_alarms_shadowing_hits(loaded, capsys):
 
 def test_drop_outliers_reaches_the_event_table(output_dir, capsys):
     """`drop_outliers` must actually remove rows - it is the only quality filter read_data applies."""
-    kept = read_data(output_dir, drop_bad_eye=False, drop_outliers=False, missing="raise")
-    dropped = read_data(output_dir, drop_bad_eye=False, drop_outliers=True, missing="raise")
+    kept = load_data(output_dir, drop_bad_eye=False, drop_outliers=False, missing="raise")
+    dropped = load_data(output_dir, drop_bad_eye=False, drop_outliers=True, missing="raise")
 
     with capsys.disabled():
         print("\n--- drop_outliers coverage ---")
