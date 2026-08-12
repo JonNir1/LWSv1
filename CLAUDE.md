@@ -55,11 +55,10 @@ The mirror construct is a **target-return**: an on-target event *after* identifi
 
 ## Commands
 
-Run the full preprocessing pipeline (from repo root, in the venv). `run_pipeline.py` has no `__main__` block, so
-invoke it from a REPL/notebook or `-c`:
+Run stage 1 (parse raw data to pickles, from repo root, in the venv):
 
 ```bash
-python -c "from pipeline.run_pipeline import run_pipeline; run_pipeline(save=True, verbose=True)"
+python -c "from pipeline.stage1_parse.run_stage1 import run_stage1; run_stage1(save=True, verbose=True)"
 ```
 
 Fit a GAM (from repo root; the scripts use `file.path(\"analysis\", \"R\", ...)` relative paths):
@@ -77,9 +76,9 @@ notebooks then read to overlay model estimates on plotly figures.
 Three stages: parse (raw data to tables), align (join fixations to targets, build visits and identifications),
 and classify (funnels, LWS/target-return). Stage 1 persists pickles; stage 2 computes on-the-fly.
 
-### Stage 1: parse (`pipeline/parse/`, `data_models/`)
+### Stage 1: parse (`pipeline/stage1_parse/`, `data_models/`)
 
-`run_pipeline()` = `parse_all_subjects()` then `build_dataframes()`, saving four pickles to `cnfg.OUTPUT_PATH`:
+`run_stage1()` = `parse_all_subjects()` then `build_dataframes()`, saving four pickles to `cnfg.OUTPUT_PATH`:
 `icons.pkl`, `actions.pkl`, `metadata.pkl`, `eye_movements.pkl`.
 
 Shared distance math lives in `pipeline/utils.py`: `pixel_distance(x1, y1, x2, y2)` and
@@ -88,7 +87,7 @@ Shared distance math lives in `pipeline/utils.py`: `pixel_distance(x1, y1, x2, y
 ### `eye_movements.pkl` and why fixations are a view
 
 One row per **(subject, trial, eye, event)**. `event` is the event's positional rank among *all* events of that
-eye in the trial. `LoadedData.fixations` is a derived view (`event_type == "FIXATION"`), not a separate file.
+eye in the trial. `DataStore.fixations` is a derived view (`event_type == "FIXATION"`), not a separate file.
 
 | group | columns | populated for |
 | --- | --- | --- |
@@ -111,7 +110,7 @@ crossed at speed, not a held position. The spread features are kept for every ev
 ### `icons.pkl` and the stable icon identifier
 
 One row per **(subject, trial, icon)** with all 180 icons. `icon{i}` is the stable identifier (flat row-major
-index over the 10x18 grid). `LoadedData.targets` is a derived view (`is_target` subset, identifier renamed to
+index over the 10x18 grid). `DataStore.targets` is a derived view (`is_target` subset, identifier renamed to
 `target`). Stored as categoricals (~7 MB for 27 subjects).
 
 Target distances are not in the events table. They are computed on-the-fly in stage 2 by
@@ -125,8 +124,9 @@ Object model (`Subject` -> list of `Trial` -> one `SearchArray` each):
   collapsed into a `SubjectActionCategoryEnum` per action (mark+confirm, mark-only, attempted-mark, mark+reject).
 - `Trial.__init__` does the heavy preprocessing eagerly: loads the `SearchArray` from its `.mat` file and runs
   `peyes` Engbert detection **separately for each eye**.
-- `data_models/preprocess/events.py` tabulates every detected event, adding `num_fixs_to_strip` (how many
-  **fixations** until one lands in the exemplar strip; `inf` if never, NaN for non-fixations).
+- `data_models/parse/eye_movements.py` handles both detection (Engbert via `peyes`) and tabulation of every
+  detected event, adding `num_fixs_to_strip` (how many **fixations** until one lands in the exemplar strip;
+  `inf` if never, NaN for non-fixations).
 
 **Why there are no per-icon visits.** The on-target radius is 68 px against 76 px icon spacing (ratio 0.90), so
 an all-within-threshold rule over 180 icons would claim ~2-3 icons per fixation with no principled tiebreak.
@@ -134,21 +134,21 @@ Target-visits remain the primary construct.
 
 Caching is layered: `Subject.pkl` and `eye_movements_df.pkl` are written per subject under
 `OUTPUT_PATH/subjects/<exp>_Subject_NN/`, and `parse_single_subject` prefers the pickle over re-parsing raw data.
-Both carry a `<name>.cache.json` sidecar keyed on the stage-1 source files (`pipeline/parse/cache_key.py`).
+Both carry a `<name>.cache.json` sidecar keyed on the stage-1 source files (`pipeline/stage1_parse/cache_key.py`).
 
-### Stage 2: align (`pipeline/align/`, `analysis/helpers/read_data.py`)
+### Stage 2: align (`pipeline/stage2_align/`, `analysis/helpers/read_data.py`)
 
-`read_data(dir_path)` loads stage-1 pickles into a `LoadedData` dataclass. `align_data(loaded)` computes the
-stage-2 outputs on-the-fly, returning an `AlignedData` dataclass:
+`load_data(dir_path)` loads stage-1 pickles and computes stage-2 outputs in one step, returning a `DataStore`
+dataclass with all tables:
 
 - `fixation_target_dists`: long-format (subject, trial, eye, event, target, distance_px, distance_dva), from
-  `pipeline/align/fixations_to_targets.py`
-- `visits`: from `pipeline/align/build_visits.py`, groups consecutive on-target fixations
-- `identifications`: from `pipeline/align/target_identifications.py`, matches identification actions to fixation
+  `pipeline/stage2_align/fixations_to_targets.py`
+- `visits`: from `pipeline/stage2_align/build_visits.py`, groups consecutive on-target fixations
+- `identifications`: from `pipeline/stage2_align/target_identifications.py`, matches identification actions to fixation
   positions and classifies as hit / repeated_hit / false_alarm / miss
 
 Nothing from stage 2 is persisted as pickles. All outputs depend on researcher-chosen thresholds
-(`on_target_threshold_dva`, `visit_merging_time_threshold`) stored on `AlignedData`.
+(`on_target_threshold_dva`, `visit_merging_time_threshold`) stored on `DataStore`.
 
 ### Stage 3: classify / funnels and analysis (`analysis/`)
 
