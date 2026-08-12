@@ -14,7 +14,7 @@ from data_models.parse.subject_info import parse_subject_info
 from data_models.parse.triggers_and_gaze import parse_triggers_and_gaze
 
 from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum, SubjectActionCategoryEnum
-from pipeline.parse.cache_key import build_cache_key, describe_staleness, is_cache_valid, write_cache_key
+from pipeline.stage1_parse.cache_key import build_cache_key, describe_staleness, is_cache_valid, write_cache_key
 
 
 class Subject:

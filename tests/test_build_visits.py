@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 import constants as cnst
-from pipeline.align.build_visits import build_visits
+from pipeline.stage2_align.build_visits import build_visits
 
 
 def _fixations(rows: list[dict]) -> pd.DataFrame:

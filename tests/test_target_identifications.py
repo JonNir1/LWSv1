@@ -9,7 +9,7 @@ import pytest
 
 import constants as cnst
 from data_models.LWSEnums import SignalDetectionCategoryEnum as SDT
-from pipeline.align.target_identifications import (
+from pipeline.stage2_align.target_identifications import (
     _append_missed_targets,
     _classify_hits_and_false_alarms,
 )

@@ -7,9 +7,9 @@ import pandas as pd
 from numpy import isnan
 
 import config as cnfg
-from pipeline.align.fixations_to_targets import fixations_to_targets
-from pipeline.align.build_visits import build_visits
-from pipeline.align.target_identifications import build_identifications
+from pipeline.stage2_align.fixations_to_targets import fixations_to_targets
+from pipeline.stage2_align.build_visits import build_visits
+from pipeline.stage2_align.target_identifications import build_identifications
 
 
 FIXATION_EVENT_TYPE = "FIXATION"

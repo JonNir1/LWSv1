@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 import constants as cnst
-from pipeline.align.fixations_to_targets import fixations_to_targets
+from pipeline.stage2_align.fixations_to_targets import fixations_to_targets
 from pipeline.utils import px2deg as _px2deg
 
 
