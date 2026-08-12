@@ -86,10 +86,10 @@ class TestAssertIsCumulative:
         frame = pd.DataFrame({"a": [True], "unrelated": [False], "b": [True]})
         assert_is_cumulative(frame, columns=["a", "b"])   # ignores the interleaved non-funnel column
 
-    def test_a_real_funnel_satisfies_the_invariant(self, output_dir):
+    def test_a_real_funnel_satisfies_the_invariant(self, data_store):
         from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
 
-        funnel = build_event_classification_funnel(output_dir, "lws", "visit", exclude="invalid_trials")
+        funnel = build_event_classification_funnel(data_store, "lws", "visit", exclude="invalid_trials")
         ordered = pcfg.cumulative_names(pcfg.TRIAL_INCLUSION_CRITERIA + pcfg.IS_LWS_CRITERIA + ["is_lws"])
         assert_is_cumulative(funnel, columns=[c for c in ordered if c in funnel.columns])
 

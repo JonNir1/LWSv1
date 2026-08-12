@@ -28,14 +28,13 @@ pio.renderers.default = "browser"
 
 from analysis.helpers.read_data import load_data
 
-loaded_data = load_data(cnfg.OUTPUT_PATH, drop_bad_eye=True, drop_outliers=True)
-targets = loaded_data.targets
-actions = loaded_data.actions
-metadata = loaded_data.metadata
-idents = loaded_data.identifications
-fixations = loaded_data.fixations
-visits = loaded_data.visits
-del loaded_data    # free up memory by deleting the loaded_data object
+data = load_data(cnfg.OUTPUT_PATH, drop_bad_eye=True, drop_outliers=True)
+targets = data.targets
+actions = data.actions
+metadata = data.metadata
+idents = data.identifications
+fixations = data.fixations
+visits = data.visits
 
 
 # %%
@@ -45,9 +44,7 @@ from pipeline.config import (
     TRIAL_INCLUSION_CRITERIA, IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA, cumulative_names,
 )
 
-trial_funnel = build_trial_inclusion_funnel(
-    cnfg.OUTPUT_PATH
-)
+trial_funnel = build_trial_inclusion_funnel(data)
 trial_funnel_sizes = calculate_step_sizes(
     trial_funnel,
     ["subject", "trial"],
@@ -55,7 +52,7 @@ trial_funnel_sizes = calculate_step_sizes(
 )
 
 is_lws_funnel = build_event_classification_funnel(
-    cnfg.OUTPUT_PATH,
+    data,
     event_type="visit",
     funnel_type="lws",
 )
@@ -66,7 +63,7 @@ lws_sizes = calculate_step_sizes(
 )
 
 is_tr_funnel = build_event_classification_funnel(
-    cnfg.OUTPUT_PATH,
+    data,
     event_type="visit",
     funnel_type="target_return",
 )

@@ -69,6 +69,14 @@ def loaded(output_dir: str):
     return load_data(output_dir, drop_bad_eye=False, drop_outliers=False, missing="raise")
 
 
+@pytest.fixture(scope="session")
+def data_store(output_dir: str):
+    """DataStore with default filtering (bad eye dropped, outliers dropped)."""
+    from analysis.helpers.read_data import load_data
+
+    return load_data(output_dir, drop_bad_eye=True, drop_outliers=True, missing="raise")
+
+
 def make_fixation_row(
     eye: str,
     event: int,

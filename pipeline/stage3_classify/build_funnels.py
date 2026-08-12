@@ -1,23 +1,26 @@
-from typing import Literal, Optional
+from __future__ import annotations
+
+from typing import Literal, Optional, TYPE_CHECKING
 
 import pandas as pd
 
 import pipeline.config as pcfg
-from analysis.helpers.read_data import load_data
 from pipeline.stage3_classify.trial_inclusion import check_trial_inclusion_criteria
 from pipeline.stage3_classify.event_classification import check_lws_criteria, check_target_return_criteria
 from data_models.LWSEnums import SearchArrayCategoryEnum, ImageCategoryEnum
 
+if TYPE_CHECKING:
+    from analysis.helpers.read_data import DataStore
+
 
 def build_trial_inclusion_funnel(
-    data_dir: str,
+    data: DataStore,
     min_gaze_coverage: int | float = pcfg.DEFAULT_GAZE_COVERAGE_PERCENT_THRESHOLD,
     min_fixation_rate: float = pcfg.DEFAULT_FIXATION_RATE_THRESHOLD,
     bad_actions: Optional[pcfg.BAD_ACTIONS_TYPE] = None,
     require_actions: bool = False,
 ) -> pd.DataFrame:
     bad_actions = _bad_actions_as_list(bad_actions)
-    data = load_data(data_dir, drop_bad_eye=True)
     trial_criteria = check_trial_inclusion_criteria(
         data.metadata, data.fixations, data.actions, data.identifications,
         min_gaze_coverage=min_gaze_coverage,
@@ -39,15 +42,14 @@ def build_trial_inclusion_funnel(
 
 
 def build_event_classification_funnel(
-    data_dir: str,
+    data: DataStore,
     funnel_type: Literal["lws", "target_return"],
     event_type: Literal["fixation", "visit"],
     min_gaze_coverage: int | float = pcfg.DEFAULT_GAZE_COVERAGE_PERCENT_THRESHOLD,
     min_fixation_rate: float = pcfg.DEFAULT_FIXATION_RATE_THRESHOLD,
     bad_actions: Optional[pcfg.BAD_ACTIONS_TYPE] = None,
     require_actions: bool = False,
-    on_target_threshold_dva: float = pcfg.ON_TARGET_THRESHOLD_DVA,
-    exclude: Literal["none", "invalid_trials", "outliers", "both"] = "both",
+    exclude: Literal["none", "invalid_trials"] = "invalid_trials",
 ) -> pd.DataFrame:
     """
     Build a per-event funnel classifying each event as LWS or as a target-return.
@@ -76,16 +78,12 @@ def build_event_classification_funnel(
         raise ValueError("`funnel_type` must be 'lws' or 'target_return'.")
     if event_type not in {"fixation", "visit"}:
         raise ValueError("`event_type` must be 'fixation' or 'visit'.")
-    if exclude not in {"none", "invalid_trials", "outliers", "both"}:
-        raise ValueError("`exclude` must be 'none', 'invalid_trials', 'outliers', or 'both'.")
+    if exclude not in {"none", "invalid_trials"}:
+        raise ValueError("`exclude` must be 'none' or 'invalid_trials'.")
     bad_actions = _bad_actions_as_list(bad_actions)
-    data = load_data(
-        data_dir, drop_bad_eye=True, drop_outliers=exclude in {"outliers", "both"},
-        on_target_threshold_dva=on_target_threshold_dva,
-    )
     event_data = data.fixations if event_type == "fixation" else data.visits
     if event_data is None or (hasattr(event_data, 'empty') and event_data.empty):
-        raise ValueError(f"no {event_type} data available in {data_dir!r}")
+        raise ValueError(f"no {event_type} data available")
     trial_criteria = check_trial_inclusion_criteria(
         data.metadata, data.fixations, data.actions, data.identifications,
         min_gaze_coverage=min_gaze_coverage,
@@ -98,7 +96,7 @@ def build_event_classification_funnel(
         event_type=event_type,
         event_data=event_data,
         idents=data.identifications,
-        on_target_threshold_dva=on_target_threshold_dva,
+        on_target_threshold_dva=data.on_target_threshold_dva,
     )
     # build a joint funnel table aligned to event_data rows
     joint_criteria = _join_trial_and_event_criteria(
