@@ -17,12 +17,12 @@ the numpy/pandas upgrade. New findings surfaced while building the test suite: *
 `tests/` encodes the findings as executable claims. Each test for an unfixed bug is `xfail(strict=True)`, so the suite
 is green now and turns red the moment a bug is fixed without its marker being removed.
 
-Suite status: **158 passed, 14 skipped** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6 (13 files under `tests/`).
+Suite status: **177 passed** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6 (14 files under `tests/`).
 
-Every skip has the same cause: the built pickles in `OUTPUT_PATH` predate the icon refactor, so nothing keyed on
-the `icon{i}` identifier can be checked against them. They become `xfail`/pass on the next `run_pipeline()`. The
-`xfail`s inside that set are "fixed in code, but the pickles predate the fix" (C4 frequency, H2 magnitude, M1
-dtypes).
+Pipeline was re-run on 2026-08-12 with `force_reparse=True` on all 27 subjects. All previously-skipped tests now
+pass (pickles use `icon{i}` identifiers). Former `xfail` markers for C4 (FA shadowing frequency) and M1 (object
+dtypes) have been removed: both bugs are fixed in the current pickles. An E2E test (`test_pipeline_e2e.py`)
+exercises stages 2+3 on synthetic data without requiring raw data or pickles.
 
 | Finding | Test | Status |
 | --- | --- | --- |
@@ -30,14 +30,14 @@ dtypes).
 | C3 `KeyError: None`; attempted mark clobbered | `test_attempted_mark_*` | **confirmed → fixed** |
 | C4 FA shadows the real hit | `test_false_alarm_does_not_shadow_the_real_hit` | **confirmed** — lookup returns 500.0, not 4000.0 |
 | C4 first-hit guarantee is incidental | `test_repeated_hit_does_not_move_identification_time` | **confirmed → fixed** |
-| C4 **frequency** | `test_c4_false_alarms_shadowing_hits` | **confirmed** — 12 targets affected; LWS window truncated by a median **3684 ms** (max 12904 ms) |
+| C4 **frequency** | `test_c4_false_alarms_shadowing_hits` | **fixed** — 0 targets affected after pipeline re-run (was 12) |
 | H1 cross-eye strip count | `test_does_not_count_across_the_eye_boundary` | **confirmed** — `[2.0, 1.0]` where `[inf, inf]` is correct |
 | H1 wrongly rejects an LWS candidate | `test_leak_can_wrongly_reject_an_lws_candidate` | **confirmed** — count 1 vs threshold 3 |
 | H2 **magnitude** | `test_h2_outlier_exclusion_is_a_noop_for_visits` | **confirmed** — 11,830/116,947 fixations dropped (10.1%), **0** of 5,720 visits |
 | H5 unbalanced triggers | `test_unclosed_final_trial`, `test_dropped_end_trigger_*` | **confirmed** — `np.vstack` `ValueError` |
 | H7 **magnitude** | `test_h7_long_fixation_cap_is_immaterial_in_this_dataset` | **downgraded** — only 6/116,947 (0.005%) exceed the cap |
 | H9 pandas 3 breaks trigger alignment | `TestTrialBoundaries::test_balanced` | **confirmed** — `AttributeError: '_hasna'` |
-| M1 metadata dtypes | `test_m1_metadata_is_object_dtype` | **confirmed** — all numeric columns are `object` |
+| M1 metadata dtypes | `test_m1_metadata_is_object_dtype` | **fixed** — numeric columns now have proper dtypes |
 | M4 falsy-zero guard | `test_mark_at_row_zero` | **confirmed** — guard assertion does not fire |
 | M15 wrong `pixel_size` | `test_saccade_amplitude_in_degrees` | **confirmed** — 300 px saccade reports **179.24°**, correct is 7.92° |
 | M15 is inert for current output | `test_outlier_reasons_are_independent_of_pixel_size` | **holds** — clean trace yields no outlier reasons |
@@ -1245,7 +1245,7 @@ that `pixel_size` agrees with `cnst.PIXEL_SIZE_MM / 10` to within rounding. Add 
 
 ### L1. ~~No tests~~
 
-**STATUS: FIXED.** 13 test files, 158 tests, all green (14 skipped because the built pickles predate the
+**STATUS: FIXED.** 14 test files, 177 tests, all green. Pipeline re-run completed 2026-08-12 (previously 14 skipped because the built pickles predate the
 icon refactor). Every test in the table below exists, under its own or an equivalent name. `pyproject.toml` carries
 `pythonpath = ["."]` and `testpaths = ["tests"]`; the packaging half of the original suggestion was withdrawn with
 M14. The original entry follows.
@@ -1411,15 +1411,14 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | ~~**L6** R script hygiene~~ | fixed, except the `k` choice, which is deferred with M10/M11 |
 | **L4** strip geometry validation | unblocked - `Stimuli/` is now local |
 
-**Re-run required.** Every stage-1 fix (C2, C3, C4, H1, H1a, H6, M15) changes the pickles, and the caches now
-invalidate themselves (H3), so the next `run_pipeline()` rebuilds from raw. Until then the built pickles in
-`OUTPUT_PATH` are pre-fix, which is why the three real-data checks remain `xfail`. The re-run also replaces
-`fixations.pkl` + `visits.pkl` with `eye_movements.pkl`; the old two are **not** deleted automatically, so remove
-them by hand once the new build is verified, or `read_data` will keep finding a stale `visits.pkl`.
-
-**No longer blocked.** `SEARCH_ARRAY_PATH` now resolves locally (`<base>\Stimuli`), so the re-run, the C3
-measurement, H5 and L4 can all proceed. Note the re-run will also pick up the corrected TOBII dimensions
-(527 × 296 mm), so every DVA figure shifts slightly against the current pickles.
+**Re-run completed (2026-08-12).** Pipeline ran with `force_reparse=True` on all 27 subjects. All stage-1 fixes
+(C2, C3, C4, H1, H1a, H6, M15) are now reflected in the built pickles. Stale files (`fixations.pkl`,
+`targets.pkl`, `visits.pkl`, `idents.pkl`) deleted from `OUTPUT_PATH`. Regression comparison against the old
+backup (`Results - Backup`) confirmed all differences trace to intentional fixes (C2/C3/C4, H1/H1a) or the
+corrected TOBII dimensions (527 x 296 mm). Two additional bugs found and fixed during the run:
+`_map_ident_time` crashed on off-target fixations (NaN target), and `build_identifications` missed 82 trials
+with targets but zero actions (no miss rows emitted). All 8 analysis notebooks pass smoke tests. Full test
+suite: 177 passed.
 
 ## Fix order
 
@@ -1427,10 +1426,7 @@ The original ordering (H8/H9 → H3 → C2/C3/C4 → the Highs → L1 → the Me
 Critical and every High except H5 is fixed, along with every Medium and Low that was not explicitly deferred or
 withdrawn. What remains, in the order it should be done:
 
-1. **Re-run the pipeline.** Nothing downstream can be trusted until this happens: every stage-1 fix changes the
-   pickles, and the current build additionally predates the icon refactor. Delete the per-subject caches (or rely
-   on the H3 sidecars to invalidate them), run once, then remove the stale `fixations.pkl` and `visits.pkl` by
-   hand. Gate on the C4 invariant test and on the three `xfail`s flipping to pass.
+1. ~~**Re-run the pipeline.**~~ Done 2026-08-12. All `xfail` markers removed, 177 tests pass.
 2. ~~**T4 `fixations_to_targets()`.**~~ Resolved: `pipeline/stage2_align/fixations_to_targets.py` returns long format;
    `build_visits.py` and `target_identifications.py` also moved to stage 2. Stage-3 classification moved to
    `pipeline/stage3_classify/` with `run_stage3()` as the entry point.
