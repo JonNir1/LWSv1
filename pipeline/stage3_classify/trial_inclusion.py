@@ -2,10 +2,10 @@ from typing import List, Union, Callable
 
 import pandas as pd
 
-from config import MILLISECONDS_IN_SECOND
-from analysis.helpers.funnels.funnel_config import TRIAL_INCLUSION_CRITERIA
+from constants import MILLISECONDS_IN_SECOND
+from pipeline.config import TRIAL_INCLUSION_CRITERIA
 from data_models.LWSEnums import SubjectActionCategoryEnum
-from analysis.helpers.sdt import calc_sdt_class_per_trial
+from utils.sdt import calc_sdt_class_per_trial
 
 _SUBJECT_TRIAL_COLS = ["subject", "trial"]
 

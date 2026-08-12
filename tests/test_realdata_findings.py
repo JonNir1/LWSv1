@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 import config as cnfg
-from analysis.helpers.read_data import read_data
+from analysis.helpers.read_data import load_data
 from data_models.LWSEnums import SignalDetectionCategoryEnum
 
 pytestmark = pytest.mark.realdata
@@ -32,9 +32,7 @@ def test_h7_long_fixation_cap_is_immaterial_in_this_dataset(loaded, capsys):
     too_long = fixs["duration"] > PEYES_FIXATION_MAX_DURATION_MS
     flagged = fixs["outlier_reasons"].map(lambda r: isinstance(r, list) and "max_duration" in r)
 
-    # the per-target distance block is gone from the events table; `closest_icon_distance_dva` is the minimum over
-    # it, so "within threshold of the nearest target" is the same test as "within threshold of any"
-    on_target = fixs["closest_icon_distance_dva"].le(cnfg.ON_TARGET_THRESHOLD_DVA)
+    # TODO: restore on-target enrichment check once fixations_to_targets() lands (step 5)
 
     with capsys.disabled():
         print(f"\n--- H7: fixation duration cap ({PEYES_FIXATION_MAX_DURATION_MS} ms) ---")
@@ -44,10 +42,6 @@ def test_h7_long_fixation_cap_is_immaterial_in_this_dataset(loaded, capsys):
         print(f"duration percentiles (ms)      : "
               f"p50={fixs['duration'].quantile(.50):.0f}  p95={fixs['duration'].quantile(.95):.0f}  "
               f"p99={fixs['duration'].quantile(.99):.0f}  max={fixs['duration'].max():.0f}")
-        if too_long.any():
-            print(f"of those over the cap, on-target: {on_target[too_long].sum():,} "
-                  f"({100 * on_target[too_long].mean():.1f}%)")
-        print(f"on-target rate, all fixations  : {100 * on_target.mean():.1f}%")
 
     # the cap and the flag must agree - if they diverge, the flag is being set by something else
     assert flagged.sum() == too_long.sum(), "outlier flag disagrees with the duration cap"
@@ -99,8 +93,8 @@ def test_c4_false_alarms_shadowing_hits(loaded, capsys):
 
 def test_drop_outliers_reaches_the_event_table(output_dir, capsys):
     """`drop_outliers` must actually remove rows - it is the only quality filter read_data applies."""
-    kept = read_data(output_dir, drop_bad_eye=False, drop_outliers=False, missing="raise")
-    dropped = read_data(output_dir, drop_bad_eye=False, drop_outliers=True, missing="raise")
+    kept = load_data(output_dir, drop_bad_eye=False, drop_outliers=False, missing="raise")
+    dropped = load_data(output_dir, drop_bad_eye=False, drop_outliers=True, missing="raise")
 
     with capsys.disabled():
         print("\n--- drop_outliers coverage ---")
@@ -115,39 +109,26 @@ def test_drop_outliers_reaches_the_event_table(output_dir, capsys):
     assert (len(kept.eye_movements) - len(dropped.eye_movements)) > (len(kept.fixations) - len(dropped.fixations))
 
 
-# --- broken by the eye_movements refactor, pending `fixations_to_targets()` --------------------------------------
-# These are `strict` so they turn red - and the markers come off - the moment the helper lands.
+def test_h2_visit_funnel_with_outliers_dropped(data_store):
+    """H2: visit-level outlier exclusion (via load_data) produces a non-empty funnel."""
+    from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
 
-_PENDING_DISTANCES = pytest.mark.xfail(
-    strict=True, raises=NotImplementedError,
-    reason="the per-target distance columns were removed from the events table; restored by the deferred "
-           "`fixations_to_targets()` helper - see CODE_REVIEW.md",
-)
-
-
-@_PENDING_DISTANCES
-@pytest.mark.parametrize("exclude", ["outliers", "both"])
-def test_h2_visit_funnel_accepts_outlier_exclusion(output_dir, exclude):
-    """H2: visit-level outlier exclusion is implemented (all-outlier rule), so it must not raise."""
-    from analysis.helpers.funnels.build_funnels import build_event_classification_funnel
-
-    funnel = build_event_classification_funnel(output_dir, "lws", "visit", exclude=exclude)
+    funnel = build_event_classification_funnel(data_store, "lws", "visit", exclude="invalid_trials")
     assert len(funnel) > 0
 
 
-@_PENDING_DISTANCES
-def test_h2_fixation_funnel_still_accepts_outlier_exclusion(output_dir):
-    """The refusal must be scoped to visits - fixation-level exclusion works and must keep working."""
-    from analysis.helpers.funnels.build_funnels import build_event_classification_funnel
+def test_h2_fixation_funnel_with_outliers_dropped(data_store):
+    """Fixation-level funnel with outliers dropped (via load_data) works."""
+    from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
 
-    funnel = build_event_classification_funnel(output_dir, "lws", "fixation", exclude="both")
+    funnel = build_event_classification_funnel(data_store, "lws", "fixation", exclude="invalid_trials")
     assert len(funnel) > 0
 
 
 class TestEventTableInvariants:
     """The properties `eye_movements.pkl` must hold, checked against the real build rather than a fixture."""
 
-    FIXATION_ONLY = ["x", "y", "closest_icon", "closest_icon_distance_dva", "num_fixs_to_strip"]
+    FIXATION_ONLY = ["x", "y", "num_fixs_to_strip"]
 
     def test_the_key_is_unique(self, loaded):
         assert not loaded.eye_movements.duplicated(subset=["subject", "trial", "eye", "event"]).any()

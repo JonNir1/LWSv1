@@ -42,9 +42,8 @@ class Trial:
 
         # pre-process inputs
         self._search_array = self._create_search_array()
-        dists = self._calculate_gaze_target_distances()
         labels, left_events, right_events = self._detect_eye_movements()
-        self._gaze = pd.concat([self._gaze, labels, dists], axis=1)
+        self._gaze = pd.concat([self._gaze, labels], axis=1)
         self._left_events = left_events
         self._right_events = right_events
 
@@ -175,11 +174,11 @@ class Trial:
         return df
 
     def process_events(self) -> pd.DataFrame:
-        from data_models.preprocess.events import process_trial_events
+        from data_models.parse.eye_movements import process_trial_events
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             features = self.get_raw_eye_movements()
-        events = process_trial_events(features, self.get_targets(), self.end_time, self.px2deg)
+        events = process_trial_events(features, self.end_time)
         return events
 
     @staticmethod
@@ -225,41 +224,6 @@ class Trial:
         )
         labels = pd.concat([left_labels, right_labels], axis=1)
         return labels, left_events, right_events
-
-    def _calculate_gaze_target_distances(self,) -> pd.DataFrame:
-        """
-        Per-sample distance from gaze to each target, computed from the **dominant eye only**.
-
-        Samples with no dominant-eye gaze get NaN rather than falling back to the other eye: these distances decide
-        hit vs false-alarm classification, and mixing eyes there would be inconsistent with the rest of the pipeline,
-        where `read_data(drop_bad_eye=True)` discards the non-dominant eye outright.
-        """
-        is_left = self._subject.eye == DominantEyeEnum.LEFT
-        x_str = cnfg.LEFT_X_STR if is_left else cnfg.RIGHT_X_STR
-        y_str = cnfg.LEFT_Y_STR if is_left else cnfg.RIGHT_Y_STR
-        dists = self._calculate_target_distances(self._gaze[x_str].values, self._gaze[y_str].values)
-        dists.index = self._gaze.index
-        return dists
-
-    def _calculate_target_distances(self, x: np.ndarray, y: np.ndarray,) -> pd.DataFrame:
-        """
-        Calculate the pixel-distance from each X-Y coordinate to each target in the search array.
-        :param x: 1D array of X coordinates with shape (N,) or (N, 1) or (1, N)
-        :param y: 1D array of Y coordinates with shape (N,) or (N, 1) or (1, N)
-        :return: a (num_coords, num_targets) DataFrame with the distances from each coordinate to each target.
-
-        Columns are named by the target's stable `icon{i}` identifier, matching `get_icons()` / `get_targets()` and
-        the per-fixation distance columns. They were previously `target{j}` - the target's position *among the
-        targets* - which meant the same physical icon carried different names in different trials.
-        """
-        if x.shape != y.shape:
-            raise ValueError(f"Input arrays must have the same shape. Got {x.shape} and {y.shape}.")
-        targets = [(icon_id, img) for icon_id, img, is_tgt in self._search_array.icons if is_tgt]
-        coords = np.column_stack((x, y))                                                            # shape (n_coords, 2)
-        target_coords = np.array([(img.x, img.y) for _icon_id, img in targets])                     # shape (n_targets, 2)
-        dists = np.linalg.norm(coords[:, np.newaxis, :] - target_coords[np.newaxis, :, :], axis=2)  # shape (n_coords, n_targets)
-        dists = pd.DataFrame(dists, columns=[icon_id for icon_id, _img in targets])
-        return dists
 
     def _calculate_gaze_coverage(self, eye: DominantEyeEnum) -> float:
         """ Calculates the percent of samples with valid gaze data (not NaN) for the specified eye. """

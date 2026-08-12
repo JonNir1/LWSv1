@@ -1,37 +1,41 @@
-from typing import Literal, Optional
+from __future__ import annotations
+
+from typing import Literal, Optional, TYPE_CHECKING
 
 import pandas as pd
 
-import config as cnfg
-import analysis.helpers.funnels.funnel_config as fcfg
-from analysis.helpers.read_data import read_data
-from analysis.helpers.funnels.trial_inclusion import check_trial_inclusion_criteria
-from analysis.helpers.funnels.event_classification import check_lws_criteria, check_target_return_criteria
+import pipeline.config as pcfg
+from pipeline.stage3_classify.trial_inclusion import check_trial_inclusion_criteria
+from pipeline.stage3_classify.event_classification import (
+    assign_fixation_targets, check_lws_criteria, check_target_return_criteria,
+)
 from data_models.LWSEnums import SearchArrayCategoryEnum, ImageCategoryEnum
+
+if TYPE_CHECKING:
+    from analysis.helpers.read_data import DataStore
 
 
 def build_trial_inclusion_funnel(
-    data_dir: str,
-    min_gaze_coverage: int | float = fcfg.DEFAULT_GAZE_COVERAGE_PERCENT_THRESHOLD,
-    min_fixation_rate: float = fcfg.DEFAULT_FIXATION_RATE_THRESHOLD,
-    bad_actions: Optional[fcfg.BAD_ACTIONS_TYPE] = None,
+    data: DataStore,
+    min_gaze_coverage: int | float = pcfg.DEFAULT_GAZE_COVERAGE_PERCENT_THRESHOLD,
+    min_fixation_rate: float = pcfg.DEFAULT_FIXATION_RATE_THRESHOLD,
+    bad_actions: Optional[pcfg.BAD_ACTIONS_TYPE] = None,
     require_actions: bool = False,
 ) -> pd.DataFrame:
     bad_actions = _bad_actions_as_list(bad_actions)
-    loaded = read_data(data_dir, drop_bad_eye=True)
     trial_criteria = check_trial_inclusion_criteria(
-        loaded.metadata, loaded.fixations, loaded.actions, loaded.identifications,
+        data.metadata, data.fixations, data.actions, data.identifications,
         min_gaze_coverage=min_gaze_coverage,
         min_fixation_rate=min_fixation_rate,
         bad_actions=bad_actions,
         require_actions=require_actions,
     )
     trial_funnel = _convert_criteria_to_funnel(trial_criteria)
-    trial_funnel = (    # attach trial category from metadata
+    trial_funnel = (
         trial_funnel
         .reset_index(drop=False)
         .merge(
-            loaded.metadata[["subject", "trial", "trial_category"]],
+            data.metadata[["subject", "trial", "trial_category"]],
             on=["subject", "trial"],
             how="left"
         )
@@ -40,15 +44,14 @@ def build_trial_inclusion_funnel(
 
 
 def build_event_classification_funnel(
-    data_dir: str,
+    data: DataStore,
     funnel_type: Literal["lws", "target_return"],
     event_type: Literal["fixation", "visit"],
-    min_gaze_coverage: int | float = fcfg.DEFAULT_GAZE_COVERAGE_PERCENT_THRESHOLD,
-    min_fixation_rate: float = fcfg.DEFAULT_FIXATION_RATE_THRESHOLD,
-    bad_actions: Optional[fcfg.BAD_ACTIONS_TYPE] = None,
+    min_gaze_coverage: int | float = pcfg.DEFAULT_GAZE_COVERAGE_PERCENT_THRESHOLD,
+    min_fixation_rate: float = pcfg.DEFAULT_FIXATION_RATE_THRESHOLD,
+    bad_actions: Optional[pcfg.BAD_ACTIONS_TYPE] = None,
     require_actions: bool = False,
-    on_target_threshold_dva: float = cnfg.ON_TARGET_THRESHOLD_DVA,
-    exclude: Literal["none", "invalid_trials", "outliers", "both"] = "both",
+    exclude: Literal["none", "invalid_trials"] = "invalid_trials",
 ) -> pd.DataFrame:
     """
     Build a per-event funnel classifying each event as LWS or as a target-return.
@@ -77,19 +80,19 @@ def build_event_classification_funnel(
         raise ValueError("`funnel_type` must be 'lws' or 'target_return'.")
     if event_type not in {"fixation", "visit"}:
         raise ValueError("`event_type` must be 'fixation' or 'visit'.")
-    if exclude not in {"none", "invalid_trials", "outliers", "both"}:
-        raise ValueError("`exclude` must be 'none', 'invalid_trials', 'outliers', or 'both'.")
+    if exclude not in {"none", "invalid_trials"}:
+        raise ValueError("`exclude` must be 'none' or 'invalid_trials'.")
     bad_actions = _bad_actions_as_list(bad_actions)
-    loaded = read_data(data_dir, drop_bad_eye=True, drop_outliers=exclude in {"outliers", "both"})
-    event_data = loaded.fixations if event_type == "fixation" else loaded.visits
-    if event_data is None:
-        raise NotImplementedError(
-            f"no {event_type} table in {data_dir!r}. Visits are not built at present: they need the per-target "
-            "distances that were removed from the events table, restored by the deferred `fixations_to_targets()` "
-            "helper - see CODE_REVIEW.md"
+    if event_type == "fixation":
+        event_data = assign_fixation_targets(
+            data.fixations, data.fixation_target_dists, data.on_target_threshold_dva,
         )
+    else:
+        event_data = data.visits
+    if event_data is None or (hasattr(event_data, 'empty') and event_data.empty):
+        raise ValueError(f"no {event_type} data available")
     trial_criteria = check_trial_inclusion_criteria(
-        loaded.metadata, loaded.fixations, loaded.actions, loaded.identifications,
+        data.metadata, data.fixations, data.actions, data.identifications,
         min_gaze_coverage=min_gaze_coverage,
         min_fixation_rate=min_fixation_rate,
         bad_actions=bad_actions,
@@ -99,8 +102,8 @@ def build_event_classification_funnel(
         funnel_type=funnel_type,
         event_type=event_type,
         event_data=event_data,
-        idents=loaded.identifications,
-        on_target_threshold_dva=on_target_threshold_dva,
+        idents=data.identifications,
+        on_target_threshold_dva=data.on_target_threshold_dva,
     )
     # build a joint funnel table aligned to event_data rows
     joint_criteria = _join_trial_and_event_criteria(
@@ -112,12 +115,12 @@ def build_event_classification_funnel(
     out = (
         pd.concat([event_data, funnel_df], axis=1)
         .merge(
-            loaded.metadata[["subject", "trial", "trial_category"]],
+            data.metadata[["subject", "trial", "trial_category"]],
             on=["subject", "trial"],
             how="left"
         )
         .merge(
-            loaded.targets[["subject", "trial", "target", "category", "angle"]],
+            data.targets[["subject", "trial", "target", "category", "angle"]],
             on=["subject", "trial", "target"],
             how="left"
         )
@@ -131,10 +134,10 @@ def build_event_classification_funnel(
     return _coerce_column_types(out)
 
 
-def _bad_actions_as_list(bad_actions: Optional[fcfg.BAD_ACTIONS_TYPE]) -> list[fcfg.SubjectActionCategoryEnum]:
+def _bad_actions_as_list(bad_actions: Optional[pcfg.BAD_ACTIONS_TYPE]) -> list[pcfg.SubjectActionCategoryEnum]:
     if bad_actions is None:
-        return list(fcfg.DEFAULT_BAD_ACTIONS)
-    if isinstance(bad_actions, fcfg.SubjectActionCategoryEnum):
+        return list(pcfg.DEFAULT_BAD_ACTIONS)
+    if isinstance(bad_actions, pcfg.SubjectActionCategoryEnum):
         return [bad_actions]
     return list(bad_actions)
 
@@ -151,8 +154,8 @@ def _compute_event_classification_criteria(
             event_data, idents,
             event_type=event_type,
             on_target_threshold_dva=on_target_threshold_dva,
-            time_to_trial_end_threshold=fcfg.DEFAULT_MIN_MS_BEFORE_TRIAL_END,
-            min_fixs_from_exemplars=fcfg.DEFAULT_MIN_FIXATIONS_FROM_STRIP,
+            time_to_trial_end_threshold=pcfg.DEFAULT_MIN_MS_BEFORE_TRIAL_END,
+            min_fixs_from_exemplars=pcfg.DEFAULT_MIN_FIXATIONS_FROM_STRIP,
         )
     return check_target_return_criteria(
         event_data, idents,
@@ -195,7 +198,7 @@ def _convert_criteria_to_funnel(criteria_df: pd.DataFrame) -> pd.DataFrame:
     cumulative = pd.Series(True, index=criteria_df.index)
     for col in criteria_df.columns:
         cumulative &= criteria_df[col].fillna(False).astype(bool)
-        funnel_df[fcfg.cumulative_name(col)] = cumulative
+        funnel_df[pcfg.cumulative_name(col)] = cumulative
     assert_is_cumulative(funnel_df)
     return funnel_df
 

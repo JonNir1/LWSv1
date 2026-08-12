@@ -4,7 +4,7 @@ from typing import Literal, Callable
 import pandas as pd
 
 import constants as cnst
-from analysis.helpers.funnels.funnel_config import IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA
+from pipeline.config import IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA
 from data_models.LWSEnums import SignalDetectionCategoryEnum
 
 # identification categories that count as "the subject identified this target"
@@ -53,23 +53,46 @@ def check_target_return_criteria(
     return out
 
 
+def assign_fixation_targets(
+    fixations: pd.DataFrame,
+    fixation_target_dists: pd.DataFrame,
+    on_target_threshold_dva: float,
+) -> pd.DataFrame:
+    """
+    Return a copy of fixations with `target` set to the closest within-threshold target (NaN if none).
+
+    This is the fixation-level analogue of the visit table's pre-existing `target` column: each fixation is
+    attributed to at most one target (the nearest one within threshold).
+    """
+    if on_target_threshold_dva <= 0:
+        raise ValueError(f"`on_target_threshold_dva` must be positive, got {on_target_threshold_dva}.")
+    keys = ["subject", "trial", "eye", "event"]
+    within = fixation_target_dists[fixation_target_dists["distance_dva"] <= on_target_threshold_dva]
+    closest = within.loc[within.groupby(keys, observed=True)["distance_dva"].idxmin()]
+    out = fixations.merge(closest[keys + ["target"]], on=keys, how="left")
+    out.index = fixations.index
+    return out
+
+
 def is_on_target(
     event_data: pd.DataFrame,
     on_target_threshold_dva: float,
     event_type: Literal["fixation", "visit"],
 ) -> pd.Series:
-    """ True if any relevant distance column <= threshold. """
     if on_target_threshold_dva <= 0:
         raise ValueError(f"`on_target_threshold_dva` must be positive, got {on_target_threshold_dva}.")
-    dist_cols = _distance_columns(event_data, event_type)
-    on_target = (
+    if event_type == "fixation":
+        return event_data["target"].notna().astype(bool).rename("on_target")
+    dist_cols = [c for c in event_data.columns if c == VISIT_DISTANCE_COLUMN]
+    if not dist_cols:
+        raise ValueError("No distance column found for visits.")
+    return (
         event_data[dist_cols]
         .le(on_target_threshold_dva)
         .any(axis=1)
         .astype(bool)
         .rename("on_target")
     )
-    return on_target
 
 
 def is_before_identification(event_data: pd.DataFrame, ident_time: pd.Series) -> pd.Series:
@@ -115,29 +138,7 @@ def _validate_event_type(event_type: str) -> None:
         raise ValueError(f"Unknown event type: {event_type!r}. Expected 'fixation' or 'visit'.")
 
 
-# For a visit, `min`/`max`/`weighted` distance columns all exist. Taking `.any()` over all three is equivalent to
-# testing `min` alone (min <= weighted <= max), which reads as stricter than it is. Name the statistic explicitly:
-# a visit counts as on-target when its duration-weighted mean distance is within threshold.
 VISIT_DISTANCE_COLUMN = "weighted_distance_dva"
-
-
-def _distance_columns(event_data: pd.DataFrame, event_type: Literal["fixation", "visit"]) -> list[str]:
-    if event_type == "fixation":
-        # e.g. icon37_distance_dva, icon92_distance_dva, ... one per target, and the event is on-target if it is
-        # within threshold of any of them
-        dist_cols = [c for c in event_data.columns if c.startswith(cnst.ICON_STR) and c.endswith("distance_dva")]
-        if not dist_cols:
-            raise NotImplementedError(
-                "the per-target distance columns were removed from the events table (they were unique per trial, "
-                "so concatenating subjects produced a 97%-NaN frame). LWS / target-return classification is "
-                "restored by the deferred `fixations_to_targets()` helper - see CODE_REVIEW.md"
-            )
-    else:
-        # a visit already belongs to exactly one target, so there is a single distance to test
-        dist_cols = [c for c in event_data.columns if c == VISIT_DISTANCE_COLUMN]
-    if not dist_cols:
-        raise ValueError(f"No distance columns found for event_type={event_type!r}.")
-    return dist_cols
 
 
 def identification_time_lookup(idents: pd.DataFrame) -> pd.Series:

@@ -10,10 +10,12 @@ import pytest
 
 from conftest import make_fixation_row, make_idents
 
-from analysis.helpers.funnels.event_classification import (
+from pipeline.stage3_classify.event_classification import (
+    assign_fixation_targets,
     identification_time_lookup,
     is_after_identification,
     is_before_identification,
+    is_on_target,
 )
 
 
@@ -32,6 +34,36 @@ def event_on(target: str, start_time: float, end_time: float, subject: int = 1, 
         "to_trial_end": 10_000.0 - end_time,
         "num_fixs_to_strip": np.inf,
     }
+
+
+class TestAssignFixationTargets:
+    def _fixations(self):
+        return pd.DataFrame([
+            {"subject": 1, "trial": 1, "eye": "LEFT", "event": 0, "x": 100, "y": 100},
+            {"subject": 1, "trial": 1, "eye": "LEFT", "event": 1, "x": 500, "y": 500},
+        ])
+
+    def _dists(self):
+        return pd.DataFrame([
+            {"subject": 1, "trial": 1, "eye": "LEFT", "event": 0, "target": "icon5", "distance_dva": 1.0},
+            {"subject": 1, "trial": 1, "eye": "LEFT", "event": 0, "target": "icon8", "distance_dva": 3.0},
+            {"subject": 1, "trial": 1, "eye": "LEFT", "event": 1, "target": "icon5", "distance_dva": 5.0},
+            {"subject": 1, "trial": 1, "eye": "LEFT", "event": 1, "target": "icon8", "distance_dva": 4.0},
+        ])
+
+    def test_assigns_closest_within_threshold(self):
+        result = assign_fixation_targets(self._fixations(), self._dists(), 2.0)
+        assert result.loc[0, "target"] == "icon5"
+        assert pd.isna(result.loc[1, "target"])
+
+    def test_no_target_when_none_within_threshold(self):
+        result = assign_fixation_targets(self._fixations(), self._dists(), 0.5)
+        assert result["target"].isna().all()
+
+    def test_is_on_target_for_fixations(self):
+        augmented = assign_fixation_targets(self._fixations(), self._dists(), 2.0)
+        on = is_on_target(augmented, 2.0, "fixation")
+        assert on.tolist() == [True, False]
 
 
 class TestIdentificationTimeLookup:

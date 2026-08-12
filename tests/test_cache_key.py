@@ -8,7 +8,7 @@ import pathlib
 
 import pytest
 
-from pipeline.cache_key import (
+from pipeline.stage1_parse.cache_key import (
     build_cache_key,
     describe_staleness,
     is_cache_valid,
@@ -32,7 +32,7 @@ class TestCodeHash:
 
     def test_changes_when_a_stage1_source_changes(self, monkeypatch, tmp_path):
         """Editing preprocessing code must invalidate - the whole point of H3."""
-        import pipeline.cache_key as ck
+        import pipeline.stage1_parse.cache_key as ck
 
         before = ck.stage1_code_hash()
         fake_root = tmp_path / "repo"
