@@ -111,3 +111,14 @@ class TestBeforeAfterIdentification:
         data = events(event_on("target_unknown", 1000.0, 1500.0))
         with pytest.raises((KeyError, ValueError, AssertionError)):
             is_before_identification(data, ident)
+
+    def test_nan_target_returns_false(self):
+        """Off-target fixations (target=NaN) must not crash; they get False for both temporal criteria."""
+        ident = identification_time_lookup(make_idents([("target0", "hit", 4000.0)]))
+        on_target_row = event_on("target0", 1000.0, 1500.0)
+        off_target_row = event_on(np.nan, 2000.0, 2500.0)
+        data = events(on_target_row, off_target_row)
+        before = is_before_identification(data, ident)
+        after = is_after_identification(data, ident)
+        assert before.tolist() == [True, False]
+        assert after.tolist() == [False, False]

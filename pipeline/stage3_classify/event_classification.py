@@ -185,12 +185,20 @@ def _map_ident_time(event_data: pd.DataFrame, id_time: pd.Series) -> pd.Series:
     if missing:
         raise KeyError(f"`event_data` missing columns: {sorted(missing)}")
 
-    key = pd.MultiIndex.from_frame(event_data[["subject", "trial", "target"]])
-    mapped = pd.Series(key.map(id_time), index=event_data.index, dtype=float)
-    if mapped.isna().any():
-        unmapped = key[mapped.isna().to_numpy()].unique().tolist()
+    has_target = event_data["target"].notna()
+    if not has_target.any():
+        return pd.Series(float("nan"), index=event_data.index, dtype=float)
+
+    on_target_data = event_data.loc[has_target, ["subject", "trial", "target"]]
+    key = pd.MultiIndex.from_frame(on_target_data)
+    mapped_on_target = pd.Series(key.map(id_time), index=on_target_data.index, dtype=float)
+    if mapped_on_target.isna().any():
+        unmapped = key[mapped_on_target.isna().to_numpy()].unique().tolist()
         raise KeyError(
             f"{len(unmapped)} (subject, trial, target) key(s) have no identification time, e.g. {unmapped[:5]}. "
             f"Every target should appear in `idents` as a hit or a miss."
         )
+    # Off-target fixations get NaN; callers treat NaN as False (conservative)
+    mapped = pd.Series(float("nan"), index=event_data.index, dtype=float)
+    mapped.loc[has_target] = mapped_on_target
     return mapped
