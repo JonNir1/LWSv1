@@ -51,14 +51,27 @@ The mirror construct is a **target-return**: an on-target event *after* identifi
 - R: `mgcv` for the GAM scripts under `analysis/R/`.
 - There are no `__init__.py` files and no packaging metadata: **all code must be run with the repo root as CWD /
   sys.path root** (`import config as cnfg`, `from analysis.helpers... import ...`).
-- There is no test suite, no linter config, and no build step.
+- Tests: `pytest tests/ -q` from repo root. `pyproject.toml` sets `pythonpath = ["."]` and `testpaths = ["tests"]`.
+  No linter config and no build step.
 
 ## Commands
 
-Run stage 1 (parse raw data to pickles, from repo root, in the venv):
+Run the full pipeline (parse + align + classify, from repo root, in the venv):
+
+```bash
+python -c "from pipeline.run import run_pipeline; run_pipeline(save=True, verbose=True)"
+```
+
+Run stage 1 only (parse raw data to pickles):
 
 ```bash
 python -c "from pipeline.stage1_parse.run_stage1 import run_stage1; run_stage1(save=True, verbose=True)"
+```
+
+Run tests:
+
+```bash
+pytest tests/ -q
 ```
 
 Fit a GAM (from repo root; the scripts use `file.path(\"analysis\", \"R\", ...)` relative paths):
@@ -74,14 +87,21 @@ notebooks then read to overlay model estimates on plotly figures.
 ## Architecture
 
 Three stages: parse (raw data to tables), align (join fixations to targets, build visits and identifications),
-and classify (funnels, LWS/target-return). Stage 1 persists pickles; stage 2 computes on-the-fly.
+and classify (funnels, LWS/target-return). Stage 1 persists pickles; stages 2 and 3 compute on-the-fly.
+
+`pipeline/run.py:run_pipeline()` composes all three stages and returns a `DataStore` with every table populated.
+`analysis/helpers/read_data.py:load_data()` does stages 2+3 from pre-built pickles (the common notebook entry point).
+
+All pipeline thresholds, criteria lists, and naming helpers live in `pipeline/config.py`. The root-level `config.py`
+re-exports pipeline thresholds via `from pipeline.config import *` for backward compatibility (TODO: drop the
+re-export once all consumers import from `pipeline.config` directly).
 
 ### Stage 1: parse (`pipeline/stage1_parse/`, `data_models/`)
 
 `run_stage1()` = `parse_all_subjects()` then `build_dataframes()`, saving four pickles to `cnfg.OUTPUT_PATH`:
 `icons.pkl`, `actions.pkl`, `metadata.pkl`, `eye_movements.pkl`.
 
-Shared distance math lives in `pipeline/utils.py`: `pixel_distance(x1, y1, x2, y2)` and
+Shared distance math lives in `utils/distances.py`: `pixel_distance(x1, y1, x2, y2)` and
 `px2deg(screen_distance_cm)`.
 
 ### `eye_movements.pkl` and why fixations are a view
@@ -136,10 +156,9 @@ Caching is layered: `Subject.pkl` and `eye_movements_df.pkl` are written per sub
 `OUTPUT_PATH/subjects/<exp>_Subject_NN/`, and `parse_single_subject` prefers the pickle over re-parsing raw data.
 Both carry a `<name>.cache.json` sidecar keyed on the stage-1 source files (`pipeline/stage1_parse/cache_key.py`).
 
-### Stage 2: align (`pipeline/stage2_align/`, `analysis/helpers/read_data.py`)
+### Stage 2: align (`pipeline/stage2_align/`)
 
-`load_data(dir_path)` loads stage-1 pickles and computes stage-2 outputs in one step, returning a `DataStore`
-dataclass with all tables:
+Stage 2 computes on-the-fly from stage-1 pickles, producing three tables stored on `DataStore`:
 
 - `fixation_target_dists`: long-format (subject, trial, eye, event, target, distance_px, distance_dva), from
   `pipeline/stage2_align/fixations_to_targets.py`
@@ -150,26 +169,37 @@ dataclass with all tables:
 Nothing from stage 2 is persisted as pickles. All outputs depend on researcher-chosen thresholds
 (`on_target_threshold_dva`, `visit_merging_time_threshold`) stored on `DataStore`.
 
-### Stage 3: classify / funnels and analysis (`analysis/`)
+### Stage 3: classify (`pipeline/stage3_classify/`)
 
 The "funnel" is the core abstraction: an ordered list of boolean criteria, converted to **cumulative** pass columns
-(`_convert_criteria_to_funnel`), so each column means "passed this and every earlier criterion". Two entry points in
-`analysis/helpers/funnels/build_funnels.py`:
+(`_convert_criteria_to_funnel`), so each column means "passed this and every earlier criterion".
 
-- `build_trial_inclusion_funnel(...)` -> per (subject, trial), criteria from `TRIAL_INCLUSION_CRITERIA` plus
-  `is_valid_trial`.
-- `build_event_classification_funnel(data_dir, funnel_type, event_type, ...)` -> per fixation or per visit,
+`run_stage3(data)` in `pipeline/stage3_classify/run_stage3.py` builds all funnels and returns
+`(trial_funnel, event_funnels)`. `event_funnels` is a dict keyed by `"{funnel_type}_{event_type}"` (e.g.
+`"lws_visit"`, `"target_return_fixation"`). Both are stored on `DataStore`.
+
+Two entry points in `pipeline/stage3_classify/build_funnels.py`:
+
+- `build_trial_inclusion_funnel(data: DataStore, ...)` -> per (subject, trial), criteria from
+  `TRIAL_INCLUSION_CRITERIA` plus `is_valid_trial`.
+- `build_event_classification_funnel(data: DataStore, funnel_type, event_type, ...)` -> per fixation or per visit,
   trial-level criteria joined onto event-level criteria (`IS_LWS_CRITERIA` or `IS_TARGET_RETURN_CRITERIA`), plus
   `is_lws` / `is_target_return`, enriched with `trial_category`, `target_category`, `target_angle`.
 
-Criteria ordering lives in `analysis/helpers/funnels/funnel_config.py` (the lists), the predicates in
-`trial_inclusion.py` and `event_classification.py` (each returns a named boolean Series). To add a criterion: write
-the predicate, register it in the `criteria_functions` dict, and insert its name into the relevant list.
+Criteria ordering and naming helpers live in `pipeline/config.py` (the lists, `CUMULATIVE_PREFIX`, `cumulative_name()`,
+`cumulative_names()`). The predicates live in `trial_inclusion.py` and `event_classification.py` (each returns a named
+boolean Series). To add a criterion: write the predicate, register it in the `criteria_functions` dict, and insert its
+name into the relevant list in `pipeline/config.py`.
+
+For fixation-level funnels, `assign_fixation_targets()` in `event_classification.py` uses the long-format
+`fixation_target_dists` from stage 2 to assign the closest within-threshold target to each fixation. The visit path
+uses `weighted_distance_dva` as before.
 
 Two things to keep in mind when reading funnel output:
 
-- **Columns are cumulative, but keep the raw criterion name.** `on_target` means "passed every earlier criterion
-  *and* is on target". This matters when computing proportions from the exported CSV (`CODE_REVIEW.md` M7).
+- **Columns are cumulative with `upto_` prefix.** `upto_on_target` means "passed every earlier criterion *and* is on
+  target". Terminal columns (`is_valid_trial`, `is_lws`, `is_target_return`) keep their names since both readings
+  coincide. `cumulative_name()` / `cumulative_names()` in `pipeline/config.py` map criteria to column names.
 - **`event_type` changes target attribution.** A fixation row carries only its *closest* target; a visit row exists
   per (target, visit), so one fixation can contribute to several. Fixation- and visit-level counts are not
   comparable denominators.
@@ -177,19 +207,35 @@ Two things to keep in mind when reading funnel output:
 Every target has an identification time by construction: the first hit, or `inf` if it was never identified (so
 every on-target event on a missed target is pre-identification). A missing time is a data error and raises.
 
-`analysis/helpers/sdt.py` computes hit/miss/FA/CR counts and rates, d' (with Macmillan & Kaplan or log-linear
+### `DataStore` (`analysis/helpers/read_data.py`)
+
+Frozen dataclass holding all tables from all three stages:
+
+- **Stage 1:** `icons`, `actions`, `metadata`, `eye_movements` (all `Optional[pd.DataFrame]`)
+- **Stage 2:** `fixation_target_dists`, `visits`, `identifications`
+- **Stage 3:** `trial_funnel` (DataFrame), `event_funnels` (dict[str, DataFrame])
+- **Thresholds:** `on_target_threshold_dva`, `visit_merging_time_threshold`, `min_gaze_coverage`, `min_fixation_rate`
+- **Derived properties:** `fixations` (event_type == FIXATION view), `targets` (is_target subset of icons)
+
+### Shared utilities and analysis helpers
+
+`utils/sdt.py` computes hit/miss/FA/CR counts and rates, d' (with Macmillan & Kaplan or log-linear
 corrections), A', and F1 per subject-trial.
+
+`analysis/helpers/visualizations/funnel/size_and_proportion.py` computes step sizes for funnel visualization.
 
 Analysis lives in notebooks at `analysis/*.ipynb` (`hit_rate`, `time_on_task`, `time_in_trial`, `spatial_effects`,
 `stimulus_features`, `trial_exclusion`, `gaze_behavior`, `ssm_and_ab`), each of which builds a funnel and plots it.
-`analysis/helpers/default_value_selection/_*.ipynb` are the notebooks that justify the hyperparameter defaults.
+`analysis/helpers/default_value_selection/_determine_fvf.ipynb` justifies the FVF hyperparameter.
+Stage-3 threshold notebooks (`_determine_fixation_rate`, `_determine_fixs_to_strip`, `_determine_time_to_trial_end`)
+live in `pipeline/stage3_classify/`.
 `__old__subject_comparisons/` is superseded, `_publications_/` holds figure notebooks, `plgrnd2.py` is a scratchpad.
 
 ## Conventions
 
 - Column and key names are centralized in `constants.py` as `*_STR` constants and referenced as `cnst.X` /
   `cnfg.X` rather than string literals; `config.py` does `from constants import *`, so `cnfg.TRIAL_STR` also works.
-- `funnel_config.py` is the source of truth for funnel behavior, not `config.py`.
+- `pipeline/config.py` is the source of truth for all pipeline thresholds and funnel behavior.
 - Times are ms relative to trial onset; distances exist in both px and DVA (`px2deg` derived per subject from screen
   distance and `TOBII_MONITOR`). `to_trial_end` is time remaining, not elapsed.
 - Both eyes are detected and kept through stage 1; the non-dominant eye is dropped at read time via

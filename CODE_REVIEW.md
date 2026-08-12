@@ -17,7 +17,7 @@ the numpy/pandas upgrade. New findings surfaced while building the test suite: *
 `tests/` encodes the findings as executable claims. Each test for an unfixed bug is `xfail(strict=True)`, so the suite
 is green now and turns red the moment a bug is fixed without its marker being removed.
 
-Suite status: **155 passed, 15 skipped** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6 (13 files under `tests/`).
+Suite status: **158 passed, 14 skipped** on numpy 2.5.1 / pandas 3.0.5 / peyes 0.0.9.6 (13 files under `tests/`).
 
 Every skip has the same cause: the built pickles in `OUTPUT_PATH` predate the icon refactor, so nothing keyed on
 the `icon{i}` identifier can be checked against them. They become `xfail`/pass on the next `run_pipeline()`. The
@@ -98,8 +98,9 @@ Recorded here so they are not re-litigated as defects. These need a research dec
   justification treatment as `TIME_TO_TRIAL_END_THRESHOLD` and `FIXATIONS_TO_STRIP_THRESHOLD` in
   `analysis/helpers/default_value_selection/`.
 - ~~**T4. `fixations_to_targets()` -- restore per-target distances in stage 2.**~~ *(RESOLVED 2026-08-11:
-  implemented as `pipeline/align/fixations_to_targets.py` returning long-format distances; visits and identifications
-  also moved to stage 2 as `pipeline/align/build_visits.py` and `pipeline/align/target_identifications.py`.)* See below.
+  implemented as `pipeline/stage2_align/fixations_to_targets.py` returning long-format distances; visits and
+  identifications also moved to stage 2 as `pipeline/stage2_align/build_visits.py` and
+  `pipeline/stage2_align/target_identifications.py`.)* See below.
 - **T5. Three gaps reported upstream to `peyes`.** *(RESOLVED 2026-08-11: verified against the installed 0.0.9.6
   and filed on the `peyes` repo.)* Kept here because the workarounds stay until upstream ships fixes.
   1. **`summary()` omits `start_pixel` / `end_pixel`** (`_DataModels/Event.py:135-160`), though both exist as
@@ -141,27 +142,25 @@ looks lossy.
 `closest_icon_distance_dva` (fixations only). Measured on subject 12: 24,668 events x 31 columns = **5.7 MB
 (232 B/row)**, against 16.6 MB for 11,733 fixations x 175 columns — a third of the size for 2.1x the rows.
 
-**What is broken until this lands.** Each raises `NotImplementedError` naming `fixations_to_targets()` rather than
-returning a wrong answer, and none of the code was deleted:
+**What was broken (all now resolved).** These raised `NotImplementedError` naming `fixations_to_targets()`:
 
-| broken | where |
+| item | resolution |
 | --- | --- |
-| visit construction (`visits.pkl` is no longer produced) | `Subject.get_visits`, `preprocess/visits.py` `_assign_visit_ids` |
-| LWS / target-return funnels, both `fixation` and `visit` paths | `funnels/event_classification.py` `_distance_columns` |
-| all three FVF estimators | `analysis/helpers/fvf.py` `per_target_distances` |
-| four threshold-derivation notebooks | `_determine_on_target_threshold`, `_determine_fixs_to_strip`, `_determine_time_to_trial_end`, `_determine_fvf` |
-| `tests/test_realdata_findings.py` on-target computation | already latently broken — it globs `startswith("target")` while builds emit `icon*` |
+| visit construction | resolved: `pipeline/stage2_align/build_visits.py` builds visits on-the-fly from long-format distances |
+| LWS / target-return funnels, both paths | resolved: `pipeline/stage3_classify/event_classification.py` uses `assign_fixation_targets()` for fixations, `weighted_distance_dva` for visits |
+| all three FVF estimators | `analysis/helpers/fvf.py` `per_target_distances` still broken (needs updating to use long-format distances) |
+| four threshold-derivation notebooks | partially resolved: three moved to `pipeline/stage3_classify/`; `_determine_on_target_threshold` and `_determine_fvf` still need updating |
+| `tests/test_realdata_findings.py` on-target computation | resolved: tests use stage-2 long-format distances |
 
-**Shape of the fix.** A stage-2 helper that takes the fixation subset plus `icons.pkl` and returns the long format
-`(subject, trial, eye, event, icon, distance_px, distance_dva)` — long, not wide, so it never re-creates the sparse
-block. It also lets the same helper serve distractors, which the wide table could not (see the per-icon-visits note
-in `CLAUDE.md`). Two follow-ups belong with it:
+**Shape of the fix (implemented).** `pipeline/stage2_align/fixations_to_targets.py` returns the long format
+`(subject, trial, eye, event, target, distance_px, distance_dva)`. `pipeline/stage3_classify/event_classification.py`
+uses `assign_fixation_targets()` to pick the closest within-threshold target per fixation from the long-format table.
+
+**Remaining follow-ups:**
 
 - **FVF's "preceding fixation" logic.** `estimate_by_launch_distance` and `estimate_by_selection_hazard` walk
   `event - 1` to find the launching fixation. In the events table that neighbour is usually a *saccade*, so both
   must filter to fixations before stepping.
-- **`read_data`'s visit branch** can be deleted rather than restored if visits move to stage 2, which is the
-  current intent.
 
 ---
 
@@ -245,7 +244,7 @@ This also removes the `None`-index path entirely.
 
 **STATUS: FIXED** (`c25b527`).
 
-**Where:** `analysis/helpers/funnels/event_classification.py:122-134`
+**Where:** `pipeline/stage3_classify/event_classification.py` (was `analysis/helpers/funnels/event_classification.py`)
 
 ```python
 s = idents.dropna(subset=["time"]).set_index(["subject", "trial", "target"])["time"]
@@ -392,7 +391,7 @@ Two lessons worth keeping: a `groupby.transform` callable must preserve the grou
 
 **STATUS: FIXED** (`e3d432a`).
 
-**Where:** `analysis/helpers/read_data.py:42-46`; `analysis/helpers/funnels/build_funnels.py:63-64`
+**Where:** `analysis/helpers/read_data.py`; `pipeline/stage3_classify/build_funnels.py`
 
 **Description.** `read_data` filters `fixations` by `outlier_reasons` but leaves `visits` untouched — `visits.pkl` was
 built in stage 1 from *all* fixations, and the visit table carries no outlier column. Yet
@@ -821,7 +820,7 @@ tolerance. Optionally confirm inertness by rebuilding one subject and asserting 
 
 **STATUS: FIXED** (`26968d6`).
 
-**Where:** `analysis/helpers/funnels/event_classification.py:110-119`, `50-66`
+**Where:** `pipeline/stage3_classify/event_classification.py` (was `analysis/helpers/funnels/event_classification.py`)
 
 For `event_type="visit"`, `_distance_columns` returns *all* columns ending in `distance_dva` — i.e.
 `min_distance_dva`, `max_distance_dva`, **and** `weighted_distance_dva` — and `is_on_target` then takes `.any(axis=1)`.
@@ -890,7 +889,7 @@ with `START_RECORD`), but the failure is silent.
 
 **STATUS: FIXED** (`26968d6`).
 
-**Where:** `analysis/helpers/funnels/build_funnels.py:172-183`
+**Where:** `pipeline/stage3_classify/build_funnels.py` (was `analysis/helpers/funnels/build_funnels.py`)
 
 ```python
 pd.Categorical.from_codes(
@@ -921,7 +920,7 @@ consolidate on that one function and delete the duplicate logic.
 
 **STATUS: FIXED** (`30fe583`).
 
-**Where:** `analysis/helpers/funnels/trial_inclusion.py:40-46`
+**Where:** `pipeline/stage3_classify/trial_inclusion.py` (was `analysis/helpers/funnels/trial_inclusion.py`)
 
 ```python
 pd.concat(ordered_components, axis=1)
@@ -952,7 +951,7 @@ Funnel columns now carry an explicit `upto_` prefix - `upto_on_target` reads as 
 including on_target". This avoids the objection to a bare `passed_` prefix, which could equally be read as "passed
 *only* that criterion". The three terminal columns (`is_valid_trial`, `is_lws`, `is_target_return`) keep their names:
 they are conjunctions by definition, so both readings coincide, and they are what downstream analyses select on.
-`funnel_config.cumulative_name()` / `cumulative_names()` map a criteria list onto column names, so callers never
+`pipeline.config.cumulative_name()` / `cumulative_names()` map a criteria list onto column names, so callers never
 hardcode the prefix.
 
 The standalone columns returned by `check_trial_inclusion_criteria` keep the bare names, so the two can no longer
@@ -971,7 +970,7 @@ Migrated: `analysis/R/helpers.R` (column list, `subset`, plus a clear error when
 **Note.** Any `funnel_results.csv` exported before this change uses the old bare names; re-export it. `helpers.R`
 raises a message saying exactly that rather than failing obscurely.
 
-**Where:** `analysis/helpers/funnels/build_funnels.py:160-166`; consumed in `analysis/R/helpers.R:27-28`
+**Where:** `pipeline/stage3_classify/build_funnels.py` (was `analysis/helpers/funnels/build_funnels.py`); consumed in `analysis/R/helpers.R`
 
 `_convert_criteria_to_funnel` overwrites each criterion column with the running AND of that criterion and all previous
 ones, but keeps the original name. So in the exported `funnel_results.csv`, `on_target` does not mean "this event is on
@@ -1131,7 +1130,8 @@ eccentricity as a covariate and confirm the `te(x, y)` term survives it.
 
 ### M13. Configuration is duplicated, partly stale, and hardcodes machine-specific paths
 
-**STATUS: FIXED** (`2a49ed0`).
+**STATUS: FIXED** (`2a49ed0`, further consolidated in the stage-3 refactor: `pipeline/config.py` is now the single
+source of truth for all pipeline thresholds, criteria lists, and naming helpers).
 
 **Where:** `config.py`
 
@@ -1245,7 +1245,7 @@ that `pixel_size` agrees with `cnst.PIXEL_SIZE_MM / 10` to within rounding. Add 
 
 ### L1. ~~No tests~~
 
-**STATUS: FIXED.** 11 test files, 140 tests, all green (15 skips, every one because the built pickles predate the
+**STATUS: FIXED.** 13 test files, 158 tests, all green (14 skipped because the built pickles predate the
 icon refactor). Every test in the table below exists, under its own or an equivalent name. `pyproject.toml` carries
 `pythonpath = ["."]` and `testpaths = ["tests"]`; the packaging half of the original suggestion was withdrawn with
 M14. The original entry follows.
@@ -1343,22 +1343,17 @@ only those in valid trials — a research question, so left alone.
 
 ### L5. Fixation-level and visit-level analyses attribute targets differently
 
-**STATUS: OPEN, and unchanged by the events refactor.** A fixation row still carries exactly one target - now named
-`closest_icon` (`preprocess/events.py` `_closest_target`) rather than `target`, which at least makes the "closest"
-part self-documenting. A visit row still exists per (target, visit) (`visits.py:20`). So the asymmetry survives:
-a fixation within threshold of two targets contributes **one** fixation row and **two** visit rows.
+**STATUS: PARTIALLY DISSOLVED by the stage-3 refactor.** `fixations_to_targets()` returns long format, so the
+underlying data is one row per (fixation, target). In the fixation-level funnel, `assign_fixation_targets()` picks the
+closest within-threshold target per fixation (one target per fixation row). A visit row still exists per (target,
+visit). So a fixation within threshold of two targets contributes **one** fixation row and **two** visit rows.
 
 Measured on the current build: 24 of 11,716 on-target fixations (0.2%) fall within threshold of two targets, because
-targets are placed far apart. Small, but it means fixation- and visit-level counts are not comparable denominators,
-and one target's episode can be invisible at fixation level.
+targets are placed far apart. Small, but it means fixation- and visit-level counts are not comparable denominators.
 
-Worth being precise about what is *not* wrong here: `is_on_target` tests `.any()` over the per-target distance
-columns while target attribution takes the closest, which looks like it could disagree - but it cannot. The closest
-target is by definition no further than any other, so "within threshold of any" and "the closest is within
-threshold" are the same predicate. The asymmetry is only in row multiplicity, not in the criterion.
-
-**Dissolved by T4.** `fixations_to_targets()` returns long format, so the fixation path is one row per
-(fixation, target) exactly as visits are, and the two levels attribute targets identically.
+The raw asymmetry is now a deliberate design choice rather than an artefact: fixation-level attribution picks the
+closest target, visit-level attribution keeps all within-threshold targets. Both use the same long-format distance
+table from stage 2.
 
 ### L6. ~~R script hygiene~~
 
@@ -1401,17 +1396,17 @@ Every Critical is fixed, and every High except H5 (deferred by decision). All ar
 | --- | --- |
 | **T1** d' denominator | research decision |
 | **T2** what makes a *visit* an outlier | research decision; H2 refuses the request until this is settled |
-| ~~**T4** `fixations_to_targets()`~~ | resolved; long-format distances in `pipeline/align/`, visits and identifications moved to stage 2 |
+| ~~**T4** `fixations_to_targets()`~~ | resolved; long-format distances in `pipeline/stage2_align/`, visits and identifications moved to stage 2 |
 | ~~**T5** three `peyes` gaps~~ | filed upstream; the `start_pixel`/`end_pixel` workaround stays until a fix ships |
 | ~~**T3** fixation `max_duration`~~ | resolved - no bump in the tail, so the 2500 ms default stands with a literature TODO |
 | **H5** trigger pairing | unblocked - raw data and stimuli are local; fall back to `TRIAL_END` |
 | **C3 frequency** | unblocked - `SEARCH_ARRAY_PATH` is now local; needs a pipeline re-run |
 | **M10, M11** GAM specification | deferred by decision; accepted as valid, modelling choice pending |
 | **M12** `px2deg` position dependence | deferred by decision; measured median 3.0% / max 9.7% across real targets |
-| ~~**L5** fixation vs visit target attribution~~ | dissolved by T4; long format makes both levels identical |
+| ~~**L5** fixation vs visit target attribution~~ | partially dissolved by T4 and stage-3 refactor; both levels use the same long-format distance table |
 | ~~**L7** broken cell in `_determine_time_to_trial_end`~~ | fixed; denominator settled as all target-visits across all trials. Re-running is now unblocked (T4 resolved) |
 | ~~**M14** packaging~~ | withdrawn — not a distributable package; the scratchpad import is fixed |
-| ~~**L1** no tests~~ | fixed - 13 files, 155 tests |
+| ~~**L1** no tests~~ | fixed - 13 files, 158 tests |
 | ~~**L3** small nits~~ | fixed |
 | ~~**L6** R script hygiene~~ | fixed, except the `k` choice, which is deferred with M10/M11 |
 | **L4** strip geometry validation | unblocked - `Stimuli/` is now local |
@@ -1436,9 +1431,9 @@ withdrawn. What remains, in the order it should be done:
    pickles, and the current build additionally predates the icon refactor. Delete the per-subject caches (or rely
    on the H3 sidecars to invalidate them), run once, then remove the stale `fixations.pkl` and `visits.pkl` by
    hand. Gate on the C4 invariant test and on the three `xfail`s flipping to pass.
-2. ~~**T4 `fixations_to_targets()`.**~~ Resolved: `pipeline/align/fixations_to_targets.py` returns long format;
-   `build_visits.py` and `target_identifications.py` also moved to stage 2. L5 dissolves: long format makes
-   fixation- and visit-level attribution identical.
+2. ~~**T4 `fixations_to_targets()`.**~~ Resolved: `pipeline/stage2_align/fixations_to_targets.py` returns long format;
+   `build_visits.py` and `target_identifications.py` also moved to stage 2. Stage-3 classification moved to
+   `pipeline/stage3_classify/` with `run_stage3()` as the entry point.
 3. **T1 and T2**, the two research decisions. T1's FVF blocker is resolved; T2 gates whether H2's all-outlier rule
    is the right one.
 4. **H5, L4** — both unblocked now that raw data and `Stimuli/` are local, neither urgent.
