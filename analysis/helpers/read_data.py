@@ -10,6 +10,7 @@ import pipeline.config as pcfg
 from pipeline.stage2_align.fixations_to_targets import fixations_to_targets
 from pipeline.stage2_align.build_visits import build_visits
 from pipeline.stage2_align.target_identifications import build_identifications
+from pipeline.stage3_classify.run_stage3 import run_stage3
 
 
 FIXATION_EVENT_TYPE = "FIXATION"
@@ -17,7 +18,7 @@ FIXATION_EVENT_TYPE = "FIXATION"
 
 @dataclass(frozen=True)
 class DataStore:
-    """All tables needed for analysis: stage-1 pickles plus stage-2 on-the-fly outputs."""
+    """All tables needed for analysis: stage-1 pickles plus stage-2 and stage-3 on-the-fly outputs."""
 
     # stage 1 (persisted)
     icons: Optional[pd.DataFrame]
@@ -30,9 +31,17 @@ class DataStore:
     visits: pd.DataFrame
     identifications: pd.DataFrame
 
+    # stage 3 (computed on-the-fly)
+    trial_funnel: pd.DataFrame
+    event_funnels: dict[str, pd.DataFrame]
+
     # thresholds used to produce stage-2 outputs
     on_target_threshold_dva: float
     visit_merging_time_threshold: float
+
+    # thresholds used to produce stage-3 outputs
+    min_gaze_coverage: float
+    min_fixation_rate: float
 
     @property
     def fixations(self) -> Optional[pd.DataFrame]:
@@ -56,8 +65,10 @@ def load_data(
         on_target_threshold_dva: float = pcfg.ON_TARGET_THRESHOLD_DVA,
         visit_merging_time_threshold: float = pcfg.VISIT_MERGING_TIME_THRESHOLD,
         identification_actions=None,
+        min_gaze_coverage: float = pcfg.DEFAULT_GAZE_COVERAGE_PERCENT_THRESHOLD,
+        min_fixation_rate: float = pcfg.DEFAULT_FIXATION_RATE_THRESHOLD,
 ) -> DataStore:
-    """Load stage-1 pickles and compute stage-2 alignment in one step."""
+    """Load stage-1 pickles and compute stage-2 alignment and stage-3 classification."""
     if identification_actions is None:
         identification_actions = pcfg.IDENTIFICATION_ACTIONS
 
@@ -82,6 +93,29 @@ def load_data(
         identification_actions, on_target_threshold_dva,
     )
 
+    # build a partial DataStore (without stage 3) so run_stage3 can use it
+    partial = DataStore(
+        icons=icons,
+        actions=actions,
+        metadata=metadata,
+        eye_movements=eye_movements,
+        fixation_target_dists=dists,
+        visits=visits,
+        identifications=idents,
+        trial_funnel=pd.DataFrame(),
+        event_funnels={},
+        on_target_threshold_dva=on_target_threshold_dva,
+        visit_merging_time_threshold=visit_merging_time_threshold,
+        min_gaze_coverage=min_gaze_coverage,
+        min_fixation_rate=min_fixation_rate,
+    )
+
+    trial_funnel, event_funnels = run_stage3(
+        partial,
+        min_gaze_coverage=min_gaze_coverage,
+        min_fixation_rate=min_fixation_rate,
+    )
+
     return DataStore(
         icons=icons,
         actions=actions,
@@ -90,8 +124,12 @@ def load_data(
         fixation_target_dists=dists,
         visits=visits,
         identifications=idents,
+        trial_funnel=trial_funnel,
+        event_funnels=event_funnels,
         on_target_threshold_dva=on_target_threshold_dva,
         visit_merging_time_threshold=visit_merging_time_threshold,
+        min_gaze_coverage=min_gaze_coverage,
+        min_fixation_rate=min_fixation_rate,
     )
 
 
