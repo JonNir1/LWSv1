@@ -117,7 +117,24 @@ def build_identifications(
 
     if not results:
         return _empty_result()
-    return pd.concat(results, ignore_index=True)
+    out = pd.concat(results, ignore_index=True)
+
+    # Trials with targets but no actions at all won't appear in the loop above.
+    # Emit misses for any (subject, trial, target) not yet covered.
+    covered = set(zip(out[cnst.SUBJECT_STR], out[cnst.TRIAL_STR]))
+    all_target_trials = (
+        targets
+        .groupby([cnst.SUBJECT_STR, cnst.TRIAL_STR], observed=True)[cnst.TARGET_STR]
+        .apply(np.array)
+    )
+    extra_misses = []
+    for (subj, trial), tgt_ids in all_target_trials.items():
+        if (subj, trial) not in covered:
+            extra_misses.append(_make_misses(tgt_ids, subj, trial))
+    if extra_misses:
+        out = pd.concat([out] + extra_misses, ignore_index=True)
+
+    return out
 
 
 def _gaze_at_time(t: float, trial_fixations: pd.DataFrame) -> tuple[float, float]:
