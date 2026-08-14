@@ -200,6 +200,9 @@ Two things to keep in mind when reading funnel output:
 - **Columns are cumulative with `upto_` prefix.** `upto_on_target` means "passed every earlier criterion *and* is on
   target". Terminal columns (`is_valid_trial`, `is_lws`, `is_target_return`) keep their names since both readings
   coincide. `cumulative_name()` / `cumulative_names()` in `pipeline/config.py` map criteria to column names.
+  Concretely: `is_lws`/`is_target_return` are cumulative through the **trial-level** criteria too (they're prepended
+  before the event-level ones), so both silently already require `is_valid_trial` even though neither
+  `IS_LWS_CRITERIA` nor `IS_TARGET_RETURN_CRITERIA` mentions it. See `CODE_REVIEW.md` L8.
 - **`event_type` changes target attribution.** A fixation row carries only its *closest* target; a visit row exists
   per (target, visit), so one fixation can contribute to several. Fixation- and visit-level counts are not
   comparable denominators.
