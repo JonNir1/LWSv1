@@ -6,6 +6,7 @@ from typing import Optional, Literal
 import pandas as pd
 from numpy import isnan
 
+import config as cnfg
 import pipeline.config as pcfg
 from pipeline.stage2_align.fixations_to_targets import fixations_to_targets
 from pipeline.stage2_align.build_visits import build_visits
@@ -14,6 +15,8 @@ from pipeline.stage3_classify.run_stage3 import run_stage3
 
 
 FIXATION_EVENT_TYPE = "FIXATION"
+
+_DATA_CACHE: dict[tuple, "DataStore"] = {}
 
 
 @dataclass(frozen=True)
@@ -131,6 +134,53 @@ def load_data(
         min_gaze_coverage=min_gaze_coverage,
         min_fixation_rate=min_fixation_rate,
     )
+
+
+def load_analysis_data(
+        dir_path: str = None,
+        funnel_type: str = "lws",
+        event_type: str = "visit",
+        exclude: str = "invalid_trials",
+        drop_bad_eye: bool = True,
+        drop_outliers: bool = True,
+        **load_kwargs,
+) -> tuple["DataStore", pd.DataFrame]:
+    """
+    Convenience wrapper: loads data, retrieves a pre-built event funnel,
+    and applies the requested exclusion filter.
+
+    Returns (DataStore, filtered_funnel_df).
+    """
+    if dir_path is None:
+        dir_path = cnfg.OUTPUT_PATH
+
+    cache_key = (
+        dir_path, drop_bad_eye, drop_outliers,
+        load_kwargs.get("on_target_threshold_dva", pcfg.ON_TARGET_THRESHOLD_DVA),
+        load_kwargs.get("visit_merging_time_threshold", pcfg.VISIT_MERGING_TIME_THRESHOLD),
+        load_kwargs.get("min_gaze_coverage", pcfg.DEFAULT_GAZE_COVERAGE_PERCENT_THRESHOLD),
+        load_kwargs.get("min_fixation_rate", pcfg.DEFAULT_FIXATION_RATE_THRESHOLD),
+    )
+    if cache_key in _DATA_CACHE:
+        data = _DATA_CACHE[cache_key]
+    else:
+        data = load_data(dir_path, drop_bad_eye=drop_bad_eye, drop_outliers=drop_outliers, **load_kwargs)
+        _DATA_CACHE[cache_key] = data
+
+    funnel_key = f"{funnel_type}_{event_type}"
+    if funnel_key not in data.event_funnels:
+        raise KeyError(
+            f"No event funnel '{funnel_key}'. "
+            f"Available: {sorted(data.event_funnels.keys())}"
+        )
+    funnel_df = data.event_funnels[funnel_key]
+
+    if exclude == "invalid_trials":
+        funnel_df = funnel_df[funnel_df["is_valid_trial"].fillna(False)].reset_index(drop=True)
+    elif exclude != "none":
+        raise ValueError(f"exclude must be 'none' or 'invalid_trials', got {exclude!r}")
+
+    return data, funnel_df
 
 
 def parse_as_categorical(series: pd.Series, enum_cls, ordered: bool) -> pd.Categorical:
