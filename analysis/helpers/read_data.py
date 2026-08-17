@@ -140,16 +140,18 @@ def load_analysis_data(
         dir_path: str = None,
         funnel_type: str = "lws",
         event_type: str = "visit",
-        exclude: str = "invalid_trials",
         drop_bad_eye: bool = True,
         drop_outliers: bool = True,
         **load_kwargs,
 ) -> tuple["DataStore", pd.DataFrame]:
     """
-    Convenience wrapper: loads data, retrieves a pre-built event funnel,
-    and applies the requested exclusion filter.
+    Convenience wrapper: loads data and retrieves a pre-built event funnel.
 
-    Returns (DataStore, filtered_funnel_df).
+    Returns (DataStore, funnel_df). The funnel contains all events (including those from invalid trials).
+    To restrict to valid trials, filter explicitly::
+
+        valid = data.trial_funnel.loc[data.trial_funnel["is_valid_trial"], ["subject", "trial"]]
+        funnel_df = funnel_df.merge(valid, on=["subject", "trial"])
     """
     if dir_path is None:
         dir_path = cnfg.OUTPUT_PATH
@@ -173,14 +175,7 @@ def load_analysis_data(
             f"No event funnel '{funnel_key}'. "
             f"Available: {sorted(data.event_funnels.keys())}"
         )
-    funnel_df = data.event_funnels[funnel_key]
-
-    if exclude == "invalid_trials":
-        funnel_df = funnel_df[funnel_df["is_valid_trial"].fillna(False)].reset_index(drop=True)
-    elif exclude != "none":
-        raise ValueError(f"exclude must be 'none' or 'invalid_trials', got {exclude!r}")
-
-    return data, funnel_df
+    return data, data.event_funnels[funnel_key]
 
 
 def parse_as_categorical(series: pd.Series, enum_cls, ordered: bool) -> pd.Categorical:
