@@ -107,7 +107,7 @@ def test_h2_visit_funnel_with_outliers_dropped(data_store):
     """H2: visit-level outlier exclusion (via load_data) produces a non-empty funnel."""
     from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
 
-    funnel = build_event_classification_funnel(data_store, "lws", "visit", exclude="invalid_trials")
+    funnel = build_event_classification_funnel(data_store, "lws", "visit")
     assert len(funnel) > 0
 
 
@@ -115,7 +115,7 @@ def test_h2_fixation_funnel_with_outliers_dropped(data_store):
     """Fixation-level funnel with outliers dropped (via load_data) works."""
     from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
 
-    funnel = build_event_classification_funnel(data_store, "lws", "fixation", exclude="invalid_trials")
+    funnel = build_event_classification_funnel(data_store, "lws", "fixation")
     assert len(funnel) > 0
 
 
