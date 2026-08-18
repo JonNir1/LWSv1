@@ -182,9 +182,10 @@ Two entry points in `pipeline/stage3_classify/build_funnels.py`:
 
 - `build_trial_inclusion_funnel(data: DataStore, ...)` -> per (subject, trial), criteria from
   `TRIAL_INCLUSION_CRITERIA` plus `is_valid_trial`.
-- `build_event_classification_funnel(data: DataStore, funnel_type, event_type, ...)` -> per fixation or per visit,
-  trial-level criteria joined onto event-level criteria (`IS_LWS_CRITERIA` or `IS_TARGET_RETURN_CRITERIA`), plus
-  `is_lws` / `is_target_return`, enriched with `trial_category`, `target_category`, `target_angle`.
+- `build_event_classification_funnel(data: DataStore, funnel_type, event_type)` -> per fixation or per visit,
+  **only** event-level criteria (`IS_LWS_CRITERIA` or `IS_TARGET_RETURN_CRITERIA`), plus `is_lws` /
+  `is_target_return`, enriched with `trial_category`, `target_category`, `target_angle`. Trial validity is not
+  part of the event funnel; consumers filter via `data.trial_funnel["is_valid_trial"]`.
 
 Criteria ordering and naming helpers live in `pipeline/config.py` (the lists, `CUMULATIVE_PREFIX`, `cumulative_name()`,
 `cumulative_names()`). The predicates live in `trial_inclusion.py` and `event_classification.py` (each returns a named
@@ -200,9 +201,8 @@ Two things to keep in mind when reading funnel output:
 - **Columns are cumulative with `upto_` prefix.** `upto_on_target` means "passed every earlier criterion *and* is on
   target". Terminal columns (`is_valid_trial`, `is_lws`, `is_target_return`) keep their names since both readings
   coincide. `cumulative_name()` / `cumulative_names()` in `pipeline/config.py` map criteria to column names.
-  Concretely: `is_lws`/`is_target_return` are cumulative through the **trial-level** criteria too (they're prepended
-  before the event-level ones), so both silently already require `is_valid_trial` even though neither
-  `IS_LWS_CRITERIA` nor `IS_TARGET_RETURN_CRITERIA` mentions it. See `CODE_REVIEW.md` L8.
+  Event funnels contain only event-level criteria; `is_lws`/`is_target_return` do **not** encode trial validity.
+  Consumers filter for valid trials explicitly via `data.trial_funnel["is_valid_trial"]`. See `CODE_REVIEW.md` L8.
 - **`event_type` changes target attribution.** A fixation row carries only its *closest* target; a visit row exists
   per (target, visit), so one fixation can contribute to several. Fixation- and visit-level counts are not
   comparable denominators.

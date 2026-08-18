@@ -89,9 +89,36 @@ class TestAssertIsCumulative:
     def test_a_real_funnel_satisfies_the_invariant(self, data_store):
         from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
 
-        funnel = build_event_classification_funnel(data_store, "lws", "visit", exclude="invalid_trials")
-        ordered = pcfg.cumulative_names(pcfg.TRIAL_INCLUSION_CRITERIA + pcfg.IS_LWS_CRITERIA + ["is_lws"])
+        funnel = build_event_classification_funnel(data_store, "lws", "visit")
+        ordered = pcfg.cumulative_names(pcfg.IS_LWS_CRITERIA + ["is_lws"])
         assert_is_cumulative(funnel, columns=[c for c in ordered if c in funnel.columns])
+
+
+class TestEventFunnelTrialDecoupling:
+    """L8: event funnels must not include trial-validity criteria."""
+
+    def test_event_funnel_has_no_trial_validity_columns(self, data_store):
+        from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
+
+        funnel = build_event_classification_funnel(data_store, "lws", "visit")
+        trial_columns = {"is_valid_trial", "upto_gaze_coverage", "upto_fixation_rate",
+                         "upto_no_bad_action", "upto_no_miss_with_false_alarm"}
+        assert not trial_columns & set(funnel.columns), (
+            f"event funnel should not contain trial-level columns: {trial_columns & set(funnel.columns)}"
+        )
+
+    def test_is_lws_does_not_require_trial_validity(self, data_store):
+        from pipeline.stage3_classify.build_funnels import build_event_classification_funnel
+
+        funnel = build_event_classification_funnel(data_store, "lws", "visit")
+        invalid_trials = data_store.trial_funnel.loc[
+            ~data_store.trial_funnel["is_valid_trial"], ["subject", "trial"]
+        ]
+        invalid_events = funnel.merge(invalid_trials, on=["subject", "trial"])
+        lws_in_invalid = invalid_events["is_lws"].sum()
+        # With trial validity decoupled, some events in invalid trials may pass all event-level criteria.
+        # The old design would have forced these to False.
+        assert len(invalid_events) > 0, "precondition: there are events in invalid trials"
 
 
 class TestHasHighFixationRate:

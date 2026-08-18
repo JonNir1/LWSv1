@@ -23,6 +23,10 @@ def run_stage3(
 
     Returns (trial_funnel, event_funnels) where event_funnels is keyed by
     "{funnel_type}_{event_type}", e.g. "lws_visit", "target_return_fixation".
+
+    Trial validity and event classification are independent: the trial funnel evaluates trial-level
+    criteria, and event funnels evaluate only event-level criteria. Consumers who need valid-trial-only
+    events should filter via ``trial_funnel["is_valid_trial"]``.
     """
     trial_funnel = build_trial_inclusion_funnel(
         data,
@@ -39,10 +43,5 @@ def run_stage3(
                 data,
                 funnel_type=funnel_type,
                 event_type=event_type,
-                min_gaze_coverage=min_gaze_coverage,
-                min_fixation_rate=min_fixation_rate,
-                bad_actions=bad_actions,
-                require_actions=require_actions,
-                exclude="none",
             )
     return trial_funnel, event_funnels

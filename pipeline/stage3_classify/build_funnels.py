@@ -47,42 +47,27 @@ def build_event_classification_funnel(
     data: DataStore,
     funnel_type: Literal["lws", "target_return"],
     event_type: Literal["fixation", "visit"],
-    min_gaze_coverage: int | float = pcfg.DEFAULT_GAZE_COVERAGE_PERCENT_THRESHOLD,
-    min_fixation_rate: float = pcfg.DEFAULT_FIXATION_RATE_THRESHOLD,
-    bad_actions: Optional[pcfg.BAD_ACTIONS_TYPE] = None,
-    require_actions: bool = False,
-    exclude: Literal["none", "invalid_trials"] = "invalid_trials",
 ) -> pd.DataFrame:
     """
     Build a per-event funnel classifying each event as LWS or as a target-return.
 
-    Returns `event_data` with one **cumulative** boolean column per criterion appended, plus `trial_category`,
-    `target_category` and `target_angle`. Each criterion column means "passed this criterion *and every earlier
-    one*", so `on_target` is not "this event is on target" but "this event is in a valid trial and is on target".
-    The final column (`is_lws` / `is_target_return`) is the full conjunction.
+    The cumulative chain contains only event-level criteria (from ``IS_LWS_CRITERIA`` or
+    ``IS_TARGET_RETURN_CRITERIA``). Trial validity is **not** part of the funnel; consumers who need
+    valid-trial-only data should filter via ``data.trial_funnel["is_valid_trial"]``.
 
-    IMPORTANT - `event_type` changes the unit of analysis *and* how targets are attributed, so fixation-level and
-    visit-level results are not directly comparable:
+    IMPORTANT: ``event_type`` changes the unit of analysis *and* how targets are attributed, so
+    fixation-level and visit-level results are not directly comparable:
 
-    - `"fixation"`: one row per fixation, carrying a single `target` - the **closest** one. A fixation within
-      threshold of two targets is attributed only to the nearer.
-    - `"visit"`: one row per (target, visit). The same fixation can belong to visits to several targets at once, so
-      it contributes a row per target. Visit counts are therefore not fixation counts, and the denominator of any
-      proportion differs between the two.
-
-    Prefer visits when the question is about episodes of looking at a target, and fixations when it is about
-    individual fixations; do not mix them within one comparison.
+    - ``"fixation"``: one row per fixation, carrying a single ``target`` (the closest within threshold).
+    - ``"visit"``: one row per (target, visit). The same fixation can contribute to visits to several
+      targets, so visit counts are not fixation counts.
     """
     funnel_type = funnel_type.lower()
     event_type = event_type.lower()
-    exclude = exclude.lower()
     if funnel_type not in {"lws", "target_return"}:
         raise ValueError("`funnel_type` must be 'lws' or 'target_return'.")
     if event_type not in {"fixation", "visit"}:
         raise ValueError("`event_type` must be 'fixation' or 'visit'.")
-    if exclude not in {"none", "invalid_trials"}:
-        raise ValueError("`exclude` must be 'none' or 'invalid_trials'.")
-    bad_actions = _bad_actions_as_list(bad_actions)
     if event_type == "fixation":
         event_data = assign_fixation_targets(
             data.fixations, data.fixation_target_dists, data.on_target_threshold_dva,
@@ -91,13 +76,6 @@ def build_event_classification_funnel(
         event_data = data.visits
     if event_data is None or (hasattr(event_data, 'empty') and event_data.empty):
         raise ValueError(f"no {event_type} data available")
-    trial_criteria = check_trial_inclusion_criteria(
-        data.metadata, data.fixations, data.actions, data.identifications,
-        min_gaze_coverage=min_gaze_coverage,
-        min_fixation_rate=min_fixation_rate,
-        bad_actions=bad_actions,
-        require_actions=require_actions,
-    )
     class_criteria = _compute_event_classification_criteria(
         funnel_type=funnel_type,
         event_type=event_type,
@@ -105,13 +83,8 @@ def build_event_classification_funnel(
         idents=data.identifications,
         on_target_threshold_dva=data.on_target_threshold_dva,
     )
-    # build a joint funnel table aligned to event_data rows
-    joint_criteria = _join_trial_and_event_criteria(
-        event_data, class_criteria, trial_criteria,
-    )
-    funnel_df = _convert_criteria_to_funnel(joint_criteria)
+    funnel_df = _convert_criteria_to_funnel(class_criteria)
     funnel_df.index = event_data.index
-    # enrich event data with funnel columns + trial and target metadata
     out = (
         pd.concat([event_data, funnel_df], axis=1)
         .merge(
@@ -126,11 +99,6 @@ def build_event_classification_funnel(
         )
         .rename(columns={"category": "target_category", "angle": "target_angle"})
     )
-    # drop invalid trials if specified
-    if exclude in {"invalid_trials", "both"}:
-        if "is_valid_trial" not in out.columns:
-            raise KeyError("Cannot exclude invalid trials because 'is_valid_trial' column is missing.")
-        out = out[out["is_valid_trial"].fillna(False)]
     return _coerce_column_types(out)
 
 
@@ -163,27 +131,6 @@ def _compute_event_classification_criteria(
         on_target_threshold_dva=on_target_threshold_dva,
     )
 
-
-def _join_trial_and_event_criteria(
-        event_data: pd.DataFrame,
-        event_criteria: pd.DataFrame,
-        trial_criteria: pd.DataFrame,
-) -> pd.DataFrame:
-    """ Return boolean criteria columns aligned to event_data rows, by bringing in trial_criteria on (subject, trial). """
-    col_order = list(trial_criteria.columns) + list(event_criteria.columns)
-    event_with_crit = pd.concat(
-        [event_data[["subject", "trial"]], event_criteria],
-        axis=1
-    )
-    joined = (
-        event_with_crit
-        .merge(
-            trial_criteria.reset_index(inplace=False), on=["subject", "trial"], how="left"
-        )
-        .drop(columns=["subject", "trial"])
-        .loc[:, col_order]
-    )
-    return joined
 
 
 def _convert_criteria_to_funnel(criteria_df: pd.DataFrame) -> pd.DataFrame:
