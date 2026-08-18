@@ -1277,46 +1277,28 @@ fixation-level label disagrees with the visit's.
 
 ---
 
-### L8. `is_lws`/`is_target_return` silently also require `is_valid_trial` — not obvious from the name
+### L8. Trial validity was coupled into event funnels via the cumulative chain
 
-**STATUS: DOCUMENTATION ONLY** — working as designed, not a bug; flagged 2026-08-13 while building
-`thesis/scripts/build_snapshot.py`, which needed to reproduce these two terminal columns from their component
-predicates and initially got it wrong by omitting this.
+**STATUS: FIXED** (2026-08-17, commits `9905ecf`, `0418467`)
 
-**Where:** `pipeline/stage3_classify/build_funnels.py` (`_join_trial_and_event_criteria`,
-`_convert_criteria_to_funnel`)
+**Where:** `pipeline/stage3_classify/build_funnels.py`
 
-**Description.** `build_event_classification_funnel` prepends the trial-level criteria columns
-(`upto_gaze_coverage`, `upto_fixation_rate`, `upto_no_bad_action`, `is_valid_trial`) *before* the event-level ones,
-then takes one running cumulative AND across the whole row (`col_order = trial_criteria.columns + event_criteria.
-columns`, `build_funnels.py:173`). Since `is_lws`/`is_target_return` are each the *last* column in that combined
-sequence, they are cumulative through everything before them — including trial validity — even though
-`IS_LWS_CRITERIA`/`IS_TARGET_RETURN_CRITERIA` in `pipeline/config.py` never mention `is_valid_trial` at all. A
-reader who only checks those two criteria lists would reasonably assume `is_lws`/`is_target_return` are purely
-event-level.
+**Description.** `build_event_classification_funnel` used to prepend trial-level criteria
+(`upto_gaze_coverage`, `upto_fixation_rate`, `upto_no_bad_action`, `is_valid_trial`) before the event-level ones
+in the cumulative chain, making `is_lws`/`is_target_return` silently dependent on `is_valid_trial` even though
+`IS_LWS_CRITERIA`/`IS_TARGET_RETURN_CRITERIA` never mention it. This is a separation-of-concerns issue: trial
+validity and event classification are independent concerns that were incorrectly coupled.
 
-**Measured** (2026-08-13, real data, 27 subjects, 6,831 visits): `is_on_target(visits) & is_after_identification
-(visits)` — the literal `IS_TARGET_RETURN_CRITERIA` conjunction with no trial term — disagrees with the stored
-`event_funnels["target_return_visit"]["is_target_return"]` on 311 visits (4.6%), **every one of them in an invalid
-trial**. Adding `& is_valid_trial` makes the two match exactly (0 mismatches).
+**Measured** (2026-08-13, real data, 27 subjects, 6,831 visits): the old design disagreed with the literal
+`IS_TARGET_RETURN_CRITERIA` conjunction on 311 visits (4.6%), all in invalid trials.
 
-**Outcome.** Anyone who reads `IS_LWS_CRITERIA`/`IS_TARGET_RETURN_CRITERIA` and reimplements the terminal column
-from those two lists alone (rather than calling `check_lws_criteria`/`check_target_return_criteria` or reading
-`event_funnels` directly) will silently get a version that includes visits from invalid trials — a systematic
-inflation, not noise. This is exactly what almost happened in `thesis/scripts/build_snapshot.py` while deriving
-`visits.is_identification` (a label that doesn't exist in the funnel code at all, see the thesis handoff doc) — it
-was caught only because the script cross-checks its derived columns against the stored funnel output on real data
-before writing anything.
+**Fix.** Event funnels now contain only event-level criteria. `_join_trial_and_event_criteria` was deleted. The
+`exclude` parameter was removed from `build_event_classification_funnel` and `load_analysis_data`. Consumers who
+need valid-trial-only events filter explicitly via `data.trial_funnel["is_valid_trial"]`. All analysis notebooks
+and `_publications_/2026_vss.ipynb` were updated with the explicit filter pattern.
 
-**Fix — documentation, not code.** `CLAUDE.md`'s stage-3 section already says terminal columns are "cumulative
-through everything before them," which is technically sufficient, but doesn't call out *specifically* that
-`is_lws`/`is_target_return` therefore encode trial validity too, which is the non-obvious part (their names don't
-suggest it). Worth a one-line addition there. No code change needed — the current behaviour is correct and,
-now that it's written down, intentional.
-
-**Validate.** N/A (behavioural, not a bug); `thesis/scripts/build_snapshot.py`'s own assertions
-(`is_target_return == valid & on_target & after`, etc.) serve as a standing regression check that this
-relationship doesn't silently change.
+**Validate.** `test_event_funnel_has_no_trial_validity_columns` and `test_is_lws_does_not_require_trial_validity`
+in `tests/test_trial_inclusion.py` verify the decoupling.
 
 ---
 
