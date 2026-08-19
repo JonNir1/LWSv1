@@ -93,7 +93,7 @@ def create_gaze_video(
     sampled = gaze.iloc[::downsample_factor].reset_index(drop=True)
 
     action_markers = _build_action_markers(
-        actions, identifications, trial, action_circle_radius_px,
+        actions, fixation_events, trial, action_circle_radius_px,
     )
 
     base_img = _load_stimulus_pil(trial)
@@ -174,7 +174,7 @@ def _render_title(image: Image.Image, title: str) -> None:
 
 def _build_action_markers(
         actions: Optional[pd.DataFrame],
-        identifications: Optional[pd.DataFrame],
+        fixation_events: Optional[pd.DataFrame],
         trial: "Trial",
         radius_px: Optional[float],
 ) -> list[_ActionMarker]:
@@ -184,11 +184,6 @@ def _build_action_markers(
     if radius_px is None:
         import pipeline.config as pcfg
         radius_px = pcfg.ON_TARGET_THRESHOLD_DVA / trial.px2deg
-
-    targets = trial.get_targets()
-    target_coords = {}
-    for tgt_id, row in targets.iterrows():
-        target_coords[tgt_id] = (row[f"{TARGET_STR}_x"], row[f"{TARGET_STR}_y"])
 
     markers = []
     for _, row in actions.iterrows():
@@ -200,7 +195,7 @@ def _build_action_markers(
             continue
 
         action_time = row[TIME_STR]
-        cx, cy = _find_action_position(action_time, identifications, target_coords)
+        cx, cy = _gaze_at_time(action_time, fixation_events)
         if np.isnan(cx):
             continue
 
@@ -213,25 +208,29 @@ def _build_action_markers(
     return markers
 
 
-def _find_action_position(
-        action_time: float,
-        identifications: Optional[pd.DataFrame],
-        target_coords: dict[str, tuple[float, float]],
+def _gaze_at_time(
+        t: float,
+        fixation_events: Optional[pd.DataFrame],
 ) -> tuple[float, float]:
-    if identifications is None or identifications.empty:
-        return np.nan, np.nan
+    """Find gaze position at time t from fixation events.
 
-    time_match = identifications.loc[
-        np.isclose(identifications[TIME_STR], action_time, atol=1.0)
+    Returns (x, y) of the fixation containing t, or the most recent
+    fixation that ended within 50 ms before t.
+    """
+    if fixation_events is None or fixation_events.empty:
+        return np.nan, np.nan
+    during = fixation_events.loc[
+        (fixation_events[START_TIME_STR] <= t) & (t <= fixation_events[END_TIME_STR])
     ]
-    if time_match.empty:
-        return np.nan, np.nan
-
-    row = time_match.iloc[0]
-    tgt = row.get(TARGET_STR)
-    if pd.notna(tgt) and tgt in target_coords:
-        return target_coords[tgt]
-
+    if not during.empty:
+        row = during.iloc[0]
+        return float(row[X]), float(row[Y])
+    before = fixation_events.loc[
+        (fixation_events[END_TIME_STR] < t) & (t - fixation_events[END_TIME_STR] <= 50.0)
+    ]
+    if not before.empty:
+        row = before.iloc[-1]
+        return float(row[X]), float(row[Y])
     return np.nan, np.nan
 
 
