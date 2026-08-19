@@ -3,6 +3,7 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import Normalize
 from matplotlib.figure import Figure
 from scipy.ndimage import gaussian_filter
 
@@ -16,9 +17,9 @@ def create_heatmap(
         trial: "Trial",
         gaze_data: pd.DataFrame,
         identifications: Optional[pd.DataFrame] = None,
-        kernel_sigma: float = 30.0,
+        kernel_sigma: float = 10.0,
         heatmap_colorscale: str = DEFAULT_HEATMAP_COLORSCALE,
-        heatmap_alpha: float = 0.5,
+        heatmap_alpha: float = 0.85,
         show_colorbar: bool = True,
         title: Optional[str] = None,
         target_colors: Optional[dict[str, RGBA]] = None,
@@ -34,11 +35,11 @@ def create_heatmap(
     trial : Trial object
     gaze_data : DataFrame with columns x, y, and optionally duration.
         If duration is present, it weights the Gaussian kernel.
-        If absent, each point is weighted equally.
     identifications : optional DataFrame for target color-coding
     kernel_sigma : standard deviation of the Gaussian kernel in pixels
     heatmap_colorscale : matplotlib colormap name
-    heatmap_alpha : opacity of the heatmap layer (0-1)
+    heatmap_alpha : peak opacity of the heatmap layer (0-1). Alpha scales
+        linearly with density: zero-density areas are fully transparent.
     show_colorbar : whether to add a colorbar
     output_path : if provided, saves the figure to this path
     """
@@ -61,15 +62,21 @@ def create_heatmap(
         marker_line_width=marker_line_width,
     )
 
+    cmap = plt.get_cmap(heatmap_colorscale)
+    norm = Normalize(vmin=0, vmax=heatmap_array.max() or 1.0)
+    normalized = norm(heatmap_array)
+    rgba_img = cmap(normalized)
+    rgba_img[..., 3] = np.power(normalized, 1/3) * heatmap_alpha
+
     im = ax.imshow(
-        heatmap_array,
+        rgba_img,
         extent=[0, width, height, 0],
-        cmap=heatmap_colorscale,
-        alpha=heatmap_alpha,
         interpolation="bilinear",
     )
     if show_colorbar:
-        fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02, label="Density")
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02, label="Density")
 
     if title is None:
         title = f"Subject {trial._subject.id}, Trial {trial.trial_num}"
