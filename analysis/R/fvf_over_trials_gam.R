@@ -14,14 +14,19 @@ source(file.path("analysis", "R", "helpers.R"))
 # set constants
 K <- 10
 
+# optional suffix (e.g. "Rscript fvf_over_trials_gam.R D") to run against a differently-named coverage table,
+# for FVF estimators besides the default selection-hazard one - e.g. array_coverage_results_D.csv for estimator D
+args <- commandArgs(trailingOnly = TRUE)
+suffix <- if (length(args) >= 1) paste0("_", args[1]) else ""
+
 # === Load Data ===
-# array_coverage_results.csv is gitignored and exported by hand from array_coverage.ipynb, with columns:
-# subject, trial, n_icons, n_covered, coverage_pct
-csv_path <- file.path("analysis", "R", "array_coverage_results.csv")
+# array_coverage_results{suffix}.csv is gitignored and exported by hand from array_coverage.ipynb /
+# fvf_over_trials.ipynb, with columns: subject, trial, n_icons, n_covered, coverage_pct
+csv_path <- file.path("analysis", "R", paste0("array_coverage_results", suffix, ".csv"))
 if (!file.exists(csv_path)) {
   stop(
     "array coverage results not found at ", csv_path, ".\n",
-    "This file is gitignored and exported by hand from array_coverage.ipynb."
+    "This file is gitignored and exported by hand from array_coverage.ipynb / fvf_over_trials.ipynb."
   )
 }
 dat <- read.csv(csv_path)
@@ -42,7 +47,7 @@ model <- gam(
 summary(model)
 
 # diagnostics -> analysis/R/figures/, rather than an anonymous Rplots.pdf in the working directory
-plot_path <- open_plot_device("fvf_over_trials_gam_diagnostics.pdf")
+plot_path <- open_plot_device(paste0("fvf_over_trials_gam_diagnostics", suffix, ".pdf"))
 gam.check(model)
 plot(model, select = 1)
 dev.off()
@@ -62,5 +67,5 @@ preds <- predict(
 grid$coverage_prop <- preds
 
 # save predictions to file
-outfile <- file.path("analysis", "R", "fvf_over_trials_predictions.csv")
+outfile <- file.path("analysis", "R", paste0("fvf_over_trials_predictions", suffix, ".csv"))
 write.csv(grid, outfile, row.names = FALSE)
