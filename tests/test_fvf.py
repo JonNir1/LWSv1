@@ -1,7 +1,7 @@
 """Functional Visual Field estimation.
 
-Both estimators are checked by recovery: synthesise fixations from a *known* field radius and confirm the estimator
-returns it. That is the only way to test an estimator whose real-data answer is unknown.
+Both estimators are checked by recovery: synthesise fixation-target distances from a *known* field radius and
+confirm the estimator returns it. That is the only way to test an estimator whose real-data answer is unknown.
 """
 
 import numpy as np
@@ -9,14 +9,13 @@ import pandas as pd
 import pytest
 
 import config as cnfg
-from analysis.helpers.fvf import (
+from analysis.fvf.fvf import (
     estimate_by_foveation_falloff,
     estimate_by_launch_distance,
     estimate_by_selection_hazard,
     estimate_fvf,
-    per_target_distances,
     selection_opportunities,
-    target_distance_columns,
+    with_on_target,
 )
 
 TRUE_FVF = 4.0
@@ -25,6 +24,10 @@ THRESHOLD = cnfg.ON_TARGET_THRESHOLD_DVA
 
 def synthetic_fixations(true_fvf: float = TRUE_FVF, n_subjects: int = 5, n_trials: int = 120, seed: int = 1):
     """One target per trial, approached from a random peripheral distance and foveated iff within `true_fvf`.
+
+    Returned already in the long format `fixations_to_icons()`/`DataStore.fixation_target_dists` produces
+    (subject, trial, eye, event, target, distance_dva), built only from fixation events - the shape every
+    estimator now consumes directly, with no reshaping.
 
     The approach is drawn strictly beyond the on-target threshold so it is never itself an on-target fixation -
     otherwise the "launching" fixation would resolve to an earlier, unrelated one.
@@ -37,31 +40,44 @@ def synthetic_fixations(true_fvf: float = TRUE_FVF, n_subjects: int = 5, n_trial
             event = 0
             for far in rng.uniform(10, 18, size=2):
                 rows.append(dict(subject=subject, trial=trial, eye="right", event=event,
-                                 start_time=100.0 * event, icon10_distance_dva=float(far)))
+                                 target="icon10", distance_dva=float(far)))
                 event += 1
             rows.append(dict(subject=subject, trial=trial, eye="right", event=event,
-                             start_time=100.0 * event, icon10_distance_dva=float(approach)))
+                             target="icon10", distance_dva=float(approach)))
             event += 1
             if approach <= true_fvf:
                 rows.append(dict(subject=subject, trial=trial, eye="right", event=event,
-                                 start_time=100.0 * event, icon10_distance_dva=0.4))
+                                 target="icon10", distance_dva=0.4))
     return pd.DataFrame(rows)
 
 
-class TestReshaping:
-    def test_distance_columns_are_discovered(self):
-        cols = target_distance_columns(synthetic_fixations(n_trials=2))
-        assert cols == {"icon10": "icon10_distance_dva"}
-
-    def test_raises_when_no_distance_columns(self):
-        """The persisted events table no longer carries them, so the raise names what restores them."""
-        with pytest.raises(NotImplementedError, match="fixations_to_targets"):
-            per_target_distances(pd.DataFrame({"subject": [1], "trial": [1]}), THRESHOLD)
-
-    def test_long_format_marks_on_target(self):
-        long = per_target_distances(synthetic_fixations(n_trials=5), THRESHOLD)
+class TestOnTarget:
+    def test_marks_on_target(self):
+        long = with_on_target(synthetic_fixations(n_trials=5), THRESHOLD)
         assert long["on_target"].equals(long["distance_dva"] <= THRESHOLD)
         assert set(long["target"]) == {"icon10"}
+
+
+class TestLaunchFixationOrdering:
+    """CODE_REVIEW.md L161-163: the launch-fixation lookup must never resolve to a saccade or blink.
+
+    `fixation_target_dists` is built only from `event_type == FIXATION` rows (`fixations_to_icons()` receives the
+    fixation subset, never saccades/blinks), so `event` values within a (subject, trial, eye, target) group are
+    already a contiguous fixation-only sequence - stepping back one *position* is safe even though `event` itself
+    is a rank over all events (fixations, saccades, blinks) in the trial, i.e. not contiguous integers.
+    """
+
+    def test_launch_resolves_to_the_correct_fixation_despite_nonconsecutive_event_numbers(self):
+        # event numbers 0, 3, 7 stand in for a fixation-only table where saccades/blinks (events 1-2, 4-6) were
+        # already filtered out upstream - the gaps must not affect which row is "the previous fixation".
+        long = pd.DataFrame([
+            dict(subject=1, trial=1, eye="right", event=0, target="icon10", distance_dva=15.0),
+            dict(subject=1, trial=1, eye="right", event=3, target="icon10", distance_dva=3.0),  # true launch
+            dict(subject=1, trial=1, eye="right", event=7, target="icon10", distance_dva=0.4),  # on target
+        ])
+        per_subject, pooled, launches = estimate_by_launch_distance(long, on_target_threshold_dva=THRESHOLD)
+        assert pooled == pytest.approx(3.0)
+        assert launches["launch_dva"].iloc[0] == pytest.approx(3.0)
 
 
 class TestFoveationFalloff:
@@ -98,10 +114,10 @@ class TestFoveationFalloff:
         rows = []
         for trial in range(1, 200):
             approach = rng.uniform(THRESHOLD + 0.25, 12.0)
-            rows.append(dict(subject=1, trial=trial, eye="right", event=0, start_time=0.0,
-                             icon10_distance_dva=float(approach)))
-            rows.append(dict(subject=1, trial=trial, eye="right", event=1, start_time=50.0,
-                             icon10_distance_dva=0.4))
+            rows.append(dict(subject=1, trial=trial, eye="right", event=0,
+                             target="icon10", distance_dva=float(approach)))
+            rows.append(dict(subject=1, trial=trial, eye="right", event=1,
+                             target="icon10", distance_dva=0.4))
         with pytest.warns(RuntimeWarning, match="never drops"):
             _per_subject, pooled, _curve = estimate_by_foveation_falloff(pd.DataFrame(rows))
         assert np.isnan(pooled)
@@ -125,9 +141,9 @@ class TestLaunchDistance:
         assert (launches["launch_dva"] > THRESHOLD).all()
 
     def test_requires_an_event_column(self):
-        fixations = synthetic_fixations(n_trials=5).drop(columns=["event"])
+        fixation_target_dists = synthetic_fixations(n_trials=5).drop(columns=["event"])
         with pytest.raises(ValueError, match="event"):
-            estimate_by_launch_distance(fixations)
+            estimate_by_launch_distance(fixation_target_dists)
 
 
 class TestSelectionHazard:
