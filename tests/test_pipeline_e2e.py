@@ -13,7 +13,7 @@ import constants as cnst
 import pipeline.config as pcfg
 from analysis.helpers.read_data import DataStore
 from data_models.LWSEnums import SubjectActionCategoryEnum, SignalDetectionCategoryEnum
-from pipeline.stage2_align.fixations_to_targets import fixations_to_targets
+from pipeline.stage2_align.fixations_to_icons import fixations_to_icons
 from pipeline.stage2_align.build_visits import build_visits
 from pipeline.stage2_align.target_identifications import build_identifications
 from pipeline.stage3_classify.run_stage3 import run_stage3
@@ -160,7 +160,8 @@ class TestPipelineE2E:
         on_target_dva = pcfg.ON_TARGET_THRESHOLD_DVA
         visit_merge_ms = pcfg.VISIT_MERGING_TIME_THRESHOLD
 
-        dists = fixations_to_targets(fixations, icons, metadata)
+        dists = fixations_to_icons(fixations, icons.loc[icons["is_target"]], metadata)
+        dists = dists.rename(columns={cnst.ICON_STR: cnst.TARGET_STR})
         visits = build_visits(fixations, dists, on_target_dva, visit_merge_ms)
         idents = build_identifications(
             fixations, icons, actions, metadata,
@@ -199,7 +200,8 @@ class TestPipelineE2E:
         on_target_dva = pcfg.ON_TARGET_THRESHOLD_DVA
         visit_merge_ms = pcfg.VISIT_MERGING_TIME_THRESHOLD
 
-        dists = fixations_to_targets(fixations, icons, metadata)
+        dists = fixations_to_icons(fixations, icons.loc[icons["is_target"]], metadata)
+        dists = dists.rename(columns={cnst.ICON_STR: cnst.TARGET_STR})
         visits = build_visits(fixations, dists, on_target_dva, visit_merge_ms)
         idents = build_identifications(
             fixations, icons, actions, metadata,
@@ -231,7 +233,8 @@ class TestPipelineE2E:
     def test_on_target_fixations_exist(self, stage1_data):
         icons, actions, metadata, eye_movements = stage1_data
         fixations = eye_movements[eye_movements["event_type"] == "FIXATION"]
-        dists = fixations_to_targets(fixations, icons, metadata)
+        dists = fixations_to_icons(fixations, icons.loc[icons["is_target"]], metadata)
+        dists = dists.rename(columns={cnst.ICON_STR: cnst.TARGET_STR})
         within = dists[dists["distance_dva"] <= pcfg.ON_TARGET_THRESHOLD_DVA]
         assert len(within) > 0, "Synthetic data should have at least one on-target fixation"
 

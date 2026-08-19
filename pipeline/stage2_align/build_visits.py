@@ -20,7 +20,8 @@ def build_visits(
     """Build the visits table from fixations and their target distances.
 
     :param fixations: fixation events (dominant eye, non-outlier).
-    :param fixation_target_dists: long-format output of fixations_to_targets().
+    :param fixation_target_dists: long-format output of fixations_to_icons() (target-filtered, `icon` renamed to
+        `target`).
     :param on_target_threshold_dva: distance threshold for on-target.
     :param visit_merging_time_threshold: max gap (ms) between consecutive on-target fixations to merge.
     :return: one row per (subject, trial, eye, target, visit).

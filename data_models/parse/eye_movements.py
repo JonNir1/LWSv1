@@ -5,7 +5,7 @@ labels and (optionally) event objects per eye.
 
 Tabulation: `process_trial_events` reshapes the detected events into the persisted event table, adding derived
 columns (`to_trial_end`, split `x`/`y`, `num_fixs_to_strip`). Target distances are computed in stage 2 by
-`pipeline.stage2_align.fixations_to_targets`.
+`pipeline.stage2_align.fixations_to_icons`.
 """
 
 from typing import Sequence, Tuple, Union

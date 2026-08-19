@@ -32,7 +32,7 @@ def test_h7_long_fixation_cap_is_immaterial_in_this_dataset(loaded, capsys):
     too_long = fixs["duration"] > PEYES_FIXATION_MAX_DURATION_MS
     flagged = fixs["outlier_reasons"].map(lambda r: isinstance(r, list) and "max_duration" in r)
 
-    # TODO: restore on-target enrichment check once fixations_to_targets() lands (step 5)
+    # TODO: restore on-target enrichment check once fixations_to_icons() lands (step 5)
 
     with capsys.disabled():
         print(f"\n--- H7: fixation duration cap ({PEYES_FIXATION_MAX_DURATION_MS} ms) ---")

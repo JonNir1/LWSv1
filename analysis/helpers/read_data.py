@@ -7,8 +7,9 @@ import pandas as pd
 from numpy import isnan
 
 import config as cnfg
+import constants as cnst
 import pipeline.config as pcfg
-from pipeline.stage2_align.fixations_to_targets import fixations_to_targets
+from pipeline.stage2_align.fixations_to_icons import fixations_to_icons
 from pipeline.stage2_align.build_visits import build_visits
 from pipeline.stage2_align.target_identifications import build_identifications
 from pipeline.stage3_classify.run_stage3 import run_stage3
@@ -89,7 +90,8 @@ def load_data(
     if eye_movements is not None:
         fixations = eye_movements.loc[eye_movements["event_type"] == FIXATION_EVENT_TYPE]
 
-    dists = fixations_to_targets(fixations, icons, metadata)
+    dists = fixations_to_icons(fixations, icons.loc[icons["is_target"]], metadata)
+    dists = dists.rename(columns={cnst.ICON_STR: cnst.TARGET_STR})
     visits = build_visits(fixations, dists, on_target_threshold_dva, visit_merging_time_threshold)
     idents = build_identifications(
         fixations, icons, actions, metadata,

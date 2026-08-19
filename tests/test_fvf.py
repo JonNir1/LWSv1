@@ -1,7 +1,7 @@
 """Functional Visual Field estimation.
 
-Both estimators are checked by recovery: synthesise fixations from a *known* field radius and confirm the estimator
-returns it. That is the only way to test an estimator whose real-data answer is unknown.
+Both estimators are checked by recovery: synthesise fixation-target distances from a *known* field radius and
+confirm the estimator returns it. That is the only way to test an estimator whose real-data answer is unknown.
 """
 
 import numpy as np
@@ -9,14 +9,14 @@ import pandas as pd
 import pytest
 
 import config as cnfg
-from analysis.helpers.fvf import (
+from analysis.fvf.fvf import (
+    estimate_by_encircling,
     estimate_by_foveation_falloff,
     estimate_by_launch_distance,
     estimate_by_selection_hazard,
     estimate_fvf,
-    per_target_distances,
     selection_opportunities,
-    target_distance_columns,
+    with_on_target,
 )
 
 TRUE_FVF = 4.0
@@ -25,6 +25,10 @@ THRESHOLD = cnfg.ON_TARGET_THRESHOLD_DVA
 
 def synthetic_fixations(true_fvf: float = TRUE_FVF, n_subjects: int = 5, n_trials: int = 120, seed: int = 1):
     """One target per trial, approached from a random peripheral distance and foveated iff within `true_fvf`.
+
+    Returned already in the long format `fixations_to_icons()`/`DataStore.fixation_target_dists` produces
+    (subject, trial, eye, event, target, distance_dva), built only from fixation events - the shape every
+    estimator now consumes directly, with no reshaping.
 
     The approach is drawn strictly beyond the on-target threshold so it is never itself an on-target fixation -
     otherwise the "launching" fixation would resolve to an earlier, unrelated one.
@@ -37,31 +41,44 @@ def synthetic_fixations(true_fvf: float = TRUE_FVF, n_subjects: int = 5, n_trial
             event = 0
             for far in rng.uniform(10, 18, size=2):
                 rows.append(dict(subject=subject, trial=trial, eye="right", event=event,
-                                 start_time=100.0 * event, icon10_distance_dva=float(far)))
+                                 target="icon10", distance_dva=float(far)))
                 event += 1
             rows.append(dict(subject=subject, trial=trial, eye="right", event=event,
-                             start_time=100.0 * event, icon10_distance_dva=float(approach)))
+                             target="icon10", distance_dva=float(approach)))
             event += 1
             if approach <= true_fvf:
                 rows.append(dict(subject=subject, trial=trial, eye="right", event=event,
-                                 start_time=100.0 * event, icon10_distance_dva=0.4))
+                                 target="icon10", distance_dva=0.4))
     return pd.DataFrame(rows)
 
 
-class TestReshaping:
-    def test_distance_columns_are_discovered(self):
-        cols = target_distance_columns(synthetic_fixations(n_trials=2))
-        assert cols == {"icon10": "icon10_distance_dva"}
-
-    def test_raises_when_no_distance_columns(self):
-        """The persisted events table no longer carries them, so the raise names what restores them."""
-        with pytest.raises(NotImplementedError, match="fixations_to_targets"):
-            per_target_distances(pd.DataFrame({"subject": [1], "trial": [1]}), THRESHOLD)
-
-    def test_long_format_marks_on_target(self):
-        long = per_target_distances(synthetic_fixations(n_trials=5), THRESHOLD)
+class TestOnTarget:
+    def test_marks_on_target(self):
+        long = with_on_target(synthetic_fixations(n_trials=5), THRESHOLD)
         assert long["on_target"].equals(long["distance_dva"] <= THRESHOLD)
         assert set(long["target"]) == {"icon10"}
+
+
+class TestLaunchFixationOrdering:
+    """CODE_REVIEW.md L161-163: the launch-fixation lookup must never resolve to a saccade or blink.
+
+    `fixation_target_dists` is built only from `event_type == FIXATION` rows (`fixations_to_icons()` receives the
+    fixation subset, never saccades/blinks), so `event` values within a (subject, trial, eye, target) group are
+    already a contiguous fixation-only sequence - stepping back one *position* is safe even though `event` itself
+    is a rank over all events (fixations, saccades, blinks) in the trial, i.e. not contiguous integers.
+    """
+
+    def test_launch_resolves_to_the_correct_fixation_despite_nonconsecutive_event_numbers(self):
+        # event numbers 0, 3, 7 stand in for a fixation-only table where saccades/blinks (events 1-2, 4-6) were
+        # already filtered out upstream - the gaps must not affect which row is "the previous fixation".
+        long = pd.DataFrame([
+            dict(subject=1, trial=1, eye="right", event=0, target="icon10", distance_dva=15.0),
+            dict(subject=1, trial=1, eye="right", event=3, target="icon10", distance_dva=3.0),  # true launch
+            dict(subject=1, trial=1, eye="right", event=7, target="icon10", distance_dva=0.4),  # on target
+        ])
+        per_subject, pooled, launches = estimate_by_launch_distance(long, on_target_threshold_dva=THRESHOLD)
+        assert pooled == pytest.approx(3.0)
+        assert launches["launch_dva"].iloc[0] == pytest.approx(3.0)
 
 
 class TestFoveationFalloff:
@@ -98,10 +115,10 @@ class TestFoveationFalloff:
         rows = []
         for trial in range(1, 200):
             approach = rng.uniform(THRESHOLD + 0.25, 12.0)
-            rows.append(dict(subject=1, trial=trial, eye="right", event=0, start_time=0.0,
-                             icon10_distance_dva=float(approach)))
-            rows.append(dict(subject=1, trial=trial, eye="right", event=1, start_time=50.0,
-                             icon10_distance_dva=0.4))
+            rows.append(dict(subject=1, trial=trial, eye="right", event=0,
+                             target="icon10", distance_dva=float(approach)))
+            rows.append(dict(subject=1, trial=trial, eye="right", event=1,
+                             target="icon10", distance_dva=0.4))
         with pytest.warns(RuntimeWarning, match="never drops"):
             _per_subject, pooled, _curve = estimate_by_foveation_falloff(pd.DataFrame(rows))
         assert np.isnan(pooled)
@@ -125,9 +142,9 @@ class TestLaunchDistance:
         assert (launches["launch_dva"] > THRESHOLD).all()
 
     def test_requires_an_event_column(self):
-        fixations = synthetic_fixations(n_trials=5).drop(columns=["event"])
+        fixation_target_dists = synthetic_fixations(n_trials=5).drop(columns=["event"])
         with pytest.raises(ValueError, match="event"):
-            estimate_by_launch_distance(fixations)
+            estimate_by_launch_distance(fixation_target_dists)
 
 
 class TestSelectionHazard:
@@ -161,6 +178,75 @@ class TestSelectionHazard:
         """C's defining advantage over A: most opportunities are declined, so the curve has room to fall."""
         opportunities = selection_opportunities(synthetic_fixations())
         assert opportunities["selected"].mean() < 0.5
+
+
+class TestEncirclingCriterion:
+    """Estimator D - Young & Hulleman (2013) / Papesh et al. (2021)'s encircling criterion.
+
+    Unlike A-C, this operates over every item in the display (not just targets) and doesn't use
+    ON_TARGET_THRESHOLD_DVA at all, so its synthetic fixtures are built directly in the fixations_to_icons()
+    shape (subject, trial, icon, distance_dva) rather than reusing `synthetic_fixations()`.
+    """
+
+    @staticmethod
+    def _single_fixation_trial(subject: int, trial: int, set_size: int) -> pd.DataFrame:
+        """One fixation; icon k sits at distance k + 0.5 DVA, so a 1-DVA-step sweep gives an exact, known answer."""
+        return pd.DataFrame({
+            "subject": subject, "trial": trial, "eye": "right", "event": 0,
+            "icon": [f"icon{k}" for k in range(set_size)],
+            "distance_dva": [k + 0.5 for k in range(set_size)],
+        })
+
+    def test_recovers_the_known_critical_radius(self):
+        """32 items, 1 target -> critical count ceil(33/2) = 17 (the exact example from Papesh et al., 2021).
+
+        Pinned to their 1.0 DVA step (rather than this module's finer 0.25 default) so the expected radius
+        matches the paper's worked example exactly.
+        """
+        dists = self._single_fixation_trial(subject=1, trial=1, set_size=32)
+        metadata = pd.DataFrame({"subject": [1], "trial": [1], "num_targets": [1]})
+        per_subject, pooled, per_trial = estimate_by_encircling(
+            dists, metadata, radius_step_dva=1.0, max_radius_dva=20.0
+        )
+        assert per_trial["fvf_dva"].iloc[0] == pytest.approx(17.0)
+        assert pooled == pytest.approx(17.0)
+        assert per_subject.loc[1] == pytest.approx(17.0)
+
+    def test_finer_step_finds_the_precise_threshold(self):
+        """At the default 0.25 DVA step, the same display resolves to the exact boundary (16.5) rather than
+        overshooting to the next whole DVA (17.0) the way the 1.0-step sweep does."""
+        dists = self._single_fixation_trial(subject=1, trial=1, set_size=32)
+        metadata = pd.DataFrame({"subject": [1], "trial": [1], "num_targets": [1]})
+        _per_subject, pooled, _per_trial = estimate_by_encircling(dists, metadata, max_radius_dva=20.0)
+        assert pooled == pytest.approx(16.5)
+
+    def test_more_targets_lowers_the_critical_radius(self):
+        """More targets -> lower critical count (the searcher can quit sooner) -> smaller FVF, same display."""
+        one_target = self._single_fixation_trial(subject=1, trial=1, set_size=32)
+        three_targets = self._single_fixation_trial(subject=1, trial=2, set_size=32)
+        dists = pd.concat([one_target, three_targets], ignore_index=True)
+        metadata = pd.DataFrame({"subject": [1, 1], "trial": [1, 2], "num_targets": [1, 3]})
+        _per_subject, _pooled, per_trial = estimate_by_encircling(dists, metadata, max_radius_dva=20.0)
+        fvf_by_trial = per_trial.set_index("trial")["fvf_dva"]
+        assert fvf_by_trial[2] < fvf_by_trial[1]
+
+    def test_censored_trial_returns_nan(self):
+        """A display too small to ever reach the critical count within the swept range returns NaN rather than the
+        edge of the sweep. critical_count = ceil(4/2) = 2, but only one icon is ever within max_radius_dva."""
+        dists = pd.DataFrame({
+            "subject": 1, "trial": 1, "eye": "right", "event": 0,
+            "icon": ["icon0", "icon1", "icon2"],
+            "distance_dva": [0.5, 100.0, 200.0],
+        })
+        metadata = pd.DataFrame({"subject": [1], "trial": [1], "num_targets": [1]})
+        _per_subject, pooled, per_trial = estimate_by_encircling(dists, metadata, max_radius_dva=5.0)
+        assert np.isnan(per_trial["fvf_dva"].iloc[0])
+        assert np.isnan(pooled)
+
+    def test_does_not_depend_on_on_target_threshold(self):
+        """D takes no on_target_threshold_dva argument at all - the whole point is independence from it."""
+        import inspect
+        assert "on_target_threshold_dva" not in inspect.signature(estimate_by_encircling).parameters
 
 
 class TestCombinedTable:
