@@ -27,7 +27,7 @@ def _resolve_target_color(
     match = identifications.loc[identifications[TARGET_STR] == target_id]
     if match.empty:
         return target_colors.get("UNKNOWN", DEFAULT_TARGET_COLORS["UNKNOWN"])
-    category = str(match.iloc[0]["identification_category"])
+    category = str(match.iloc[0]["identification_category"]).upper()
     return target_colors.get(category, target_colors.get("UNKNOWN", DEFAULT_TARGET_COLORS["UNKNOWN"]))
 
 
