@@ -20,6 +20,7 @@ def create_heatmap(
         heatmap_colorscale: str = DEFAULT_HEATMAP_COLORSCALE,
         heatmap_alpha: float = 0.5,
         show_colorbar: bool = True,
+        title: Optional[str] = None,
         target_colors: Optional[dict[str, RGBA]] = None,
         marker_alpha: float = 0.4,
         marker_line_width: float = 2.5,
@@ -70,6 +71,9 @@ def create_heatmap(
     if show_colorbar:
         fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02, label="Density")
 
+    if title is None:
+        title = f"Subject {trial._subject.id}, Trial {trial.trial_num}"
+    ax.set_title(title, fontsize=14)
     fig.tight_layout()
     if output_path:
         fig.savefig(output_path, dpi=150, bbox_inches="tight")

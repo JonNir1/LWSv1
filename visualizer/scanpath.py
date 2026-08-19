@@ -22,6 +22,7 @@ def create_scanpath(
         line_width: float = 1.5,
         line_color: RGBA = (0, 0, 0, 180),
         show_legend: bool = True,
+        title: Optional[str] = None,
         target_colors: Optional[dict[str, RGBA]] = None,
         marker_alpha: float = 0.4,
         marker_line_width: float = 2.5,
@@ -87,6 +88,9 @@ def create_scanpath(
         cbar.set_ticks([0, 1])
         cbar.set_ticklabels(["First", "Last"])
 
+    if title is None:
+        title = f"Subject {trial._subject.id}, Trial {trial.trial_num}"
+    ax.set_title(title, fontsize=14)
     fig.tight_layout()
     if output_path:
         fig.savefig(output_path, dpi=150, bbox_inches="tight")

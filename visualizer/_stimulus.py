@@ -40,6 +40,7 @@ def plot_stimulus_with_targets(
         target_colors: Optional[dict[str, RGBA]] = None,
         marker_alpha: float = 0.4,
         marker_line_width: float = 2.5,
+        title: Optional[str] = None,
 ) -> Axes:
     """
     Plot the trial's .bmp stimulus and draw circle markers at ON_TARGET_THRESHOLD_DVA
@@ -50,7 +51,10 @@ def plot_stimulus_with_targets(
         identifications = filter_to_trial(identifications, trial)
 
     img = Image.open(trial._search_array.image_path)
-    ax.imshow(np.asarray(img), extent=[0, img.width, img.height, 0])
+    imshow_kwargs = dict(extent=[0, img.width, img.height, 0])
+    if img.mode == "L":
+        imshow_kwargs["cmap"] = "gray"
+    ax.imshow(np.asarray(img), **imshow_kwargs)
 
     targets = trial.get_targets()
     radius_px = _target_radius_px(trial)
@@ -72,13 +76,20 @@ def plot_stimulus_with_targets(
     ax.set_ylim(img.height, 0)
     ax.set_aspect("equal")
     ax.axis("off")
+    if title is not None:
+        ax.set_title(title, fontsize=14)
     return ax
 
 
 # -- PIL API (for gaze_video.py) --
 
 def _load_stimulus_pil(trial: "Trial") -> Image.Image:
-    return Image.open(trial._search_array.image_path).convert("RGBA")
+    img = Image.open(trial._search_array.image_path)
+    if img.mode == "L":
+        img = img.convert("LA").convert("RGBA")
+    else:
+        img = img.convert("RGBA")
+    return img
 
 
 def _draw_target_markings_pil(
