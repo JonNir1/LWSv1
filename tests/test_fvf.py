@@ -198,13 +198,27 @@ class TestEncirclingCriterion:
         })
 
     def test_recovers_the_known_critical_radius(self):
-        """32 items, 1 target -> critical count ceil(33/2) = 17 (the exact example from Papesh et al., 2021)."""
+        """32 items, 1 target -> critical count ceil(33/2) = 17 (the exact example from Papesh et al., 2021).
+
+        Pinned to their 1.0 DVA step (rather than this module's finer 0.25 default) so the expected radius
+        matches the paper's worked example exactly.
+        """
         dists = self._single_fixation_trial(subject=1, trial=1, set_size=32)
         metadata = pd.DataFrame({"subject": [1], "trial": [1], "num_targets": [1]})
-        per_subject, pooled, per_trial = estimate_by_encircling(dists, metadata, max_radius_dva=20.0)
+        per_subject, pooled, per_trial = estimate_by_encircling(
+            dists, metadata, radius_step_dva=1.0, max_radius_dva=20.0
+        )
         assert per_trial["fvf_dva"].iloc[0] == pytest.approx(17.0)
         assert pooled == pytest.approx(17.0)
         assert per_subject.loc[1] == pytest.approx(17.0)
+
+    def test_finer_step_finds_the_precise_threshold(self):
+        """At the default 0.25 DVA step, the same display resolves to the exact boundary (16.5) rather than
+        overshooting to the next whole DVA (17.0) the way the 1.0-step sweep does."""
+        dists = self._single_fixation_trial(subject=1, trial=1, set_size=32)
+        metadata = pd.DataFrame({"subject": [1], "trial": [1], "num_targets": [1]})
+        _per_subject, pooled, _per_trial = estimate_by_encircling(dists, metadata, max_radius_dva=20.0)
+        assert pooled == pytest.approx(16.5)
 
     def test_more_targets_lowers_the_critical_radius(self):
         """More targets -> lower critical count (the searcher can quit sooner) -> smaller FVF, same display."""

@@ -56,8 +56,9 @@ perceptual quantity; see `CODE_REVIEW.md` T1 for how this affects the downstream
 **D - encircling criterion** (`estimate_by_encircling`; Young & Hulleman, 2013, *JEP:HPP* 39(6):1707-1720,
 https://doi.org/10.1037/a0028679; Papesh et al., 2021, *Cognitive Research: Principles and Implications* 6:20,
 https://doi.org/10.1186/s41235-020-00269-8). Per trial: draw a circle of radius r around every fixation and grow r
-in 1 DVA steps, counting the number of *distinct* items falling within any circle (an item counts once even if
-several circles cover it). FVF is the r at which that count first reaches
+in `radius_step_dva` steps (0.25 DVA by default here - finer than the 1 DVA step Papesh et al. used, since 1 DVA is
+coarse against this array's ~2.15 DVA icon spacing), counting the number of *distinct* items falling within any
+circle (an item counts once even if several circles cover it). FVF is the r at which that count first reaches
 `ceil((set_size + 1) / (num_targets + 1))` - Papesh et al.'s criterion for the search-array size at which quitting
 becomes the rational choice. Unlike A-C, D does not depend on `ON_TARGET_THRESHOLD_DVA` or on target identity at
 all - it operates over every item in the display, not just targets - so it is a useful independent check on
@@ -288,7 +289,7 @@ def estimate_fvf(
 def estimate_by_encircling(
         all_icon_dists: pd.DataFrame,
         metadata: pd.DataFrame,
-        radius_step_dva: float = 1.0,
+        radius_step_dva: float = 0.25,  # granularity of the radius sweep, in DVA (Papesh et al., 2021 used 1.0)
         max_radius_dva: float = 15.0,
 ) -> Tuple[pd.Series, float, pd.DataFrame]:
     """
@@ -298,6 +299,9 @@ def estimate_by_encircling(
     Per trial: grow a radius r in `radius_step_dva` steps, and at each step count the number of *distinct* items
     (targets and distractors alike) whose closest fixation falls within r. FVF is the r at which that count first
     reaches the critical count `ceil((set_size + 1) / (num_targets + 1))`.
+
+    :param radius_step_dva: sweep granularity, in DVA. Papesh et al. (2021) used 1.0; the default here is finer
+        (0.25) since 1 DVA is coarse relative to the ~2.15 DVA icon spacing in this array.
 
     Unlike A-C, this does not use `ON_TARGET_THRESHOLD_DVA` or `on_target` at all - the input is every item in the
     display, not just targets - which makes it a useful independent check on the other estimators.
