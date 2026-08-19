@@ -2,9 +2,13 @@
 ([V]) trial has bad actions  
 ([V]) trial has false-alarms  
 ([V]) trial has gaze-coverage below X%  
-([ ]) optional: trial has very few fixations (below Xth percentile of fixation count distribution)  
+([V]) optional: trial has very few fixations (below Xth percentile of fixation count distribution)  
 
 ### Exclusion Criteria for Subjects:
+TODO:
+  - verify those are indeed implemented and introduced into the funnel
+  - check how many/which subjects are excluded
+
 ([V]) too many trials excluded by abovementioned criteria, or  
 ([V]) too many trials with no actions  
 
@@ -14,8 +18,14 @@
 - calc variability within & between subjects for LWS visits and repeated visits
 - power analysis for LWS counts + repeated counts
 - check Carmel's data: how many reps required to successfully decode a SEEN target. multiply this number by the number of LWS visits to get the number of LWS visits required to get valid decoding in LWS instances.
+- effects on LWS probability:
+  - trial type
+  - target category, target rotation
+  - time in trial / trial in experiment (fatigue)
+  - target location / eccentricity
+  - Attentional Blink, SSM (=SoS)
 
-**Trial Category / Target Category:**
+**Trial Type / Target Category:**
 - differences in hit-rate/d'
 - differences in LWS-visit count/proportion
 - differences in repeated-visit count/proportion
@@ -24,6 +34,7 @@
 - visit duration / fixation count
 - visit spread (dispersion)
 - pupil size in LWS/identification/repeated visits
+- saccade into a LWS/TR/identification visit
 
 **Search Strategies:**
 - scan path analysis
@@ -31,7 +42,7 @@
 - exploration/exploitation - fixation duration and saccade sizes over trial time (plot using line plot (also by category and search-array type))
 
 
-### FOR NEXT VERSION:
+## FOR NEXT VERSION:
 **General:**
 - trigger order: `start recording` -> `trial start` -> `targets on` -> `targets off` -> `stimulus on` -> `stimulus off` -> `stop_recording` -> `trial end`
 meaning the `recording` does not properly flank the trial.
