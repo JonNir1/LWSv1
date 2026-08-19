@@ -5,7 +5,7 @@ The FVF is the radius around fixation from which a target can be detected and se
 input to an inspection-conditioned d' denominator (`CODE_REVIEW.md` T1), where the count of *plausibly inspected*
 items replaces the current "every non-target icon".
 
-Two estimators are provided, because the obvious formulation does not work.
+Three estimators are provided, because the obvious formulation does not work, plus a fourth from the literature.
 
 **Why not `P(identified | min eccentricity from any fixation)`.** Marking a target requires foveating it - the
 identification is classified as a hit only when gaze is within `ON_TARGET_THRESHOLD_DVA` of the target - so every
@@ -47,6 +47,21 @@ than censored. The estimate is 2.5x `ON_TARGET_THRESHOLD_DVA` (1.75), which is t
 from which a target can be *detected* must exceed the radius within which gaze counts as *on* it, but stay the same
 order of magnitude. All three estimators recover a known radius from synthetic data (true 4.0 -> A 3.9, B 3.8,
 C 3.9), so the divergence is a property of the real scanpaths, not of the implementations.
+
+**Caveat on C, found later (`threshold_sweep.ipynb`):** the selection-hazard estimate does not plateau across
+`ON_TARGET_THRESHOLD_DVA` - it rises roughly linearly from 2.47 DVA (threshold 0.25) to 5.26 DVA (threshold 2.5)
+instead of stabilizing. That is some evidence C is tracking the constant it is computed under rather than a fixed
+perceptual quantity; see `CODE_REVIEW.md` T1 for how this affects the downstream d' finding.
+
+**D - encircling criterion** (`estimate_by_encircling`; Young & Hulleman, 2013, *JEP:HPP* 39(6):1707-1720,
+https://doi.org/10.1037/a0028679; Papesh et al., 2021, *Cognitive Research: Principles and Implications* 6:20,
+https://doi.org/10.1186/s41235-020-00269-8). Per trial: draw a circle of radius r around every fixation and grow r
+in 1 DVA steps, counting the number of *distinct* items falling within any circle (an item counts once even if
+several circles cover it). FVF is the r at which that count first reaches
+`ceil((set_size + 1) / (num_targets + 1))` - Papesh et al.'s criterion for the search-array size at which quitting
+becomes the rational choice. Unlike A-C, D does not depend on `ON_TARGET_THRESHOLD_DVA` or on target identity at
+all - it operates over every item in the display, not just targets - so it is a useful independent check on
+whether the threshold-dependence above is real.
 """
 
 import warnings
@@ -268,6 +283,64 @@ def estimate_fvf(
     out["on_target_threshold"] = on_target_threshold_dva
     out.index.name = cnst.SUBJECT_STR
     return out
+
+
+def estimate_by_encircling(
+        all_icon_dists: pd.DataFrame,
+        metadata: pd.DataFrame,
+        radius_step_dva: float = 1.0,
+        max_radius_dva: float = 15.0,
+) -> Tuple[pd.Series, float, pd.DataFrame]:
+    """
+    Estimator D - encircling criterion (Young & Hulleman, 2013; Papesh et al., 2021 - see the module docstring for
+    full citations).
+
+    Per trial: grow a radius r in `radius_step_dva` steps, and at each step count the number of *distinct* items
+    (targets and distractors alike) whose closest fixation falls within r. FVF is the r at which that count first
+    reaches the critical count `ceil((set_size + 1) / (num_targets + 1))`.
+
+    Unlike A-C, this does not use `ON_TARGET_THRESHOLD_DVA` or `on_target` at all - the input is every item in the
+    display, not just targets - which makes it a useful independent check on the other estimators.
+
+    :param all_icon_dists: `fixations_to_icons()` called with the **full** icon set (not target-filtered), e.g.
+        `fixations_to_icons(fixations, icons, metadata)` - columns subject, trial, eye, event, icon, distance_dva.
+    :param metadata: per (subject, trial) metadata; must carry `num_targets`.
+    :return: (per-subject FVF Series [median across trials], pooled FVF [median across all trials],
+        per-trial FVF DataFrame with columns subject, trial, fvf_dva).
+    """
+    trial_keys = [cnst.SUBJECT_STR, cnst.TRIAL_STR]
+    set_size = all_icon_dists.groupby(trial_keys, observed=True)[cnst.ICON_STR].nunique().rename("set_size")
+    num_targets = (
+        metadata.drop_duplicates(subset=trial_keys).set_index(trial_keys)["num_targets"].rename("num_targets")
+    )
+    criteria = pd.concat([set_size, num_targets], axis=1).dropna()
+    criteria["critical_count"] = np.ceil((criteria["set_size"] + 1) / (criteria["num_targets"] + 1))
+
+    closest = (
+        all_icon_dists
+        .groupby(trial_keys + [cnst.ICON_STR], observed=True)[cnst.DISTANCE_DVA_STR]
+        .min()
+        .reset_index()
+    )
+    radii = np.arange(radius_step_dva, max_radius_dva + radius_step_dva, radius_step_dva)
+
+    results = []
+    for (subject, trial), grp in closest.groupby(trial_keys, observed=True):
+        if (subject, trial) not in criteria.index:
+            continue
+        critical_count = criteria.loc[(subject, trial), "critical_count"]
+        dists = np.sort(grp[cnst.DISTANCE_DVA_STR].to_numpy())
+        counts = np.searchsorted(dists, radii, side="right")
+        reached = np.flatnonzero(counts >= critical_count)
+        fvf = float(radii[reached[0]]) if reached.size else float("nan")
+        results.append((subject, trial, fvf))
+    if not results:
+        raise ValueError("no trials with both fixation-to-icon distances and metadata num_targets found")
+
+    per_trial = pd.DataFrame(results, columns=trial_keys + ["fvf_dva"])
+    per_subject = per_trial.groupby(cnst.SUBJECT_STR, observed=True)["fvf_dva"].median().sort_index()
+    pooled = float(per_trial["fvf_dva"].median())
+    return per_subject, pooled, per_trial
 
 
 def _binned_curve(data: pd.DataFrame, predictor: str, outcome: str, n_bins: int) -> pd.DataFrame:

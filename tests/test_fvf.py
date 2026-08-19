@@ -10,6 +10,7 @@ import pytest
 
 import config as cnfg
 from analysis.fvf.fvf import (
+    estimate_by_encircling,
     estimate_by_foveation_falloff,
     estimate_by_launch_distance,
     estimate_by_selection_hazard,
@@ -177,6 +178,61 @@ class TestSelectionHazard:
         """C's defining advantage over A: most opportunities are declined, so the curve has room to fall."""
         opportunities = selection_opportunities(synthetic_fixations())
         assert opportunities["selected"].mean() < 0.5
+
+
+class TestEncirclingCriterion:
+    """Estimator D - Young & Hulleman (2013) / Papesh et al. (2021)'s encircling criterion.
+
+    Unlike A-C, this operates over every item in the display (not just targets) and doesn't use
+    ON_TARGET_THRESHOLD_DVA at all, so its synthetic fixtures are built directly in the fixations_to_icons()
+    shape (subject, trial, icon, distance_dva) rather than reusing `synthetic_fixations()`.
+    """
+
+    @staticmethod
+    def _single_fixation_trial(subject: int, trial: int, set_size: int) -> pd.DataFrame:
+        """One fixation; icon k sits at distance k + 0.5 DVA, so a 1-DVA-step sweep gives an exact, known answer."""
+        return pd.DataFrame({
+            "subject": subject, "trial": trial, "eye": "right", "event": 0,
+            "icon": [f"icon{k}" for k in range(set_size)],
+            "distance_dva": [k + 0.5 for k in range(set_size)],
+        })
+
+    def test_recovers_the_known_critical_radius(self):
+        """32 items, 1 target -> critical count ceil(33/2) = 17 (the exact example from Papesh et al., 2021)."""
+        dists = self._single_fixation_trial(subject=1, trial=1, set_size=32)
+        metadata = pd.DataFrame({"subject": [1], "trial": [1], "num_targets": [1]})
+        per_subject, pooled, per_trial = estimate_by_encircling(dists, metadata, max_radius_dva=20.0)
+        assert per_trial["fvf_dva"].iloc[0] == pytest.approx(17.0)
+        assert pooled == pytest.approx(17.0)
+        assert per_subject.loc[1] == pytest.approx(17.0)
+
+    def test_more_targets_lowers_the_critical_radius(self):
+        """More targets -> lower critical count (the searcher can quit sooner) -> smaller FVF, same display."""
+        one_target = self._single_fixation_trial(subject=1, trial=1, set_size=32)
+        three_targets = self._single_fixation_trial(subject=1, trial=2, set_size=32)
+        dists = pd.concat([one_target, three_targets], ignore_index=True)
+        metadata = pd.DataFrame({"subject": [1, 1], "trial": [1, 2], "num_targets": [1, 3]})
+        _per_subject, _pooled, per_trial = estimate_by_encircling(dists, metadata, max_radius_dva=20.0)
+        fvf_by_trial = per_trial.set_index("trial")["fvf_dva"]
+        assert fvf_by_trial[2] < fvf_by_trial[1]
+
+    def test_censored_trial_returns_nan(self):
+        """A display too small to ever reach the critical count within the swept range returns NaN rather than the
+        edge of the sweep. critical_count = ceil(4/2) = 2, but only one icon is ever within max_radius_dva."""
+        dists = pd.DataFrame({
+            "subject": 1, "trial": 1, "eye": "right", "event": 0,
+            "icon": ["icon0", "icon1", "icon2"],
+            "distance_dva": [0.5, 100.0, 200.0],
+        })
+        metadata = pd.DataFrame({"subject": [1], "trial": [1], "num_targets": [1]})
+        _per_subject, pooled, per_trial = estimate_by_encircling(dists, metadata, max_radius_dva=5.0)
+        assert np.isnan(per_trial["fvf_dva"].iloc[0])
+        assert np.isnan(pooled)
+
+    def test_does_not_depend_on_on_target_threshold(self):
+        """D takes no on_target_threshold_dva argument at all - the whole point is independence from it."""
+        import inspect
+        assert "on_target_threshold_dva" not in inspect.signature(estimate_by_encircling).parameters
 
 
 class TestCombinedTable:
