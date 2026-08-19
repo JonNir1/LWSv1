@@ -80,10 +80,22 @@ Settled 2026-08-05. These are the intended semantics; the fixes below implement 
 
 Recorded here so they are not re-litigated as defects. These need a research decision, not a fix.
 
-- **T1. A better-engineered d'.** The FA-rate denominator is currently every non-target icon (`sdt.py:149`), which makes
-  FA rate tiny and d' large. d' is known to be a poor fit for this paradigm — A' was added for that reason. A
-  better-specified version (e.g. denominator = number of *fixated* items, or items within the functional visual field)
-  is worth designing. Until then, prefer A' when reporting sensitivity.
+- ~~**T1. A better-engineered d'.**~~ *(RESOLVED 2026-08-19: prototyped in `analysis/fvf/fvf_based_sdt.ipynb`, effect
+  is small — keep `sdt.py:149` as is, prefer A' as already recommended.)* The FA-rate denominator is currently every
+  non-target icon (`sdt.py:149`), which makes FA rate tiny and d' large. d' is known to be a poor fit for this
+  paradigm — A' was added for that reason. A better-specified version (e.g. denominator = number of *fixated* items,
+  or items within the functional visual field) is worth designing. Until then, prefer A' when reporting sensitivity.
+
+  **Finding.** Restricting the denominator to targets/distractors within a subject's FVF (selection-hazard estimate,
+  `analysis/fvf/fvf.py`) barely moves the rate: FA rate 0.000292 (unconditioned, `num_distractors`) vs. 0.000308
+  (FVF-conditioned, `distractors_in_fvf`) — mean over 1,618 valid trials. The reason the fix matters less than
+  expected: `analysis/fvf/array_coverage.ipynb` finds median per-trial coverage at 98.3% (mean 95.5%) at the
+  selection-hazard FVF radius (~4.34 DVA pooled), so "items within FVF" and "every non-target icon" are nearly the
+  same set on this data — the denominator this task was meant to shrink was never that inflated to begin with. Kept
+  as a notebook-only prototype rather than wired into `sdt.py`, since the correction it would apply is negligible.
+  Caveat: this reading assumes the selection-hazard FVF estimate itself is right — see the threshold-sweep finding
+  below `_determine_fvf.ipynb`/`compare_fvf_types.ipynb`, which found no plateau vs. `ON_TARGET_THRESHOLD_DVA` and
+  is reason for some skepticism of the ~4.34 DVA number.
 - **T2. What makes a *visit* an outlier?** Does one outlier fixation (or saccade) inside a visit contaminate the whole
   visit, or only a visit whose fixations are all outliers? Needed before visit-level outlier exclusion can be
   implemented (see H2, which for now must refuse the request rather than ignore it).
@@ -1456,7 +1468,7 @@ Every Critical and every High is fixed. All are covered by tests. What is left:
 
 | Item | Why it is still open |
 | --- | --- |
-| **T1** d' denominator | research decision |
+| ~~**T1** d' denominator~~ | resolved; FVF-conditioned denominator prototyped, effect negligible (coverage already ~95-98%), `sdt.py` kept as is |
 | **T2** what makes a *visit* an outlier | research decision; H2 refuses the request until this is settled |
 | ~~**T4** `fixations_to_targets()`~~ | resolved; long-format distances in `pipeline/stage2_align/`, visits and identifications moved to stage 2 |
 | ~~**T5** three `peyes` gaps~~ | filed upstream; the `start_pixel`/`end_pixel` workaround stays until a fix ships |
@@ -1493,6 +1505,6 @@ remains, in the order it should be done:
 2. ~~**T4 `fixations_to_targets()`.**~~ Resolved: `pipeline/stage2_align/fixations_to_targets.py` returns long format;
    `build_visits.py` and `target_identifications.py` also moved to stage 2. Stage-3 classification moved to
    `pipeline/stage3_classify/` with `run_stage3()` as the entry point.
-3. **T1 and T2**, the two research decisions. T1's FVF blocker is resolved; T2 gates whether H2's all-outlier rule
-   is the right one.
+3. ~~**T1**~~ resolved (see above) and **T2**, the remaining research decision, which gates whether H2's
+   all-outlier rule is the right one.
 4. **M10, M11, M12 and the `k` choice in L6** — deferred by decision; reopen when the modelling is revisited.
