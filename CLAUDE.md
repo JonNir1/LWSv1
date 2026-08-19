@@ -134,7 +134,7 @@ index over the 10x18 grid). `DataStore.targets` is a derived view (`is_target` s
 `target`). Stored as categoricals (~7 MB for 27 subjects).
 
 Target distances are not in the events table. They are computed on-the-fly in stage 2 by
-`fixations_to_targets()` in long format.
+`fixations_to_icons()` in long format.
 
 Object model (`Subject` -> list of `Trial` -> one `SearchArray` each):
 
@@ -161,7 +161,8 @@ Both carry a `<name>.cache.json` sidecar keyed on the stage-1 source files (`pip
 Stage 2 computes on-the-fly from stage-1 pickles, producing three tables stored on `DataStore`:
 
 - `fixation_target_dists`: long-format (subject, trial, eye, event, target, distance_px, distance_dva), from
-  `pipeline/stage2_align/fixations_to_targets.py`
+  `pipeline/stage2_align/fixations_to_icons.py` (called with `icons.loc[icons["is_target"]]`; the function itself
+  is generic over which icons it's given, e.g. the full icon set for array-coverage work under `analysis/fvf/`)
 - `visits`: from `pipeline/stage2_align/build_visits.py`, groups consecutive on-target fixations
 - `identifications`: from `pipeline/stage2_align/target_identifications.py`, matches identification actions to fixation
   positions and classifies as hit / repeated_hit / false_alarm / miss
@@ -234,7 +235,12 @@ corrections), A', and F1 per subject-trial.
 
 Analysis lives in notebooks at `analysis/*.ipynb` (`hit_rate`, `time_on_task`, `time_in_trial`, `spatial_effects`,
 `stimulus_features`, `trial_exclusion`, `gaze_behavior`, `ssm_and_ab`), each of which builds a funnel and plots it.
-`analysis/helpers/default_value_selection/_determine_fvf.ipynb` justifies the FVF hyperparameter.
+`analysis/fvf/` holds the functional-visual-field work: `fvf.py` (the three estimators, see its module docstring
+for why only the selection-hazard one works on this data), `compare_fvf_types.ipynb` (justifies the FVF
+hyperparameter), `threshold_sweep.ipynb` (FVF vs. `ON_TARGET_THRESHOLD_DVA`), `array_coverage.ipynb` (% of a
+trial's icons within a subject's FVF), `fvf_over_trials.ipynb` (array coverage vs. trial number, with a GAM in
+`analysis/R/fvf_over_trials_gam.R`), and `fvf_based_sdt.ipynb` (a notebook-only prototype of an FVF-conditioned
+hit/FA-rate denominator, `CODE_REVIEW.md` T1).
 Stage-3 threshold notebooks (`_determine_fixation_rate`, `_determine_fixs_to_strip`, `_determine_time_to_trial_end`)
 live in `pipeline/stage3_classify/`.
 `__old__subject_comparisons/` is superseded, `_publications_/` holds figure notebooks, `plgrnd2.py` is a scratchpad.

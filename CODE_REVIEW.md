@@ -100,7 +100,10 @@ Recorded here so they are not re-litigated as defects. These need a research dec
 - ~~**T4. `fixations_to_targets()` -- restore per-target distances in stage 2.**~~ *(RESOLVED 2026-08-11:
   implemented as `pipeline/stage2_align/fixations_to_targets.py` returning long-format distances; visits and
   identifications also moved to stage 2 as `pipeline/stage2_align/build_visits.py` and
-  `pipeline/stage2_align/target_identifications.py`.)* See below.
+  `pipeline/stage2_align/target_identifications.py`. Later generalized and renamed to
+  `pipeline/stage2_align/fixations_to_icons.py::fixations_to_icons()`, which takes whichever icons the caller
+  wants distances to instead of always filtering to targets internally - used both for target distances and for
+  the full-array coverage work under `analysis/fvf/`.)* See below.
 - **T5. Three gaps reported upstream to `peyes`.** *(RESOLVED 2026-08-11: verified against the installed 0.0.9.6
   and filed on the `peyes` repo.)* Kept here because the workarounds stay until upstream ships fixes.
   1. **`summary()` omits `start_pixel` / `end_pixel`** (`_DataModels/Event.py:135-160`), though both exist as
@@ -148,8 +151,8 @@ looks lossy.
 | --- | --- |
 | visit construction | resolved: `pipeline/stage2_align/build_visits.py` builds visits on-the-fly from long-format distances |
 | LWS / target-return funnels, both paths | resolved: `pipeline/stage3_classify/event_classification.py` uses `assign_fixation_targets()` for fixations, `weighted_distance_dva` for visits |
-| all three FVF estimators | `analysis/helpers/fvf.py` `per_target_distances` still broken (needs updating to use long-format distances) |
-| four threshold-derivation notebooks | partially resolved: three moved to `pipeline/stage3_classify/`; `_determine_on_target_threshold` and `_determine_fvf` still need updating |
+| all three FVF estimators | resolved: `analysis/fvf/fvf.py` estimators now take `DataStore.fixation_target_dists` directly; the wide-reshape `per_target_distances` is deleted |
+| four threshold-derivation notebooks | partially resolved: three moved to `pipeline/stage3_classify/`; `_determine_on_target_threshold` still needs updating. `_determine_fvf` moved to `analysis/fvf/compare_fvf_types.ipynb` and updated |
 | `tests/test_realdata_findings.py` on-target computation | resolved: tests use stage-2 long-format distances |
 
 **Shape of the fix (implemented).** `pipeline/stage2_align/fixations_to_targets.py` returns the long format
@@ -158,9 +161,11 @@ uses `assign_fixation_targets()` to pick the closest within-threshold target per
 
 **Remaining follow-ups:**
 
-- **FVF's "preceding fixation" logic.** `estimate_by_launch_distance` and `estimate_by_selection_hazard` walk
-  `event - 1` to find the launching fixation. In the events table that neighbour is usually a *saccade*, so both
-  must filter to fixations before stepping.
+- ~~**FVF's "preceding fixation" logic.**~~ *(RESOLVED: `estimate_by_launch_distance` and
+  `estimate_by_selection_hazard` now take `DataStore.fixation_target_dists`, which is built only from
+  `event_type == FIXATION` rows - so `event` values within a (subject, trial, eye, target) group already form a
+  contiguous fixation-only sequence, and stepping back one *position* (not `event - 1`) never lands on a saccade
+  or blink. Covered by a regression test in `tests/test_fvf.py::TestLaunchFixationOrdering`.)*
 
 ---
 
