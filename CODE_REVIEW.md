@@ -1296,7 +1296,7 @@ fixation-level label disagrees with the visit's.
 
 ### M19. `_STAGE1_SOURCES` lists three deleted `data_models/preprocess/` files, silently weakening the cache key
 
-**STATUS: FIXED** (2026-08-19, commit `74b1524`)
+**STATUS: FIXED** (2026-08-19, commit `162ffd6`)
 
 **Where:** `pipeline/stage1_parse/cache_key.py:25-38`
 
