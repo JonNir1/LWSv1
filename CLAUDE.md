@@ -32,6 +32,29 @@ Tag a backup ref (`backup/<something>`) at meaningful milestones - before a larg
 commits, or after completing a body of work worth returning to. Not on every merge, and not for small incremental
 changes; a tag per commit is noise that makes the real checkpoints harder to find.
 
+### `dev` -> `main` (PR workflow)
+
+Only when the user explicitly asks. Requires `gh` CLI, authenticated (`gh auth login`; PATH may need a manual
+refresh in a fresh shell after install - `$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")`
+in PowerShell).
+
+1. `gh pr create --base main --head dev ...`.
+2. `gh pr merge <n> --merge` (merge commit, not squash/rebase, to match this repo's `--no-ff` convention).
+3. `git fetch origin`, then fast-forward local `main` to `origin/main`.
+4. Sync local `dev` to the same commit and `git push origin dev`, so `dev` doesn't lag behind the merge.
+5. Tag the merged commit last, once `main` and `dev` (local and remote) all agree - ask the user for a tag name
+   rather than inventing one.
+6. Return to the session's worktree branch and rebase it onto `dev`.
+
+**Pitfall: check which branch is actually checked out in the main checkout before fast-forwarding.** The main
+checkout (the non-worktree clone at the repo root) does not necessarily have `main` checked out - it commonly has
+`dev` checked out instead, since that's the branch sessions rebase onto. Running `git merge --ff-only origin/main`
+there fast-forwards whatever branch is currently checked out, silently moving `dev` instead of `main` if `dev` is
+checked out. Always confirm with `git branch --show-current` (or check `git rev-parse main dev` before and after)
+rather than assuming the merge landed on the intended branch. If it lands on the wrong one, update the other ref
+directly with `git branch -f <branch> origin/<branch>` (safe when that branch isn't checked out anywhere - check
+`git worktree list` first).
+
 ## What this project is
 
 Analysis code for the LWS ("Looking Without Seeing") v1 experiment: a visual-search task recorded with a Tobii
