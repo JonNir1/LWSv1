@@ -11,7 +11,7 @@ pio.renderers.default = "browser"
 
 # %%
 # ##  Run Pipeline
-# from pipeline.run_pipeline import run_pipeline
+# from pipeline.stage1_parse.run_stage1 import run_stage1
 # targets, actions, metadata, idents, fixations, visits = run_pipeline(
 #     # raw_data_path=cnfg.RAW_DATA_PATH,
 #     # identification_actions=cnfg.IDENTIFICATION_ACTIONS,
@@ -26,51 +26,51 @@ pio.renderers.default = "browser"
 # %%
 # ##  Load Data
 
-from analysis.helpers.read_data import read_data
+from analysis.helpers.read_data import load_data
 
-loaded_data = read_data(cnfg.OUTPUT_PATH, drop_bad_eye=True, drop_outliers=True)
-targets = loaded_data.targets
-actions = loaded_data.actions
-metadata = loaded_data.metadata
-idents = loaded_data.identifications
-fixations = loaded_data.fixations
-visits = loaded_data.visits
-del loaded_data    # free up memory by deleting the loaded_data object
+data = load_data(cnfg.OUTPUT_PATH, drop_bad_eye=True, drop_outliers=True)
+targets = data.targets
+actions = data.actions
+metadata = data.metadata
+idents = data.identifications
+fixations = data.fixations
+visits = data.visits
 
 
 # %%
-from analysis.helpers.funnels import build_trial_inclusion_funnel, build_event_classification_funnel, calculate_funnel_step_sizes
-from analysis.helpers.funnels.funnel_config import TRIAL_INCLUSION_CRITERIA, IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA
-
-trial_funnel = build_trial_inclusion_funnel(
-    cnfg.OUTPUT_PATH
+from pipeline.stage3_classify.build_funnels import build_trial_inclusion_funnel, build_event_classification_funnel
+from analysis.helpers.visualizations.funnel.size_and_proportion import calculate_step_sizes
+from pipeline.config import (
+    TRIAL_INCLUSION_CRITERIA, IS_LWS_CRITERIA, IS_TARGET_RETURN_CRITERIA, cumulative_names,
 )
-trial_funnel_sizes = calculate_funnel_step_sizes(
+
+trial_funnel = build_trial_inclusion_funnel(data)
+trial_funnel_sizes = calculate_step_sizes(
     trial_funnel,
     ["subject", "trial"],
-    TRIAL_INCLUSION_CRITERIA + ["is_valid_trial"]
+    cumulative_names(TRIAL_INCLUSION_CRITERIA + ["is_valid_trial"])
 )
 
 is_lws_funnel = build_event_classification_funnel(
-    cnfg.OUTPUT_PATH,
+    data,
     event_type="visit",
     funnel_type="lws",
 )
-lws_sizes = calculate_funnel_step_sizes(
+lws_sizes = calculate_step_sizes(
     is_lws_funnel,
     ["subject", "trial", "trial_category", "target_category"],
-    IS_LWS_CRITERIA + ["is_lws"]
+    cumulative_names(IS_LWS_CRITERIA + ["is_lws"])
 )
 
 is_tr_funnel = build_event_classification_funnel(
-    cnfg.OUTPUT_PATH,
+    data,
     event_type="visit",
     funnel_type="target_return",
 )
-tr_funnel_sizes = calculate_funnel_step_sizes(
+tr_funnel_sizes = calculate_step_sizes(
     is_tr_funnel,
     ["subject", "trial", "trial_category", "target_category"],
-    IS_TARGET_RETURN_CRITERIA + ["is_target_return"]
+    cumulative_names(IS_TARGET_RETURN_CRITERIA + ["is_target_return"])
 )
 
 

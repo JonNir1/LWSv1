@@ -42,9 +42,8 @@ class Trial:
 
         # pre-process inputs
         self._search_array = self._create_search_array()
-        dists = self._calculate_gaze_target_distances()
         labels, left_events, right_events = self._detect_eye_movements()
-        self._gaze = pd.concat([self._gaze, labels, dists], axis=1)
+        self._gaze = pd.concat([self._gaze, labels], axis=1)
         self._left_events = left_events
         self._right_events = right_events
 
@@ -122,13 +121,33 @@ class Trial:
         actions = pd.concat([actions, to_trial_end], axis=1)
         return actions
 
+    def get_icons(self) -> pd.DataFrame:
+        """
+        Extracts every icon in the trial's search array: pixel coordinates, jitter angle, category, image sub-path,
+        and whether it is a target.
+
+        Indexed by the stable `icon{i}` identifier (flat row-major position in the array). Columns are prefixed
+        `target_` for backwards compatibility with the consumers of `get_targets()`, which is a filter over this.
+        """
+        icons = self._search_array.icons
+        images = [img for _icon_id, img, _is_tgt in icons]
+        icon_df = pd.DataFrame(images, index=[icon_id for icon_id, _img, _is_tgt in icons])
+        icon_df[cnfg.CATEGORY_STR] = [img.category.name for img in images]
+        icon_df = icon_df.rename(columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False)
+        icon_df["is_target"] = [is_tgt for _icon_id, _img, is_tgt in icons]
+        return icon_df
+
     def get_targets(self) -> pd.DataFrame:
-        """ Extracts the trial's target information: the targets' pixel coordinates, angle, category, and image path. """
-        target_images = self._search_array.targets
-        target_df = pd.DataFrame(target_images, index=[f"{cnfg.TARGET_STR}{i}" for i in range(len(target_images))])
-        target_df[cnfg.CATEGORY_STR] = [img.category.name for img in target_images]
-        target_df = target_df.rename(columns=lambda col: f"{cnfg.TARGET_STR}_{col}", inplace=False)
-        return target_df
+        """
+        The target subset of `get_icons()`: pixel coordinates, angle, category, and image path, indexed by the same
+        stable `icon{i}` identifier.
+        """
+        icons = self.get_icons()
+        targets = icons.loc[icons["is_target"]].drop(columns=["is_target"])
+        assert len(targets) == self.num_targets, (
+            f"expected {self.num_targets} targets in trial {self.trial_num}, found {len(targets)}"
+        )
+        return targets
 
     def get_metadata(self, bad_actions: Sequence[SubjectActionCategoryEnum]) -> pd.Series:
         return pd.Series({
@@ -145,8 +164,8 @@ class Trial:
 
     def get_raw_eye_movements(self) -> pd.DataFrame:
         """ Returns a DataFrame summarizing the eye movements detected during the trial. """
-        left = peyes.summarize_events(self._left_events)
-        right = peyes.summarize_events(self._right_events)
+        left = self._summarize_events(self._left_events)
+        right = self._summarize_events(self._right_events)
         df = pd.concat(
             [left, right],
             keys=[cnfg.LEFT_STR, cnfg.RIGHT_STR],
@@ -154,24 +173,38 @@ class Trial:
         )
         return df
 
-    def process_fixations(self) -> pd.DataFrame:
-        from data_models.preprocess.fixations import process_trial_fixations
+    def process_events(self) -> pd.DataFrame:
+        from data_models.parse.eye_movements import process_trial_events
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             features = self.get_raw_eye_movements()
-        fixations = process_trial_fixations(features, self.get_targets(), self.end_time, self.px2deg)
-        return fixations
+        events = process_trial_events(features, self.end_time)
+        return events
+
+    @staticmethod
+    def _summarize_events(events: Sequence) -> pd.DataFrame:
+        """
+        `peyes.summarize_events`, plus the two endpoint columns it omits.
+
+        `peyes`' `BaseEvent.summary()` reports `center_pixel` but neither `start_pixel` nor `end_pixel`, although
+        both exist as properties on the event. For a saccade those two points *are* the geometry - where the
+        movement began and where it landed - and amplitude and azimuth give magnitude and direction but not
+        position, so a landing site cannot be recovered from the summary alone. Read them off the `Event` objects
+        while we still hold them; drop this once upstream exposes them (feature request filed against `peyes`).
+        """
+        summary = peyes.summarize_events(events)
+        endpoints = pd.DataFrame(
+            [(*ev.start_pixel, *ev.end_pixel) for ev in events],
+            columns=["start_x", "start_y", "end_x", "end_y"], index=summary.index, dtype=float,
+        )
+        return pd.concat([summary, endpoints], axis=1)
 
     def _create_search_array(self) -> SearchArray:
         search_array_type = SearchArrayCategoryEnum[_extract_singleton_column(self._gaze, cnfg.CONDITION_STR).upper()]
         search_array_num = int(_extract_singleton_column(self._gaze, "image_num"))
-        search_array = SearchArray.from_mat(os.path.join(
-            cnfg.SEARCH_ARRAY_PATH,
-            f"generated_stim{cnfg.STIMULI_VERSION}",
-            search_array_type.name.lower(),
-            f"image_{search_array_num}.mat"
-        ))
-        return search_array
+        return SearchArray.from_mat(
+            SearchArray.get_path(cnfg.STIMULI_VERSION, search_array_type, search_array_num, "mat")
+        )
 
     def _detect_eye_movements(self) -> Tuple[pd.DataFrame, pd.Series, pd.Series]:
         from data_models.parse.eye_movements import detect_eye_movements
@@ -179,46 +212,18 @@ class Trial:
             self._gaze,
             DominantEyeEnum.LEFT,
             self._subject.screen_distance_cm,
-            pixel_size_cm=cnfg.PIXEL_SIZE_MM / 10,
+            pixel_size_cm=cnfg.PIXEL_SIZE_CM,
             only_labels=False
         )
         right_labels, right_events = detect_eye_movements(
             self._gaze,
             DominantEyeEnum.RIGHT,
             self._subject.screen_distance_cm,
-            pixel_size_cm=cnfg.PIXEL_SIZE_MM / 10,
+            pixel_size_cm=cnfg.PIXEL_SIZE_CM,
             only_labels=False
         )
         labels = pd.concat([left_labels, right_labels], axis=1)
         return labels, left_events, right_events
-
-    def _calculate_gaze_target_distances(self,) -> pd.DataFrame:
-        left_dists = self._calculate_target_distances(
-            self._gaze[cnfg.LEFT_X_STR].values, self._gaze[cnfg.LEFT_Y_STR].values
-        )
-        right_dists = self._calculate_target_distances(
-            self._gaze[cnfg.RIGHT_X_STR].values, self._gaze[cnfg.RIGHT_Y_STR].values
-        )
-        main = left_dists if self._subject.eye == DominantEyeEnum.LEFT else right_dists
-        second = right_dists if self._subject.eye == DominantEyeEnum.LEFT else left_dists
-        dists = main.fillna(second)
-        dists.index = self._gaze.index
-        return dists
-
-    def _calculate_target_distances(self, x: np.ndarray, y: np.ndarray,) -> pd.DataFrame:
-        """
-        Calculate the pixel-distance from each X-Y coordinate to each target in the search array.
-        :param x: 1D array of X coordinates with shape (N,) or (N, 1) or (1, N)
-        :param y: 1D array of Y coordinates with shape (N,) or (N, 1) or (1, N)
-        :return: a (num_coords, num_targets) DataFrame with the distances from each coordinate to each target.
-        """
-        if x.shape != y.shape:
-            raise ValueError(f"Input arrays must have the same shape. Got {x.shape} and {y.shape}.")
-        coords = np.column_stack((x, y))                                                            # shape (n_coords, 2)
-        target_coords = np.array([(img.x, img.y) for img in self._search_array.targets])            # shape (n_targets, 2)
-        dists = np.linalg.norm(coords[:, np.newaxis, :] - target_coords[np.newaxis, :, :], axis=2)  # shape (n_coords, n_targets)
-        dists = pd.DataFrame(dists, columns=[f"{cnfg.TARGET_STR}{i}" for i in range(target_coords.shape[0])])
-        return dists
 
     def _calculate_gaze_coverage(self, eye: DominantEyeEnum) -> float:
         """ Calculates the percent of samples with valid gaze data (not NaN) for the specified eye. """
@@ -253,6 +258,16 @@ class Trial:
         if self._search_array.image_num != other._search_array.image_num:
             return False
         return True
+
+    def __hash__(self) -> int:
+        """
+        Defining `__eq__` without this sets `__hash__ = None`, making `Trial` unhashable - so it cannot go in a set
+        or be a dict key, which is surprising for a value-like object.
+
+        Hashes a subset of the fields `__eq__` compares. That is the required contract: equal trials agree on every
+        comparison field, so they agree on this subset too. A `Trial` is effectively immutable after `__init__`.
+        """
+        return hash((self.block_num, self.trial_num, self.start_time, self.end_time))
 
     def __repr__(self) -> str:
         return f"Trial {self.trial_num} ({self.trial_category.name})"

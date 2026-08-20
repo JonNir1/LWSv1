@@ -1,0 +1,10 @@
+# Test-runner configuration only. This repo is an analysis pipeline, not a distributable package: there is
+# deliberately no [project] table, and code is run with the repo root as CWD.
+[tool.pytest.ini_options]
+# Imports are absolute from the repo root (`import config as cnfg`, `from analysis.helpers... import ...`),
+# so put the root on sys.path for test runs.
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "realdata: needs the built pickles in cnfg.OUTPUT_PATH; skipped when absent",
+]

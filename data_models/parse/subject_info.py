@@ -1,5 +1,6 @@
 import io
 from datetime import datetime
+from typing import Any, Dict
 
 from constants import DATE_TIME_FORMAT
 
@@ -10,20 +11,17 @@ _SUBJECT_INFO_FIELD_MAP = {
 }
 
 
-def parse_subject_info(file_path) -> dict:
+def parse_subject_info(file_path: str) -> Dict[str, Any]:
     """ Reads subject's personal information from the E-Prime log file, and returns a dictionary with the information. """
-    f = io.open(file_path, mode="r", encoding="utf-16")
-    lines = f.readlines()
     subject_info = {field: None for field in _SUBJECT_INFO_FIELD_MAP.values()}
-    for line in lines:
-        if ":" not in line:
-            continue
-        eprime_field, value = line.split(":", 1)
-        eprime_field, value = eprime_field.strip(), value.strip()
-        if eprime_field in _SUBJECT_INFO_FIELD_MAP.keys():
-            field = _SUBJECT_INFO_FIELD_MAP[eprime_field]
-            subject_info[field] = value
-    f.close()
+    with io.open(file_path, mode="r", encoding="utf-16") as f:
+        for line in f:
+            if ":" not in line:
+                continue
+            eprime_field, value = line.split(":", 1)
+            eprime_field, value = eprime_field.strip(), value.strip()
+            if eprime_field in _SUBJECT_INFO_FIELD_MAP:
+                subject_info[_SUBJECT_INFO_FIELD_MAP[eprime_field]] = value
 
     # Convert to numeric types
     subject_info["subject_id"] = int(subject_info["subject_id"])

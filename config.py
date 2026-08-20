@@ -4,7 +4,9 @@ from typing import Union, Literal
 import plotly.express.colors as _colors
 
 from constants import *
-from data_models.LWSEnums import SubjectActionCategoryEnum
+
+# TODO: drop this re-export once all consumers import from pipeline.config directly
+from pipeline.config import *  # noqa: F401,F403 - backward compat re-export of pipeline thresholds
 
 STIMULI_VERSION = 1
 
@@ -19,47 +21,6 @@ SEARCH_ARRAY_PATH = os.path.join(_BASE_PATH, "Stimuli")
 OUTPUT_PATH = os.path.join(_BASE_PATH, "Results")
 SUBJECT_OUTPUT_PATH = os.path.join(OUTPUT_PATH, f"{SUBJECT_STR}s")
 PUBLICATIONS_PATH = os.path.join(_BASE_PATH, "Publications")
-
-
-## Analysis Parameters ##
-### Pre-Processing Pipeline Parameters ###
-ON_TARGET_THRESHOLD_DVA = 1.75          # threshold to determine if a gaze/fixation is on-target
-IDENTIFICATION_ACTIONS = [     # list of subject-actions indicating target identification
-    SubjectActionCategoryEnum.MARK_AND_CONFIRM,
-    # SubjectActionCategoryEnum.MARK_ONLY    # uncomment this to include marking-only actions
-]
-BAD_ACTIONS = [
-    act for act in SubjectActionCategoryEnum if
-    act != SubjectActionCategoryEnum.NO_ACTION and act not in IDENTIFICATION_ACTIONS
-]
-
-### Funnel Analysis Parameters ###
-GAZE_COVERAGE_PERCENT_THRESHOLD = 80    # minimum percent of trial time that gaze data must cover to be included in analysis
-TIME_TO_TRIAL_END_THRESHOLD = 1000      # fixations/visits ending within this time from the trial end are considered not-LWS.
-FIXATIONS_TO_STRIP_THRESHOLD = 3        # fixations/visits whose following number of fixations fall in the bottom strip are not considered LWS.
-
-_ANY_FUNNEL_STEPS = [
-    # sequence of steps to determine if a fixation/visit is valid (valid trial, valid fixation) and on-target
-    "all",
-    "trial_gaze_coverage",
-    # "trial_has_actions",    # uncomment to exclude trials with no subject-actions
-    "trial_no_bad_action",
-    "trial_no_miss_with_false_alarm",
-    "instance_not_outlier",
-    "instance_on_target",
-]
-LWS_FUNNEL_STEPS = _ANY_FUNNEL_STEPS + [
-    # additional steps to determine if a valid & on-target fixation/visit is a Looking-without-Seeing (LWS) instance
-    "instance_before_identification",
-    "instance_not_close_to_trial_end",
-    "not_before_exemplar_visit",  # fixations/visits that precede exemplar section (bottom-strip) visits are not LWS
-    "final"
-]
-TARGET_RETURN_FUNNEL_STEPS = _ANY_FUNNEL_STEPS + [
-    # additional steps to determine if a valid & on-target fixation/visit is a target-return instance
-    "instance_after_identification",
-    "final"
-]
 
 
 ## VISUALIZATION CONFIGURATION ##

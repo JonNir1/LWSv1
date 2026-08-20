@@ -12,9 +12,9 @@ from tqdm import tqdm
 import config as cnfg
 from data_models.parse.subject_info import parse_subject_info
 from data_models.parse.triggers_and_gaze import parse_triggers_and_gaze
-from data_models.preprocess.target_identifications import extract_trial_identifications
-from data_models.preprocess.visits import convert_fixations_to_visits
+
 from data_models.LWSEnums import SexEnum, DominantHandEnum, DominantEyeEnum, SubjectActionCategoryEnum
+from pipeline.stage1_parse.cache_key import build_cache_key, describe_staleness, is_cache_valid, write_cache_key
 
 
 class Subject:
@@ -161,8 +161,7 @@ class Subject:
         To move from `d` pixels to DVA, use the formula: `d * self.px2deg`.
         """
         assert np.isfinite(self._screen_distance_cm), "Screen distance must be finite to convert pixels to degrees."
-        pixel_size_cm = cnfg.PIXEL_SIZE_MM / 10  # Convert mm to cm
-        return 2 * np.degrees(np.arctan2(pixel_size_cm / 2, self._screen_distance_cm))
+        return 2 * np.degrees(np.arctan2(cnfg.PIXEL_SIZE_CM / 2, self._screen_distance_cm))
 
     @property
     def out_dir(self) -> str:
@@ -211,37 +210,55 @@ class Subject:
         trials = sorted(trials, key=lambda t: t.trial_num)
         return trials
 
-    def get_targets(self) -> pd.DataFrame:
+    def get_icons(self) -> pd.DataFrame:
         """
-        Extract the target information from a subject's trials, returning a DataFrame with the following columns:
+        Extract every search-array icon from a subject's trials, returning a DataFrame with the following columns:
         - trial: int; the trial number
-        - target: str; the name of the target
-        - x: float; the x coordinate of the target in pixels
-        - y: float; the y coordinate of the target in pixels
-        - angle: float; the rotation angle of the target in degrees
-        - category: ImageCategoryEnum; the category of the target
-        - sub_path: str; the path to the target image file, relative to the images directory
+        - icon: str; the stable `icon{i}` identifier (flat row-major position in the array)
+        - x: float; the x coordinate of the icon in pixels
+        - y: float; the y coordinate of the icon in pixels
+        - angle: float; the rotation angle of the icon in degrees
+        - category: str; the name of the icon's ImageCategoryEnum
+        - sub_path: str; the path to the icon image file, relative to the images directory
+        - is_target: bool; whether this icon is one of the trial's targets
+
+        This supersedes the per-target table: `get_targets()` is the `is_target` subset of it.
         """
-        targets = dict()
-        for trial in tqdm(self.get_trials(), desc="Extracting Targets", disable=True):
-            targets[trial.trial_num] = (
-                trial.get_targets()
+        icons = dict()
+        for trial in self.get_trials():
+            icons[trial.trial_num] = (
+                trial.get_icons()
                 .rename(columns=lambda name: name.replace(f"{cnfg.TARGET_STR}_", ""))
                 .reset_index(drop=False)
-                .rename(columns={"index": cnfg.TARGET_STR, })
-                .sort_values(by=cnfg.TARGET_STR)
+                .rename(columns={"index": cnfg.ICON_STR, })
             )
-        targets = (
-            pd.concat(targets.values(), axis=0, keys=targets.keys())
+        icons = (
+            pd.concat(icons.values(), axis=0, keys=icons.keys())
             .reset_index(drop=False)
             .rename(columns={"level_0": cnfg.TRIAL_STR})
             .drop(columns=["level_1"])
         )
-        return targets
+        # the identifier and the two path-like strings have only a few hundred distinct values across the whole
+        # dataset; storing them as categoricals keeps icons.pkl small (see the plan's storage note)
+        for col in (cnfg.ICON_STR, "sub_path", cnfg.CATEGORY_STR):
+            if col in icons.columns:
+                icons[col] = icons[col].astype("category")
+        return icons
+
+    def get_targets(self) -> pd.DataFrame:
+        """
+        The target subset of `get_icons()`, keyed by the same stable `icon{i}` identifier.
+
+        Kept as a convenience for callers that only care about targets; it is no longer persisted separately.
+        """
+        icons = self.get_icons()
+        targets = icons.loc[icons["is_target"]].drop(columns=["is_target"]).reset_index(drop=True)
+        assert not targets.empty, f"subject {self.id} has no targets in any trial"
+        return targets.rename(columns={cnfg.ICON_STR: cnfg.TARGET_STR})
 
     def get_actions(self) -> pd.DataFrame:
         actions = dict()
-        for trial in tqdm(self.get_trials(), desc="Extracting Actions", disable=True):
+        for trial in self.get_trials():
             actions[trial.trial_num] = trial.get_actions()
         actions = pd.concat(actions.values(), axis=0, keys=actions.keys())
         actions = (
@@ -253,12 +270,19 @@ class Subject:
         return actions
 
 
+    # dtypes for the per-trial metadata table; `pd.concat(...).T` would otherwise leave every column as `object`,
+    # which silently loses NaN semantics and makes downstream arithmetic and groupby results dtype-unstable.
+    _METADATA_DTYPES = {
+        "trial": "int64", "block": "int64", "trial_category": "string", "duration": "float64",
+        "num_targets": "int64", "num_distractors": "int64", "num_actions": "int64",
+        "bad_actions": "bool", "gaze_coverage": "float64",
+    }
+
     def get_metadata(self, bad_actions: Sequence[SubjectActionCategoryEnum]) -> pd.DataFrame:
         """ Extract all trials' metadata into a DataFrame """
-        metadata = dict()
-        for trial in tqdm(self.get_trials(), desc="Trial Metadata", disable=True):
-            metadata[trial.trial_num] = trial.get_metadata(bad_actions)
-        res = pd.concat(metadata.values(), keys=metadata.keys(), axis=1).T.reset_index(drop=True)
+        rows = [trial.get_metadata(bad_actions) for trial in self.get_trials()]
+        res = pd.DataFrame.from_records([row.to_dict() for row in rows])
+        res = res.astype({col: dtype for col, dtype in self._METADATA_DTYPES.items() if col in res.columns})
         # add subject-level info
         res["px2deg"] = self.px2deg
         res["sex"] = self.sex
@@ -266,96 +290,38 @@ class Subject:
         res["dominant_eye"] = self.eye
         return res
 
-    def get_target_identifications(
-            self,
-            identification_actions: Union[Sequence[SubjectActionCategoryEnum], SubjectActionCategoryEnum],
-            temporal_matching_threshold: float,
-            on_target_threshold_dva: float,
-            verbose: bool = False,
-    ) -> pd.DataFrame:
+    def get_events(self, save: bool = True, verbose: bool = False, force_rebuild: bool = False,) -> pd.DataFrame:
         """
-        Extracts the target identification behavior of a subject across all trials.
-        :param identification_actions: action(s) that indicate the subject has identified a target.
-        :param temporal_matching_threshold: temporal threshold (in ms) for matching gaze samples to identification actions.
-        :param on_target_threshold_dva: the distance in DVA from the target to consider the identification as a hit.
-        :param verbose: if True, displays a progress bar for the extraction process.
+        Extracts every eye-movement event the subject produced across all trials - fixations, saccades and blinks -
+        and returns them as a DataFrame. `(subject, trial, eye, event)` is unique; `event` is the event's position
+        among all events of that eye in the trial.
 
-        :return: a DataFrame containing the target identification behavior for each trial, with the following columns:
-        - trial: int; the trial number
-        - target: str; the name of the closest target to the subject's gaze at the time of identification
-        - time: float; the time of the identification action in ms (relative to trial onset)
-        - distance_px: float; the distance between the subject's gaze and the closest target, in pixels
-        - distance_dva: float; the distance between the subject's gaze and the closest target, in DVA
-        - left_x, left_y, right_x, right_y: float; the x and y coordinates of the subject's left and right eye gaze at the time of identification
-        - left_pupil, right_pupil: float; the pupil size of the subject's left and right eye at the time of identification
+        This supersedes `get_fixations()`, which kept only the fixations and dropped most feature columns. The
+        fixations are the `event_type == "FIXATION"` subset and are unchanged, `event` values included.
+        See `data_models.preprocess.events.process_trial_events` for the full column list.
+
+        :param save: bool; if True, caches the DataFrame under the subject's output directory (with a cache-key
+            sidecar, so a change to stage-1 code invalidates it rather than silently serving stale rows).
+        :param verbose: bool; if True, displays a progress bar and prints messages about the process.
         """
-        trial_idents = dict()
-        for trial in tqdm(self.get_trials(), desc="Target Identifications", disable=not verbose):
-            trial_idents[trial.trial_num] = extract_trial_identifications(
-                trial=trial,
-                identification_actions=identification_actions,
-                gaze_to_trigger_matching_threshold=temporal_matching_threshold,
-                on_target_threshold_dva=on_target_threshold_dva,
-            )
-        idents = pd.concat(trial_idents.values(), axis=0, keys=trial_idents.keys())
-        idents = (
-            idents
-            .reset_index(drop=False)
-            .drop(
-                columns=["target_sub_path", "level_1", "left_label", "right_label", ],
-                inplace=False,
-                errors='ignore'
-            )
-            .rename(columns={"level_0": cnfg.TRIAL_STR})
-            .sort_values(by=[cnfg.TRIAL_STR, cnfg.TARGET_STR])
-            .reset_index(drop=True)
-        )
-        return idents
-
-    def get_fixations(self, save: bool = True, verbose: bool = False,) -> pd.DataFrame:
-        """
-        Extracts the subject's fixations across all trials and returns them as a DataFrame.
-        :param save: bool; if True, saves the fixations DataFrame to a pickle file in the subject's output directory.
-        :param verbose: bool; if True, displays a progress bar for the extraction process and prints messages about the process.
-
-        :return: a DataFrame containing the fixations for each trial, with the following columns:
-        - trial: int; the trial number
-        - eye: str; the eye that the fixation belongs to (left or right)
-        - event: int; the number of the fixation among all events from the given eye during the trial
-        - start_time: float; time of the fixation start in ms (relative to trial onset)
-        - end_time: float; time of the fixation end in ms (relative to trial onset)
-        - duration: float; duration of the fixation in ms
-        - to_trial_end: float; time from the end of the fixation to the end of the trial in ms
-        - x: float; x coordinates of the fixation center in pixels
-        - y: float; y coordinates of the fixation center in pixels
-        - outlier_reasons: List[str]; reasons for the fixation to be an outlier
-        - target: str; the name of the closest target to the fixation center at the time of the fixation
-        - target{i}_distance_px: float; the distance between the fixation center and target{i} in pixels (target0, target1, etc.)
-        - target{i}_distance_dva: float; the distance between the fixation center and target{i} in DVA (target0, target1, etc.)
-        - num_fixs_to_strip: int; number of fixations from the current fixation until a visit in the bottom strip of the
-        SearchArray. Value is 0 if he current fixation is in the bottom strip, and np.inf if there are no future fixations
-        in the strip during the trial.
-        """
-        path = os.path.join(self.out_dir, f'{cnfg.FIXATION_STR}_df.pkl')
-        try:
-            fixations = pd.read_pickle(path)
-            if verbose:
-                print(f"Subject {self.id}'s fixations DataFrame loaded.")
-        except FileNotFoundError:
-            if verbose:
-                print(f"Fixations DataFrame not found for subject {self.id}. Extracting...")
-            fixations = self._process_fixations(verbose)
-            if save:
-                fixations.to_pickle(path)
-        return fixations
-
-    def get_visits(self, target_distance_threshold_dva: float, visit_merging_time_threshold: float,) -> pd.DataFrame:
-        fixations = self.get_fixations(save=False, verbose=False)
-        return convert_fixations_to_visits(
-            fixations,
-            target_distance_threshold_dva,
-            visit_merging_time_threshold,
-        )
+        path = os.path.join(self.out_dir, 'eye_movements_df.pkl')
+        key = build_cache_key()
+        if not force_rebuild:
+            stale_reason = describe_staleness(path, key)
+            if stale_reason and verbose:
+                print(f"Subject {self.id}'s cached eye-movements are stale ({stale_reason}); rebuilding.")
+            if stale_reason is None and is_cache_valid(path, key):
+                events = pd.read_pickle(path)
+                if verbose:
+                    print(f"Subject {self.id}'s eye-movements DataFrame loaded.")
+                return events
+            if verbose and not stale_reason:
+                print(f"Eye-movements DataFrame not found for subject {self.id}. Extracting...")
+        events = self._process_events(verbose)
+        if save:
+            events.to_pickle(path)
+            write_cache_key(path, key)
+        return events
 
     def to_pickle(self, overwrite: bool = False) -> str:
         """
@@ -386,18 +352,20 @@ class Subject:
             os.makedirs(out_dir, exist_ok=True)
         return os.path.join(out_dir, "Subject.pkl")
 
-    def _process_fixations(self, verbose: bool = True) -> pd.DataFrame:
-        trial_fixations = dict()
-        for trial in tqdm(self.get_trials(), desc=f"Extracting Fixations", disable=not verbose):
-            trial_fixations[trial.trial_num] = trial.process_fixations()
-        fixations = pd.concat(trial_fixations.values(), axis=0, keys=trial_fixations.keys())
-        fixations = (
-            fixations
+    def _process_events(self, verbose: bool = True) -> pd.DataFrame:
+        trial_events = dict()
+        for trial in tqdm(self.get_trials(), desc=f"Extracting Eye Movements", disable=not verbose):
+            trial_events[trial.trial_num] = trial.process_events()
+        events = pd.concat(trial_events.values(), axis=0, keys=trial_events.keys())
+        events = (
+            events
             .reset_index(drop=False)
             .drop(columns=["level_1"])
             .rename(columns={"level_0": cnfg.TRIAL_STR})
         )
-        return fixations
+        # `pd.concat` widens categoricals with differing categories back to object
+        events[f"{cnfg.EVENT_STR}_type"] = events[f"{cnfg.EVENT_STR}_type"].astype("category")
+        return events
 
     def __repr__(self) -> str:
         return f"{self.experiment_name.upper()}-{cnfg.SUBJECT_STR.capitalize()}_{self.id}"
