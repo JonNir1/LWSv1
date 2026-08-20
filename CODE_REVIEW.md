@@ -1294,6 +1294,42 @@ fixation-level label disagrees with the visit's.
 
 ---
 
+### M19. `_STAGE1_SOURCES` lists three deleted `data_models/preprocess/` files, silently weakening the cache key
+
+**STATUS: FIXED** (2026-08-19, commit `162ffd6`)
+
+**Where:** `pipeline/stage1_parse/cache_key.py:25-38`
+
+**Description.** Two bugs in `stage1_code_hash()`:
+
+1. `_STAGE1_SOURCES` lists three files under `data_models/preprocess/` (`events.py`,
+   `target_identifications.py`, `visits.py`) that no longer exist. They were superseded by modules under
+   `pipeline/stage2_align/` and `pipeline/stage3_classify/` during the pipeline refactor.
+2. `_REPO_ROOT` (line 40) uses two `os.path.dirname` calls on `__file__`, which from
+   `pipeline/stage1_parse/cache_key.py` lands at `pipeline/`, not the repo root. This means 8 of 9 remaining
+   source paths also resolve as missing (only `config.py` accidentally works because `pipeline/config.py` exists).
+
+Because `stage1_code_hash()` catches `FileNotFoundError` and hashes missing files as the literal string
+`<missing>` (line 52), neither bug crashes. Instead, almost every entry contributes a fixed,
+content-independent value to the hash, so the cache key tracks almost no actual code changes. This is a
+recurrence of the exact problem H3 was about (silent stale caches).
+
+**Outcome.** The stage-1 per-subject cache (`Subject.pkl`, `eye_movements_df.pkl`) was effectively
+unprotected against code changes, with only `pipeline/config.py` actually tracked. The three
+`data_models/preprocess/` entries should not be replaced 1:1: their conceptual replacements are stage-2/3
+code that computes on-the-fly from stage-1 pickles and is not itself cached, so they should never have been
+in a stage-1 cache key to begin with.
+
+**Fix.** (1) Removed the three stale `data_models/preprocess/` entries from `_STAGE1_SOURCES`.
+(2) Added a third `os.path.dirname` call to `_REPO_ROOT` so it resolves to the actual repo root. This
+changes the code hash for all existing caches, forcing a one-time rebuild, which is the correct behavior
+after fixing a cache-key bug.
+
+**Validate.** `test_stage1_sources_exist` in `tests/test_cache_key.py` verifies that every path in
+`_STAGE1_SOURCES` resolves to an existing file, preventing future recurrence.
+
+---
+
 ### L8. Trial validity was coupled into event funnels via the cumulative chain
 
 **STATUS: FIXED** (2026-08-17, commits `9905ecf`, `0418467`)
