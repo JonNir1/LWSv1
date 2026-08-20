@@ -84,37 +84,37 @@ Settled 2026-08-05. These are the intended semantics; C2-C4 and H6 below impleme
 | T3 | Longest plausible fixation: measured over 116,947 fixations, smooth monotonic decay, no secondary mode; 2500 ms default kept | n/a |
 | T4 | `fixations_to_targets()` long-format refactor: `pipeline/stage2_align/fixations_to_icons.py` replaces wide per-target columns; visits and identifications moved to stage 2; FVF estimators updated | `8d2ecae` (regression introduced), resolved in stage-2/3 refactor |
 | T5 | Three gaps reported upstream to `peyes` (missing `start_pixel`/`end_pixel` in `summary()`, unimplemented velocity/dispersion outlier checks, `summarize_events([])` shape); workarounds stay until upstream ships fixes | n/a |
-| C2 | `MARK_ONLY` written to wrong column, never recorded | `9de4780` |
-| C3 | `ATTEMPTED_MARK` branch raised `KeyError` / clobbered a pending mark | `9de4780` |
-| C4 | A false alarm could supply the identification time of a real target | `c25b527` |
-| H1 | `num_fixs_to_strip` computed across both eyes concatenated instead of per-eye | `54362bf` |
+| C2 | `MARK_ONLY` written to wrong column, never recorded | `ef00fce` |
+| C3 | `ATTEMPTED_MARK` branch raised `KeyError` / clobbered a pending mark | `ef00fce` |
+| C4 | A false alarm could supply the identification time of a real target | `d5eedcf` |
+| H1 | `num_fixs_to_strip` computed across both eyes concatenated instead of per-eye | `f3278c5` |
 | H1a | The per-eye fix for H1 silently corrupted the second eye via `groupby.transform` index misalignment | `3452cd5` |
-| H2 | `drop_outliers` was a silent no-op for visit funnels (0 of 5,720 visits dropped vs. 10.1% of fixations); fixed by refusing visit-level outlier exclusion until T2 was decided, then superseded when the stage-2/3 refactor made `visits` build only from already outlier-filtered `fixations`, so the raise itself was later removed as dead code alongside the `exclude` parameter (see T2) | `e3d432a`, later folded into the L8 refactor |
-| H3 | Per-subject pickle caches were silent and unversioned | `5215e36` (cache-key sidecar; see M19 for a later regression) |
-| H4 | `parse_all_subjects` swallowed all exceptions; dirname split sat outside the `try` | `d84dafc` |
-| H5 | `_is_between_triggers` assumed start/end triggers equal in count and positionally paired; rewritten to a scan-in-order loop with `close_trailing` | (rewrite, no single hash recorded) |
-| H6 | Target distances silently fell back to the non-dominant eye | `f1cb289` |
-| H7 | Fixations > 2500 ms dropped by an inherited `peyes` default, never made explicit in `config.py`; measured impact negligible (6 of 116,947 fixations), downgraded from High to Low | `1d6cb47` (made explicit) |
+| H2 | `drop_outliers` was a silent no-op for visit funnels (0 of 5,720 visits dropped vs. 10.1% of fixations); fixed by refusing visit-level outlier exclusion until T2 was decided, then superseded when the stage-2/3 refactor made `visits` build only from already outlier-filtered `fixations`, so the raise itself was later removed as dead code alongside the `exclude` parameter (see T2) | `82296fc`, later folded into the L8 refactor |
+| H3 | Per-subject pickle caches were silent and unversioned | `3d228cc` (cache-key sidecar; see M19 for a later regression) |
+| H4 | `parse_all_subjects` swallowed all exceptions; dirname split sat outside the `try` | `e18864a` |
+| H5 | `_is_between_triggers` assumed start/end triggers equal in count and positionally paired; rewritten to a scan-in-order loop with `close_trailing` | `863fbf0` (final rewrite; several earlier attempts and reverts precede it, see commits around `1460339`/`1ad34b2`) |
+| H6 | Target distances silently fell back to the non-dominant eye | `05cccd7` |
+| H7 | Fixations > 2500 ms dropped by an inherited `peyes` default, never made explicit in `config.py`; measured impact negligible (6 of 116,947 fixations), downgraded from High to Low | `8201293` (made explicit) |
 | H8 | `peyes` pins `numpy~=1.2`, pickles were written under numpy 2.x; resolved by upgrading numpy/pandas above the pin (verified compatible) | n/a |
-| H9 | pandas 3.0 broke trigger/gaze alignment (`AttributeError: '_hasna'`) via a mixed-dtype `.loc` assignment | `12a67af` |
-| M1 | `metadata` columns were all `object` dtype | `30fe583` |
-| M2 | Visit `is_on_target` collapsed to "min distance <= threshold" because `.any(axis=1)` globbed all `*_distance_dva` columns | `26968d6` |
-| M3 | `SearchArray._get_path` disagreed with the actual directory layout the loader reads | `26968d6` |
-| M4 | Falsy-zero bugs: `start_identify_idx` label `0` treated as absent | `9de4780` |
-| M5 | `pd.Categorical.from_codes` relied on enum values matching list positions | `26968d6` |
-| M6 | `reindex(...).astype(bool)` turned a missing criterion into `True` | `30fe583` |
-| M7 | Cumulative funnel columns kept the raw criterion name, inviting misreading | `8a8ad54` |
-| M8 | `detect_eye_movements` default `pixel_size_cm` was actually a millimetre value | `1d6cb47` |
-| M9 | `visits.py` error paths raised `AttributeError` (`.iloc` on a numpy array) instead of the intended message | `30fe583` |
-| M13 | Configuration duplicated across `config.py` / `funnel_config.py`, partly stale, hardcoded machine paths; consolidated into `pipeline/config.py` as single source of truth | `2a49ed0` |
-| M14 | "No package structure" withdrawn as not applicable (single-project analysis pipeline, run-from-repo-root is a deliberate contract); `plgrnd2.py`'s broken import fixed | `4a11e53` |
-| M15 | `peyes.create_events` received `pixel_size=viewer_distance_cm` (off by ~2000x); verified inert for every surviving output column, no re-run required | `1d6cb47` |
-| M16 | Outlier detection used `peyes`'s default screen geometry instead of the project's monitor (`cnst.TOBII_MONITOR`) | `1d6cb47` |
-| M17 | `del ... start_idx` raised `UnboundLocalError` when the trigger log had no `BLOCK_*` trigger | `74129aa` |
+| H9 | pandas 3.0 broke trigger/gaze alignment (`AttributeError: '_hasna'`) via a mixed-dtype `.loc` assignment | `9c8a748` |
+| M1 | `metadata` columns were all `object` dtype | `9556003` |
+| M2 | Visit `is_on_target` collapsed to "min distance <= threshold" because `.any(axis=1)` globbed all `*_distance_dva` columns | `392f8d9` |
+| M3 | `SearchArray._get_path` disagreed with the actual directory layout the loader reads | `392f8d9` |
+| M4 | Falsy-zero bugs: `start_identify_idx` label `0` treated as absent | `ef00fce` |
+| M5 | `pd.Categorical.from_codes` relied on enum values matching list positions | `392f8d9` |
+| M6 | `reindex(...).astype(bool)` turned a missing criterion into `True` | `9556003` |
+| M7 | Cumulative funnel columns kept the raw criterion name, inviting misreading | `8489119` |
+| M8 | `detect_eye_movements` default `pixel_size_cm` was actually a millimetre value | `8201293` |
+| M9 | `visits.py` error paths raised `AttributeError` (`.iloc` on a numpy array) instead of the intended message | `9556003` |
+| M13 | Configuration duplicated across `config.py` / `funnel_config.py`, partly stale, hardcoded machine paths; consolidated into `pipeline/config.py` as single source of truth | `60a7d49` |
+| M14 | "No package structure" withdrawn as not applicable (single-project analysis pipeline, run-from-repo-root is a deliberate contract); `plgrnd2.py`'s broken import fixed | `b092c10` |
+| M15 | `peyes.create_events` received `pixel_size=viewer_distance_cm` (off by ~2000x); verified inert for every surviving output column, no re-run required | `8201293` |
+| M16 | Outlier detection used `peyes`'s default screen geometry instead of the project's monitor (`cnst.TOBII_MONITOR`) | `8201293` |
+| M17 | `del ... start_idx` raised `UnboundLocalError` when the trigger log had no `BLOCK_*` trigger | `863fbf0` |
 | M19 | `_STAGE1_SOURCES` in `pipeline/stage1_parse/cache_key.py` referenced three deleted `data_models/preprocess/` files (recurrence of H3) and `_REPO_ROOT` resolved one directory too shallow, so the stage-1 cache key tracked almost no real code changes | `162ffd6` |
 | L1 | No tests: now 14 files, 185 tests, all green | n/a |
-| L2 | No linter/formatter/type-checker config: withdrawn, this review's own findings (wrong column name, falsy-zero guards, key collisions) are not the class of bug a linter catches | n/a |
-| L3 | Resource-handling and small correctness nits (missing context manager, missing `__hash__`, unused variable, dead code, always-off `tqdm` bars) | *(hash `8c4dc1c` cited in an earlier version of this doc could not be verified in current history; flagged for follow-up, not re-investigated here)* |
+| L2 | No linter/formatter/type-checker config: withdrawn, this review's own findings (wrong column name, falsy-zero guards, key collisions) are not the class of bug a linter catches | `b092c10` (reverts the ruff config added and reconsidered in `773ebe8`) |
+| L3 | Resource-handling and small correctness nits (missing context manager, missing `__hash__`, unused variable, dead code, always-off `tqdm` bars) | `773ebe8`, `35bc6e6` |
 | L4 | Hardcoded stimulus geometry, now validated against `ArrayInfo.mat` by `test_search_array.py::TestGeometryAgainstStimulusConfig` | n/a |
 | L5 | Fixation- and visit-level analyses attribute targets differently (fixation picks closest target, visit keeps all within-threshold); partially dissolved by the stage-3 refactor, now a documented design choice rather than an artefact; residual overlap 0.2% (24/11,716 on-target fixations) | n/a |
 | L7 | `_determine_time_to_trial_end.ipynb` indexed a column (`before_identification`) that did not exist on the raw `visits` table | n/a |
