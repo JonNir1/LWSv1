@@ -1,14 +1,18 @@
 """Per-subject cache invalidation.
 
 Covers CODE_REVIEW finding H3 - the caches were unkeyed, so editing preprocessing code left them silently stale.
+Also covers M19 - stale source paths silently weakening the cache key.
 """
 
 import json
+import os
 import pathlib
 
 import pytest
 
 from pipeline.stage1_parse.cache_key import (
+    _REPO_ROOT,
+    _STAGE1_SOURCES,
     build_cache_key,
     describe_staleness,
     is_cache_valid,
@@ -31,15 +35,21 @@ class TestCodeHash:
         assert stage1_code_hash() == stage1_code_hash()
 
     def test_changes_when_a_stage1_source_changes(self, monkeypatch, tmp_path):
-        """Editing preprocessing code must invalidate - the whole point of H3."""
+        """Editing preprocessing code must invalidate (H3)."""
         import pipeline.stage1_parse.cache_key as ck
 
         before = ck.stage1_code_hash()
         fake_root = tmp_path / "repo"
-        (fake_root / "data_models" / "preprocess").mkdir(parents=True)
-        (fake_root / "data_models" / "preprocess" / "events.py").write_text("# edited", encoding="utf-8")
+        (fake_root / "data_models" / "parse").mkdir(parents=True)
+        (fake_root / "data_models" / "parse" / "eye_movements.py").write_text("# edited", encoding="utf-8")
         monkeypatch.setattr(ck, "_REPO_ROOT", str(fake_root))
         assert ck.stage1_code_hash() != before
+
+    def test_stage1_sources_exist(self):
+        """Every path in _STAGE1_SOURCES must resolve to an existing file (M19)."""
+        for rel_path in _STAGE1_SOURCES:
+            full = os.path.join(_REPO_ROOT, rel_path)
+            assert os.path.isfile(full), f"_STAGE1_SOURCES lists {rel_path!r} but it does not exist"
 
 
 class TestCacheKey:

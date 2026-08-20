@@ -32,12 +32,9 @@ _STAGE1_SOURCES = (
     os.path.join("data_models", "parse", "eye_movements.py"),
     os.path.join("data_models", "parse", "subject_info.py"),
     os.path.join("data_models", "parse", "triggers_and_gaze.py"),
-    os.path.join("data_models", "preprocess", "events.py"),
-    os.path.join("data_models", "preprocess", "target_identifications.py"),
-    os.path.join("data_models", "preprocess", "visits.py"),
 )
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def stage1_code_hash() -> str:
