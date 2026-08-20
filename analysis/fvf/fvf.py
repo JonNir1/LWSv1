@@ -5,64 +5,16 @@ The FVF is the radius around fixation from which a target can be detected and se
 input to an inspection-conditioned d' denominator (`CODE_REVIEW.md` T1), where the count of *plausibly inspected*
 items replaces the current "every non-target icon".
 
-Three estimators are provided, because the obvious formulation does not work, plus a fourth from the literature.
+Four estimators are provided: `estimate_by_foveation_falloff` (A), `estimate_by_launch_distance` (B),
+`estimate_by_selection_hazard` (C), `estimate_by_encircling` (D, from Young & Hulleman 2013 and Papesh et al.
+2021). The obvious formulation - `P(identified | min eccentricity from any fixation)` - is circular (a hit
+requires gaze already within `ON_TARGET_THRESHOLD_DVA`), which is why A-D exist instead.
 
-**Why not `P(identified | min eccentricity from any fixation)`.** Marking a target requires foveating it - the
-identification is classified as a hit only when gaze is within `ON_TARGET_THRESHOLD_DVA` of the target - so every
-hit has minimum eccentricity below that threshold *by construction*. The curve degenerates into a step function at
-the on-target threshold and recovers nothing about peripheral detection.
-
-**A - foveation falloff** (`estimate_by_foveation_falloff`). `P(target was ever foveated | minimum distance from
-any NON-on-target fixation)`. The outcome is foveation rather than identification, which removes the circularity,
-and it separates the two constructs: this curve measures detection-and-selection, while `P(not identified |
-foveated)` is the LWS rate.
-
-**B - saccade-launch distance** (`estimate_by_launch_distance`). For each foveated target, the distance from the
-*launch* fixation - the one immediately preceding the first on-target fixation - to that target. The subject
-selected the target from that distance, so it is a direct sample of the field. FVF is a high percentile of the
-distribution.
-
-Neither is authoritative. `compare_fvf_types.ipynb` compares them against each other and against
-`ON_TARGET_THRESHOLD_DVA`; substantial disagreement is itself a finding.
-
-**C - selection hazard** (`estimate_by_selection_hazard`). For every fixation at which a target was still
-unfoveated, `P(the next saccade lands on that target | current distance to it)`. A discrete-time hazard rather than
-a per-target outcome, so it does not aggregate over the trial.
-
-**MEASURED ON THE LWS-v1 DATA (2026-08-06): USE C. A AND B BOTH FAIL, FOR OPPOSITE REASONS.**
-
-*A is saturated.* Its predictor - the closest a subject came to a target without foveating it, over the whole trial
-- has almost no spread: p50 2.04, p95 3.54, p99 4.93 DVA. With ~195 fixations per trial over a ~34 x 19 DVA array,
-essentially every target is approached closely at some point regardless of whether it was detected. `P(foveated)`
-descends only from 0.96 to 0.82 and never reaches half its asymptote, so the estimator returns NaN rather than the
-edge of the data.
-
-*B measures the wrong thing.* It returns ~13.4 DVA pooled - implausible on an array only ~19 DVA tall. The fixation
-preceding a target's first on-target fixation is usually just wherever the subject was scanning, so B approximates
-the 95th percentile of saccade amplitude rather than a detection radius.
-
-*C works.* Pooled **4.34 DVA**, per subject 4.11-5.53 - a tight spread, against A's 2.76-4.87 and B's 10.3-16.6.
-The hazard falls monotonically from 0.204 to 0.005 over 2.9-14.5 DVA, a 40x range, so the half-point is real rather
-than censored. The estimate is 2.5x `ON_TARGET_THRESHOLD_DVA` (1.75), which is the expected relationship: the field
-from which a target can be *detected* must exceed the radius within which gaze counts as *on* it, but stay the same
-order of magnitude. All three estimators recover a known radius from synthetic data (true 4.0 -> A 3.9, B 3.8,
-C 3.9), so the divergence is a property of the real scanpaths, not of the implementations.
-
-**Caveat on C, found later (`threshold_sweep.ipynb`):** the selection-hazard estimate does not plateau across
-`ON_TARGET_THRESHOLD_DVA` - it rises roughly linearly from 2.47 DVA (threshold 0.25) to 5.26 DVA (threshold 2.5)
-instead of stabilizing. That is some evidence C is tracking the constant it is computed under rather than a fixed
-perceptual quantity; see `CODE_REVIEW.md` T1 for how this affects the downstream d' finding.
-
-**D - encircling criterion** (`estimate_by_encircling`; Young & Hulleman, 2013, *JEP:HPP* 39(6):1707-1720,
-https://doi.org/10.1037/a0028679; Papesh et al., 2021, *Cognitive Research: Principles and Implications* 6:20,
-https://doi.org/10.1186/s41235-020-00269-8). Per trial: draw a circle of radius r around every fixation and grow r
-in `radius_step_dva` steps (0.25 DVA by default here - finer than the 1 DVA step Papesh et al. used, since 1 DVA is
-coarse against this array's ~2.15 DVA icon spacing), counting the number of *distinct* items falling within any
-circle (an item counts once even if several circles cover it). FVF is the r at which that count first reaches
-`ceil((set_size + 1) / (num_targets + 1))` - Papesh et al.'s criterion for the search-array size at which quitting
-becomes the rational choice. Unlike A-C, D does not depend on `ON_TARGET_THRESHOLD_DVA` or on target identity at
-all - it operates over every item in the display, not just targets - so it is a useful independent check on
-whether the threshold-dependence above is real.
+Which estimator to use, why A and B fail on this data, and how C and D compare are worked out in
+`compare_fvf_types.ipynb` - read that notebook rather than this docstring for the comparison. In short: C
+(selection hazard) is the one to use for pooled/per-subject work; D (encircling) is threshold-independent and
+usable per-trial where C has no per-trial equivalent (used by `fvf_over_trials.ipynb`), though it disagrees with
+C in magnitude. `threshold_sweep.ipynb` checks C's sensitivity to `ON_TARGET_THRESHOLD_DVA`.
 """
 
 import warnings

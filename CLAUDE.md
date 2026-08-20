@@ -46,13 +46,11 @@ The mirror construct is a **target-return**: an on-target event *after* identifi
 
 - Python: use the venv at the **main checkout** root, `C:\Users\nirjo\Documents\University\PhD\Projects\LWSv1\.venv\`.
   Worktrees do not get their own `.venv`. Never `pip install` globally.
-- Key third-party deps: `peyes` (eye-movement detection), `pymatreader` (stimulus `.mat` files), `pandas`, `numpy`,
-  `plotly`, `screeninfo`, `tqdm`, `scipy`, `bambi`/`pymc` (used in some notebooks).
-- R: `mgcv` for the GAM scripts under `analysis/R/`.
-- There are no `__init__.py` files and no packaging metadata: **all code must be run with the repo root as CWD /
-  sys.path root** (`import config as cnfg`, `from analysis.helpers... import ...`).
-- Tests: `pytest tests/ -q` from repo root. `pyproject.toml` sets `pythonpath = ["."]` and `testpaths = ["tests"]`.
-  No linter config and no build step.
+- Key deps: `peyes` (eye-movement detection), `pymatreader` (stimulus `.mat` files), `pandas`, `numpy`, `plotly`,
+  `screeninfo`, `tqdm`, `scipy`, `bambi`/`pymc` (some notebooks); R's `mgcv` for `analysis/R/`.
+- No `__init__.py` files or packaging metadata: **all code runs with the repo root as CWD / sys.path root**
+  (`import config as cnfg`, `from analysis.helpers... import ...`). No linter config, no build step.
+- Tests: `pytest tests/ -q` from repo root (`pyproject.toml` sets `pythonpath = ["."]` and `testpaths = ["tests"]`).
 
 ## Commands
 
@@ -80,20 +78,18 @@ Fit a GAM (from repo root; the scripts use `file.path(\"analysis\", \"R\", ...)`
 Rscript analysis/R/time_on_task_gam.R
 ```
 
-The R scripts read `analysis/R/funnel_results.csv`, which is **not** in git (`*.csv` is gitignored) and is exported by
-hand from a notebook after building a funnel. They write `*_predictions.csv` back into `analysis/R/`, which the
-notebooks then read to overlay model estimates on plotly figures.
+The R scripts read `analysis/R/funnel_results.csv` (gitignored, exported by hand from a notebook after building a
+funnel) and write `*_predictions.csv` back, which notebooks then read to overlay model estimates on plotly figures.
 
 ## Architecture
 
 Three stages: parse (raw data to tables), align (join fixations to targets, build visits and identifications),
-and classify (funnels, LWS/target-return). Stage 1 persists pickles; stages 2 and 3 compute on-the-fly.
+classify (funnels, LWS/target-return). Stage 1 persists pickles; stages 2 and 3 compute on-the-fly.
 
-`pipeline/run.py:run_pipeline()` composes all three stages and returns a `DataStore` with every table populated.
-`analysis/helpers/read_data.py:load_data()` does stages 2+3 from pre-built pickles (the common notebook entry point).
-
-All pipeline thresholds, criteria lists, and naming helpers live in `pipeline/config.py`. The root-level `config.py`
-re-exports pipeline thresholds via `from pipeline.config import *` for backward compatibility (TODO: drop the
+`pipeline/run.py:run_pipeline()` composes all three stages, returning a `DataStore` with every table populated.
+`analysis/helpers/read_data.py:load_data()` does stages 2+3 from pre-built pickles (the common notebook entry
+point). All pipeline thresholds, criteria lists, and naming helpers live in `pipeline/config.py`; the root-level
+`config.py` re-exports them via `from pipeline.config import *` for backward compatibility (TODO: drop the
 re-export once all consumers import from `pipeline.config` directly).
 
 ### Stage 1: parse (`pipeline/stage1_parse/`, `data_models/`)
@@ -121,11 +117,9 @@ eye in the trial. `DataStore.fixations` is a derived view (`event_type == "FIXAT
 | quality | `is_outlier`, `outlier_reasons` | all |
 | strip distance | `num_fixs_to_strip` | **fixations only** |
 
-**`x`/`y` are NaN for non-fixations, deliberately.** A saccade's `center_pixel` is the midpoint of a trajectory
-crossed at speed, not a held position. The spread features are kept for every event (measurements, not location).
-
-**Anything that counts fixations must filter on `event_type` first.** The table is ~2.1x the rows it used to be
-(saccades and blinks are included), so a bare `len()` roughly doubles.
+**`x`/`y` are NaN for non-fixations, deliberately**: a saccade's `center_pixel` is a trajectory midpoint, not a
+held position. **Anything that counts fixations must filter on `event_type` first** - the table is ~2.1x the
+rows it used to be (saccades and blinks now included), so a bare `len()` roughly doubles.
 
 ### `icons.pkl` and the stable icon identifier
 
@@ -138,19 +132,18 @@ Target distances are not in the events table. They are computed on-the-fly in st
 
 Object model (`Subject` -> list of `Trial` -> one `SearchArray` each):
 
-- `data_models/parse/triggers_and_gaze.py` reads the E-Prime trigger log and Tobii gaze file, merges them on time,
-  and derives `block` / `trial` / `is_recording` columns from trigger codes (`_ExperimentTriggerEnum`). Trial
-  boundaries come from `STIMULUS_ON`/`STIMULUS_OFF`, not `TRIAL_START`/`TRIAL_END`. Key-press trigger sequences are
-  collapsed into a `SubjectActionCategoryEnum` per action (mark+confirm, mark-only, attempted-mark, mark+reject).
-- `Trial.__init__` does the heavy preprocessing eagerly: loads the `SearchArray` from its `.mat` file and runs
-  `peyes` Engbert detection **separately for each eye**.
-- `data_models/parse/eye_movements.py` handles both detection (Engbert via `peyes`) and tabulation of every
-  detected event, adding `num_fixs_to_strip` (how many **fixations** until one lands in the exemplar strip;
-  `inf` if never, NaN for non-fixations).
+- `data_models/parse/triggers_and_gaze.py` merges the E-Prime trigger log with the Tobii gaze file on time and
+  derives `block`/`trial`/`is_recording` from trigger codes. Trial boundaries come from
+  `STIMULUS_ON`/`STIMULUS_OFF`, not `TRIAL_START`/`TRIAL_END`. Key-press sequences collapse into a
+  `SubjectActionCategoryEnum` per action (mark+confirm, mark-only, attempted-mark, mark+reject).
+- `Trial.__init__` loads the `SearchArray` from its `.mat` file and runs `peyes` Engbert detection **separately
+  for each eye**.
+- `data_models/parse/eye_movements.py` detects and tabulates every event, adding `num_fixs_to_strip` (fixations
+  until one lands in the exemplar strip; `inf` if never, NaN for non-fixations).
 
-**Why there are no per-icon visits.** The on-target radius is 68 px against 76 px icon spacing (ratio 0.90), so
-an all-within-threshold rule over 180 icons would claim ~2-3 icons per fixation with no principled tiebreak.
-Target-visits remain the primary construct.
+**No per-icon visits:** the on-target radius (68px) against icon spacing (76px) is too tight a ratio (0.90) for
+an all-within-threshold rule to pick one icon per fixation without an arbitrary tiebreak. Target-visits remain
+the primary construct.
 
 Caching is layered: `Subject.pkl` and `eye_movements_df.pkl` are written per subject under
 `OUTPUT_PATH/subjects/<exp>_Subject_NN/`, and `parse_single_subject` prefers the pickle over re-parsing raw data.
@@ -188,30 +181,20 @@ Two entry points in `pipeline/stage3_classify/build_funnels.py`:
   `is_target_return`, enriched with `trial_category`, `target_category`, `target_angle`. Trial validity is not
   part of the event funnel; consumers filter via `data.trial_funnel["is_valid_trial"]`.
 
-Criteria ordering and naming helpers live in `pipeline/config.py` (the lists, `CUMULATIVE_PREFIX`, `cumulative_name()`,
-`cumulative_names()`). The predicates live in `trial_inclusion.py` and `event_classification.py` (each returns a named
-boolean Series). To add a criterion: write the predicate, register it in the `criteria_functions` dict, and insert its
-name into the relevant list in `pipeline/config.py`.
-
-For fixation-level funnels, `assign_fixation_targets()` in `event_classification.py` uses the long-format
-`fixation_target_dists` from stage 2 to assign the closest within-threshold target to each fixation. The visit path
-uses `weighted_distance_dva` as before.
+Criteria ordering and naming helpers live in `pipeline/config.py` (`CUMULATIVE_PREFIX`, `cumulative_name()`,
+`cumulative_names()`); predicates live in `trial_inclusion.py` and `event_classification.py`. To add a criterion:
+write the predicate, register it in `criteria_functions`, and insert its name into the relevant `pipeline/config.py`
+list. For fixation-level funnels, `assign_fixation_targets()` picks the closest within-threshold target per
+fixation from stage 2's `fixation_target_dists`; the visit path uses `weighted_distance_dva`.
 
 Two things to keep in mind when reading funnel output:
 
-- **Columns are cumulative with `upto_` prefix.** `upto_on_target` means "passed every earlier criterion *and* is on
-  target". Terminal columns (`is_valid_trial`, `is_lws`, `is_target_return`) keep their names since both readings
-  coincide. `cumulative_name()` / `cumulative_names()` in `pipeline/config.py` map criteria to column names.
-  Event funnels contain only event-level criteria; `is_lws`/`is_target_return` do **not** encode trial validity.
-  Consumers filter for valid trials explicitly via `data.trial_funnel["is_valid_trial"]`. See `CODE_REVIEW.md` L8.
 - **`event_type` changes target attribution.** A fixation row carries only its *closest* target; a visit row exists
   per (target, visit), so one fixation can contribute to several. Fixation- and visit-level counts are not
   comparable denominators.
-- **Fixation- and visit-level `is_lws`/`is_target_return` can disagree for fixations inside a visit.** Each grain
-  evaluates `before_identification`/`after_identification` against its own `start_time`/`end_time`, so a visit
-  classified `identification` (its span contains `ident_time`) can still have its first fixation independently
-  classified `is_lws` at the fixation level, since that one fixation ends before `ident_time`. Not a bug — each
-  grain is internally consistent — but a trap when the two are combined or compared. See `CODE_REVIEW.md` M18.
+- **Fixation- and visit-level `is_lws`/`is_target_return` can disagree for fixations inside a visit**, since each
+  grain evaluates `before_identification`/`after_identification` against its own `start_time`/`end_time`. Not a
+  bug, each grain is internally consistent, but a trap when the two are combined. See `CODE_REVIEW.md` M18.
 
 Every target has an identification time by construction: the first hit, or `inf` if it was never identified (so
 every on-target event on a missed target is pre-identification). A missing time is a data error and raises.
@@ -235,27 +218,33 @@ corrections), A', and F1 per subject-trial.
 
 Analysis lives in notebooks at `analysis/*.ipynb` (`hit_rate`, `time_on_task`, `time_in_trial`, `spatial_effects`,
 `stimulus_features`, `trial_exclusion`, `gaze_behavior`, `ssm_and_ab`), each of which builds a funnel and plots it.
-`analysis/fvf/` holds the functional-visual-field work: `fvf.py` (the three estimators, see its module docstring
-for why only the selection-hazard one works on this data), `compare_fvf_types.ipynb` (justifies the FVF
-hyperparameter), `threshold_sweep.ipynb` (FVF vs. `ON_TARGET_THRESHOLD_DVA`), `array_coverage.ipynb` (% of a
-trial's icons within a subject's FVF), `fvf_over_trials.ipynb` (array coverage vs. trial number, with a GAM in
-`analysis/R/fvf_over_trials_gam.R`), and `fvf_based_sdt.ipynb` (a notebook-only prototype of an FVF-conditioned
-hit/FA-rate denominator, `CODE_REVIEW.md` T1).
+`analysis/fvf/` holds the functional-visual-field work: `fvf.py` (four FVF estimators; the comparison and which
+one to use live in `compare_fvf_types.ipynb`, not the module docstring), `threshold_sweep.ipynb` (FVF vs.
+`ON_TARGET_THRESHOLD_DVA`), `array_coverage.ipynb` (% of a trial's icons within a subject's FVF),
+`fvf_over_trials.ipynb` (FVF radius itself over trials, estimator D only, GAM in
+`analysis/R/fvf_over_trials_gam.R`), `fvf_coverage_over_trials.ipynb` (array coverage % over trials, GAM in
+`analysis/R/fvf_coverage_over_trials_gam.R`), and `fvf_based_sdt.ipynb` (notebook-only prototype of an
+FVF-conditioned hit/FA-rate denominator, `CODE_REVIEW.md` T1).
 Stage-3 threshold notebooks (`_determine_fixation_rate`, `_determine_fixs_to_strip`, `_determine_time_to_trial_end`)
 live in `pipeline/stage3_classify/`.
 `__old__subject_comparisons/` is superseded, `_publications_/` holds figure notebooks, `plgrnd2.py` is a scratchpad.
 
+`visualizer/` renders a trial's raw/processed data as images or video for inspection, not analysis: `_colors.py`
+and `_filter.py` are shared helpers; `_stimulus.py` draws the stimulus with target markings colored by
+identification category; `heatmap.py` and `scanpath.py` return matplotlib figures (gaze-density heatmap, scanpath
+plot); `gaze_video.py` renders an animated video of gaze + fixations + actions over the trial stimulus. No
+notebook demonstrates usage yet; entry points are each module's `create_*`/`plot_*` function.
+
 ## Conventions
 
-- Column and key names are centralized in `constants.py` as `*_STR` constants and referenced as `cnst.X` /
-  `cnfg.X` rather than string literals; `config.py` does `from constants import *`, so `cnfg.TRIAL_STR` also works.
-- `pipeline/config.py` is the source of truth for all pipeline thresholds and funnel behavior.
-- Times are ms relative to trial onset; distances exist in both px and DVA (`px2deg` derived per subject from screen
-  distance and `TOBII_MONITOR`). `to_trial_end` is time remaining, not elapsed.
-- Both eyes are detected and kept through stage 1; the non-dominant eye is dropped at read time via
-  `read_data(drop_bad_eye=True)`. Anything grouped per eye must **preserve the group's index** if it goes through
-  `groupby.transform` - pandas aligns the returned Series by label, so a callable that rebuilds a fresh
-  `RangeIndex` silently corrupts every group but the first (`CODE_REVIEW.md` H1a).
+- Column/key names live in `constants.py` as `*_STR` constants, referenced as `cnst.X` / `cnfg.X` (`config.py`
+  does `from constants import *`, so `cnfg.TRIAL_STR` also works). `pipeline/config.py` is the source of truth
+  for pipeline thresholds and funnel behavior.
+- Times are ms relative to trial onset; distances exist in both px and DVA (`px2deg` derived per subject from
+  screen distance and `TOBII_MONITOR`). `to_trial_end` is time remaining, not elapsed.
+- Both eyes are detected through stage 1; the non-dominant eye is dropped at read time via
+  `read_data(drop_bad_eye=True)`. Per-eye `groupby.transform` callables must **preserve the group's index** -
+  a fresh `RangeIndex` silently corrupts every group but the first (`CODE_REVIEW.md` H1a).
 - Figures use plotly, with fonts/colors and `get_discrete_color()` defined in `config.py`.
 
 ## Data locations
@@ -271,9 +260,9 @@ Paths in `config.py` are absolute and machine-specific. On this machine the work
 | Publications | `<base>\Publications` | `PUBLICATIONS_PATH` |
 | Icon images | **not on this machine** | `IMAGE_DIR_PATH` -> `S:\Lab-Shared\...` |
 
-`config.py` sets `_BASE_PATH` twice: the lab share first, then a local override marked `# TODO: remove me!`. All four
-paths above derive from it, so pointing the pipeline at a different machine is a one-line change. `IMAGE_DIR_PATH` is
-separate and still points at `S:`; it is only used for `_SearchArrayImage.path`, not by the pipeline.
+`config.py` sets `_BASE_PATH` twice (lab share, then a local override marked `# TODO: remove me!`); all four paths
+above derive from it, so retargeting the pipeline to a different machine is a one-line change. `IMAGE_DIR_PATH` is
+separate, still points at `S:`, and is only used for `_SearchArrayImage.path`.
 
 Stage 2 needs only `OUTPUT_PATH` and works fully offline.
 
