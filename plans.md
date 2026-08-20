@@ -18,49 +18,26 @@ TODO:
 - calc variability within & between subjects for LWS visits and repeated visits
 - power analysis for LWS counts + repeated counts
 - check Carmel's data: how many reps required to successfully decode a SEEN target. multiply this number by the number of LWS visits to get the number of LWS visits required to get valid decoding in LWS instances.
-- effects on LWS probability:
-  - trial type
-  - target category, target rotation
-  - time in trial / trial in experiment (fatigue)
-  - target location / eccentricity
-  - Attentional Blink, SSM (=SoS)
+- ([V]) effects on LWS probability: trial type, target category, target rotation, time in trial / fatigue, target
+  location / eccentricity, Attentional Blink / SSM. See `spatial_effects.ipynb`, `stimulus_features.ipynb`,
+  `time_on_task.ipynb`, `ssm_and_ab.ipynb`, and `RESULTS_COMPARISON_2026-04_vs_2026-08.md` (P0-P9, SF1-7, TOT1).
 
 **Trial Type / Target Category:**
-- differences in hit-rate/d'
-- differences in LWS-visit count/proportion
-- differences in repeated-visit count/proportion
+- ([V]) differences in hit-rate/d': `hit_rate.ipynb`, `RESULTS_COMPARISON_2026-04_vs_2026-08.md` HR1-HR3
+- ([V]) differences in LWS-visit count/proportion: same notebooks as the "effects on LWS probability" item above
+- differences in repeated-visit count/proportion: not found in any notebook, unclear if this was run. Flagging
+  rather than marking done or removing.
 
 **LWS vs Repeated Visits:** (within subject)
 - visit duration / fixation count
 - visit spread (dispersion)
-- pupil size in LWS/identification/repeated visits
+- pupil size in LWS/identification/repeated visits (partially touched in `ssm_and_ab.ipynb`)
 - saccade into a LWS/TR/identification visit
+- *(`gaze_behavior.ipynb` exists as a title-only stub for this section, not yet implemented)*
 
 **Search Strategies:**
-- scan path analysis
+- scan path analysis (`visualizer/scanpath.py` can render one, but no analysis notebook uses it yet)
 - number of scanned icons per trial
 - exploration/exploitation - fixation duration and saccade sizes over trial time (plot using line plot (also by category and search-array type))
 
-
-## FOR NEXT VERSION:
-**General:**
-- trigger order: `start recording` -> `trial start` -> `targets on` -> `targets off` -> `stimulus on` -> `stimulus off` -> `stop_recording` -> `trial end`
-meaning the `recording` does not properly flank the trial.
-- change trial categories and durations randomly, not sequentially
-
-**Target Marking:**
-- DO NOT require confirmation for target marking
-- DO allow rejecting a marked target
-- Use keys in keys from both hands for marking and rejecting targets, to avoid subject looking at keyboard.
-- Do not stop the clock when marking a target, but continue until the end of the trial.
-- After marking a target, instruct subjects to visit the target-exemplar section and back to the identified target, to verify that there are "return fixations".
-
-**Stimulus:**
-- Set up the target-exemplars in a square at the center of the screen, with the icons at the 4 quarters of the screen.
-- Allow for targets to be in the same quarter.
-- No need to have same number of distractors in each quarter.
-- No need to have repeated targets, we can have only one or no target per exemplar in trial.
-- Use same icons as targets and distractors, but in different trials.
-- Verify that icons are not too similar to each other, to avoid subject misidentifying targets:
-    - explanation: we don't want subjects to identify a distractor-clock as the target-clock in clock trials. same for faces, etc.
-    - **solution:** run a short SVP experiment to make sure targets are 100% identifiable.
+Notes for redesigning the *next* experiment (not this codebase) moved to `NEXT_EXPERIMENT_NOTES.md`.
