@@ -18,20 +18,29 @@ dat <- load_data(
 
 # === Statistical Analysis ===
 # fit GAM with within-trial time as predictor
-# NOTE (CODE_REVIEW.md M10, unresolved): the unit of observation is a visit, but visits nest within target within
-# trial within subject. A subject-level random intercept does not absorb the within-trial dependence, so the smooth's
-# p-values are anti-conservative. Point estimates are unaffected.
-model <- gam(
-  is_lws ~ trial_category + s(start_time, k = K, bs = "tp") + s(subject, bs = "re"),
+# CODE_REVIEW.md M10, fixed: the unit of observation is a visit, and visits nest within trial within subject.
+# s(trial_uid, bs="re") (trial_uid = subject:trial, built in helpers.R::load_data()) absorbs that nesting
+# alongside the subject-level random intercept, so the smooth's p-value is no longer anti-conservative.
+#
+# bam() (not gam()) because trial_uid has ~1,300 levels: gam()'s dense REML fitting is impractically slow at
+# that many random-effect coefficients, while bam(..., discrete=TRUE) is mgcv's own fast-fitting path for
+# exactly this case (many rows and/or many RE levels) - same model, same smooth specs, a faster backend.
+# method="fREML" is bam's (fast) REML.
+model <- bam(
+  is_lws ~ trial_category + s(start_time, k = K, bs = "tp") + s(subject, bs = "re") + s(trial_uid, bs = "re"),
   data = dat,
   family = binomial(),
-  method = "REML"
+  method = "fREML",
+  discrete = TRUE
 )
 
 # check model results
 summary(model)
 
 # diagnostics -> analysis/R/figures/, rather than an anonymous Rplots.pdf in the working directory
+# CODE_REVIEW.md L6: k.check() reports whether K is large enough for s(start_time) - printed here (not only
+# plotted) so it's part of the script's captured output.
+print(k.check(model))
 plot_path <- open_plot_device("time_in_trial_gam_diagnostics.pdf")
 gam.check(model)
 plot(model, select = 1)
@@ -44,14 +53,9 @@ time_range <- range(dat$start_time, na.rm = TRUE)
 grid <- expand.grid(
   start_time = seq(from=0, to=time_range[2], by=100), # 100ms intervals
   trial_category = levels(dat$trial_category),
-  subject = levels(dat$subject)
+  subject = levels(dat$subject),
+  trial_uid = levels(dat$trial_uid)[1]  # placeholder level; excluded from the prediction below
 )
-
-preds <- predict(
-  model, newdata = grid, type = "response",
-  # exclude = "s(subject)"  # uncomment to calculate the same probability for all subjects (mean subject's probability)
-)
-grid$prob <- preds
 
 # marginalize probabilities over subjects and trial types:
 # final_trend <- aggregate(prob ~ trial, data = grid, FUN = mean)
@@ -59,4 +63,4 @@ grid$prob <- preds
 
 # save predictions to file
 outfile <- file.path("analysis", "R", "time-in-trial_lws_predictions.csv")
-write.csv(grid, outfile, row.names = FALSE)
+predict_and_export(model, grid, outfile, exclude = "s(trial_uid)")
