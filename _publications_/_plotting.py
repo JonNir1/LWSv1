@@ -1,18 +1,36 @@
 """Shared plotly/matplotlib figure-building helpers for the poster notebooks."""
 import copy
 import os
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import arviz as az
+import kaleido
 
 import config as cnfg
 from _publications_._modeling import AnalysisContext, ContrastGroupType
 
 LABEL_FONT = {**cnfg.AXIS_LABEL_FONT, **dict(size=40)}
 TICK_FONT = {**cnfg.AXIS_TICK_FONT, **dict(size=36)}
+
+# Kaleido's own downloaded Chrome-for-Testing build fails to launch on this machine (Windows
+# SxS "activation context generation failed" on chrome_elf.dll's manifest); fall back to a
+# system Chrome/Edge install, which doesn't hit that bug.
+_SYSTEM_BROWSER_CANDIDATES = [
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+]
+
+
+def _kaleido_browser_path() -> Optional[str]:
+    for candidate in _SYSTEM_BROWSER_CANDIDATES:
+        if os.path.isfile(candidate):
+            return candidate
+    return None
 
 
 def save_figure(fig: go.Figure, name: str, width_cm: float, height_cm: float, output_dir: str, dpi: int = 300):
@@ -31,9 +49,12 @@ def save_figure(fig: go.Figure, name: str, width_cm: float, height_cm: float, ou
         title=None, paper_bgcolor="rgba(0, 0, 0, 0)", plot_bgcolor="rgba(0, 0, 0, 0)",
         margin=dict(t=0, b=0, l=40, r=5),
     )
-    fig_copy.write_image(
-        os.path.join(output_dir, f"{name}.png"),
-        scale=dpi / PLOTLY_DEFAULT_DPI
+    browser_path = _kaleido_browser_path()
+    kaleido.write_fig_sync(
+        fig_copy,
+        path=os.path.join(output_dir, f"{name}.png"),
+        opts={"scale": dpi / PLOTLY_DEFAULT_DPI},
+        kopts={"path": browser_path} if browser_path else None,
     )
 
 
