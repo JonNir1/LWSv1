@@ -177,8 +177,15 @@ def plot_gam_spatial_predictions(
     )
 
     def _get_z_matrix(data: pd.DataFrame) -> np.ndarray:
-        subj_agg = data.groupby(["subject", "x", "y"])["prob"].mean().reset_index()
-        overall_agg = subj_agg.groupby(["x", "y"])["prob"].mean().reset_index()
+        # spatial_gam.R flags grid cells with too few nearby observations as extrapolation (is_supported=False);
+        # mask them to NaN so they render blank instead of as if they were real estimates.
+        subj_agg = data.groupby(["subject", "x", "y"])[["prob", "is_supported"]].agg(
+            {"prob": "mean", "is_supported": "all"}
+        ).reset_index()
+        overall_agg = subj_agg.groupby(["x", "y"])[["prob", "is_supported"]].agg(
+            {"prob": "mean", "is_supported": "all"}
+        ).reset_index()
+        overall_agg.loc[~overall_agg["is_supported"], "prob"] = np.nan
         return overall_agg.pivot(index="y", columns="x", values="prob").values
 
     z_overall = _get_z_matrix(df)
@@ -214,6 +221,55 @@ def plot_gam_spatial_predictions(
     fig.update_layout(
         title_text="GAM-Predicted LWS Probability Surface",
         width=1000, height=800,
+        template="plotly_white",
+    )
+    return fig
+
+
+def plot_gam_eccentricity_predictions(
+        csv_path: str,
+        title: str = "GAM-Estimated LWS Probability by Eccentricity and Angle",
+) -> go.Figure:
+    """
+    Read the polar/eccentricity GAM predictions (r-sweep and theta-sweep rows, distinguished by the
+    `sweep` column - see spatial_gam.R) and plot each as a population mean + 95% CI ribbon, in the same
+    style as `plot_gam_predictions_ribbon`.
+    """
+    df = pd.read_csv(csv_path, index_col=None)
+    fig = make_subplots(rows=1, cols=2, subplot_titles=["P[LWS] vs. Eccentricity (r)", "P[LWS] vs. Angle (θ)"])
+
+    def _add_ribbon(col: int, x_col: str, x_title: str):
+        subset = df[df["sweep"] == x_col]
+        subj_agg = subset.groupby(["subject", x_col])["prob"].mean().reset_index()
+        pop_stats = (
+            subj_agg.groupby(x_col).agg(mean_prob=("prob", "mean"), sem_prob=("prob", "sem")).reset_index()
+        )
+        pop_stats["upper_ci"] = pop_stats["mean_prob"] + (1.96 * pop_stats["sem_prob"])
+        pop_stats["lower_ci"] = pop_stats["mean_prob"] - (1.96 * pop_stats["sem_prob"])
+
+        fig.add_trace(go.Scatter(
+            x=pd.concat([pop_stats[x_col], pop_stats[x_col].iloc[::-1]]),
+            y=pd.concat([pop_stats["upper_ci"], pop_stats["lower_ci"].iloc[::-1]]),
+            name="95% CI", showlegend=False, fill="toself",
+            fillcolor="rgba(0,0,0, 0.2)", line=dict(color="rgba(0,0,0,0.25)"), hoverinfo="skip",
+        ), row=1, col=col)
+        fig.add_trace(go.Scatter(
+            x=pop_stats[x_col], y=pop_stats["mean_prob"],
+            name="Predicted Trend", showlegend=False, mode="lines", line=dict(color="black", width=3),
+        ), row=1, col=col)
+        fig.update_xaxes(title=dict(text=x_title, font=cnfg.AXIS_LABEL_FONT), row=1, col=col)
+        fig.update_yaxes(
+            title=dict(text="Predicted P[LWS]", font=cnfg.AXIS_LABEL_FONT),
+            range=[-0.01, 1.01], tickvals=np.arange(0, 1.01, 0.25), row=1, col=col,
+        )
+
+    _add_ribbon(1, "r", "Distance from Screen Center (px)")
+    _add_ribbon(2, "theta", "Angle (deg, 0=right, 90=up)")
+
+    fig.update_layout(
+        title=dict(text=title, font=cnfg.TITLE_FONT),
+        width=1100, height=500,
+        margin=dict(t=60, b=40, l=40, r=10),
         template="plotly_white",
     )
     return fig

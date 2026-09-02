@@ -69,6 +69,11 @@ load_data <- function(csv_path, valid_only = TRUE, on_target_only = TRUE) {
   dat$target_category <- as.factor(dat$target_category)
   dat$is_lws <- as.numeric(dat$is_lws)  # ensure the response column is 0/1 for binomial GAM
 
+  # Visits nest within trial within subject (CODE_REVIEW.md M10): a subject-only random intercept doesn't
+  # absorb that nesting, so smooth p-values come out anti-conservative. trial_uid gives every (subject, trial)
+  # pair its own random-intercept level, usable as s(trial_uid, bs = "re") alongside s(subject, bs = "re").
+  dat$trial_uid <- interaction(dat$subject, dat$trial, drop = TRUE)
+
   # Apply filters based on flags
   required <- c(if (valid_only) "is_valid_trial", if (on_target_only) "upto_on_target")
   missing <- setdiff(required, names(dat))
@@ -83,6 +88,24 @@ load_data <- function(csv_path, valid_only = TRUE, on_target_only = TRUE) {
   if (on_target_only) { dat <- subset(dat, upto_on_target) }
 
   return(dat)
+}
+
+
+#' Predict Over a Grid and Export to CSV
+#'
+#' Wraps the predict() -> append `prob` column -> write.csv() sequence shared by every *_gam.R script's
+#' "Export Model Estimates" section.
+#'
+#' @param model A fitted gam object.
+#' @param grid A data frame of predictor combinations to predict over.
+#' @param outfile Path to write the resulting CSV to.
+#' @param exclude Optional character vector passed through to predict()'s `exclude` (e.g. "s(subject)" to
+#'   marginalize out the subject random effect).
+#' @return `grid` with the appended `prob` column, invisibly.
+predict_and_export <- function(model, grid, outfile, exclude = NULL) {
+  grid$prob <- predict(model, newdata = grid, type = "response", exclude = exclude)
+  write.csv(grid, outfile, row.names = FALSE)
+  invisible(grid)
 }
 
 
