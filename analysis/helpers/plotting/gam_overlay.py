@@ -155,6 +155,7 @@ def plot_gam_spatial_predictions(
         csv_path: str,
         screen_width: int = 1920,
         screen_height: int = 1080,
+        title: str = "GAM-Predicted LWS Probability Surface",
 ) -> go.Figure:
     """
     Read spatial GAM predictions and visualize as heatmap subplots
@@ -219,7 +220,7 @@ def plot_gam_spatial_predictions(
         showticklabels=False,
     )
     fig.update_layout(
-        title_text="GAM-Predicted LWS Probability Surface",
+        title_text=title,
         width=1000, height=800,
         template="plotly_white",
     )

@@ -248,3 +248,20 @@ grid_ecc <- rbind(grid_r, grid_theta)
 
 outfile_ecc <- file.path("analysis", "R", "spatial_eccentricity_lws_predictions.csv")
 predict_and_export(eccentricity_model, grid_ecc, outfile_ecc, exclude = "s(trial_uid)")
+
+# === Screen-space reconstruction, for a direct visual comparison against the te(x, y) heatmap above ===
+#
+# Re-uses the exact same (x, y) grid points and is_supported mask built for the Cartesian model - is_supported
+# is a property of where the data actually is, not of which model is predicting there, so it's identically valid
+# for both heatmaps, and reusing it means the two are pixel-for-pixel comparable (same grid, same masked cells).
+#
+# Because the model is additive (no r*theta interaction), this reconstruction adds no information beyond the two
+# 1-D sweeps above - f(r) and g(theta) fully determine it. Its only purpose is visual: showing the same "where on
+# screen" picture the te(x, y) heatmap shows, so a reader can compare them directly instead of inferring the
+# difference from edf numbers alone.
+grid_screen <- grid[, c("x", "y", "trial_category", "subject", "trial_uid", "n_nearby", "is_supported")]
+grid_screen$r <- sqrt((grid_screen$x - CENTER_X)^2 + (grid_screen$y - CENTER_Y)^2)
+grid_screen$theta <- (atan2(-(grid_screen$y - CENTER_Y), grid_screen$x - CENTER_X) * 180 / pi) %% 360
+
+outfile_ecc_screen <- file.path("analysis", "R", "spatial_eccentricity_screen_predictions.csv")
+predict_and_export(eccentricity_model, grid_screen, outfile_ecc_screen, exclude = "s(trial_uid)")
