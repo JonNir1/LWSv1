@@ -76,6 +76,16 @@ def to_r_dataframe(df: pd.DataFrame, name: str = "dat", build_trial_uid: bool = 
     casting the usual grouping columns to factors. If `build_trial_uid` and both `subject`/`trial` columns
     are present, also builds `trial_uid` (subject:trial interaction) for the M10 nested-RE fix - see
     CODE_REVIEW.md M10.
+
+    Explicitly forces `ordered = FALSE`: `trial_category`'s pandas dtype is an *ordered* Categorical (a
+    DataStore convention, not a substantive claim that COLOR < BW < NOISE on some scale), and pandas2ri
+    converts that straight into an R *ordered* factor - `as.factor()` on an already-ordered factor is a
+    no-op, so without this, R silently uses polynomial (.L/.Q) contrasts instead of the treatment
+    contrasts every non-rpy2 script in this repo (and every notebook before this session's migration) has
+    always used. Confirmed by direct comparison: AIC/BIC/R-sq/dev.expl/smooth edf-p-value are unaffected by
+    contrast coding (same model, same fit, just a different parameterization) - only a categorical
+    predictor's own coefficient table changes, which is exactly what the M10 severity report needs to read
+    correctly.
     """
     setup_rpy2()
     import rpy2.robjects as ro
@@ -86,7 +96,7 @@ def to_r_dataframe(df: pd.DataFrame, name: str = "dat", build_trial_uid: bool = 
 
     for col in ("subject", "trial_category", "target_category"):
         if col in df.columns:
-            ro.r(f'{name}${col} <- as.factor({name}${col})')
+            ro.r(f'{name}${col} <- factor({name}${col}, ordered = FALSE)')
 
     if build_trial_uid and "subject" in df.columns and "trial" in df.columns:
         ro.r(f'{name}$trial_uid <- interaction({name}$subject, {name}$trial, drop = TRUE)')
