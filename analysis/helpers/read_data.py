@@ -181,7 +181,7 @@ def load_analysis_data(
 
 
 def parse_as_categorical(series: pd.Series, enum_cls, ordered: bool) -> pd.Categorical:
-    mapped = series.map(lambda val: val if val == "all" else enum_cls[val].name)
+    mapped = series.map(lambda val: val if pd.isna(val) or val == "all" else enum_cls[val].name)
     cat = pd.Categorical(
         mapped,
         categories=[e.name for e in enum_cls] + ["all"],
