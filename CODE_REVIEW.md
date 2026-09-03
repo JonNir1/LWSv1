@@ -45,23 +45,15 @@ Settled 2026-08-05. These are the intended semantics; C2-C4 and H6 below impleme
   aggregate object (e.g. unusual duration or dispersion across its own, already-clean fixations), independent of
   its constituent fixations. No such visit-level outlier detection exists today, and whether it is needed has not
   been decided.
-- **M10, M11, M12 (statistical, GAMs).** Deferred by decision, 2026-08-06: accepted as valid concerns, but the
-  fix is a modelling choice for whoever revisits the GAMs, not a code bug. Each script carries an inline warning at
-  the fit site.
-  - **M10** (`time_on_task_gam.R`, `time_in_trial_gam.R`, `spatial_gam.R`): every model is
-    `is_lws ~ trial_category + s(...) + s(subject, bs="re")`, but the unit of observation is a *visit*, and visits
-    are nested within target within trial within subject. A subject-level random intercept does not absorb that
-    nesting, so p-values on the smooth terms are optimistic. Fix: add nested grouping (e.g.
-    `s(trial_uid, bs="re")`) or aggregate to one observation per (subject, trial, target).
-  - **M11** (`spatial_gam.R:49`): `anova(simple_model, interaction_model, test="Chisq")` compares two REML fits
-    with different smooth structure, which `mgcv` itself warns is not valid. Fix: refit both under `method="ML"`
-    for the comparison, keep REML for the final reported fit.
-  - **M12** (`data_models/Subject.py`): `px2deg` is a constant (angle at screen centre), but the true px->deg
-    mapping depends on eccentricity. Measured against 1,582 targets: median overestimate 3.0%, p90 6.9%, worst
-    9.7%, 0% exceed 10%. Small for on-target classification (radius shrinks 67.8px -> ~62px, still small against
-    ~107px icon spacing) but the bias is a smooth centre->periphery gradient, exactly the shape `spatial_effects`
-    models, so it is a candidate confound rather than noise. Fix (optional): compute the true subtended angle from
-    both screen positions, or add target eccentricity as a covariate in the spatial model.
+- **M12** (`data_models/Subject.py`). Deferred by decision, 2026-08-06, still open: `px2deg` is a constant (angle
+  at screen centre), but the true px->deg mapping depends on eccentricity. Measured against 1,582 targets: median
+  overestimate 3.0%, p90 6.9%, worst 9.7%, 0% exceed 10%. Small for on-target classification (radius shrinks
+  67.8px -> ~62px, still small against ~107px icon spacing) but the bias is a smooth centre->periphery gradient,
+  exactly the shape `spatial_effects` models, so it is a candidate confound rather than noise. Fix (optional):
+  compute the true subtended angle from both screen positions, or add target eccentricity as a covariate in the
+  spatial model. Note: the new eccentricity model added 2026-09-03 (`spatial_gam.R`, `r`/`theta`) deliberately
+  keeps `r` in raw pixels rather than DVA for exactly this reason - converting `r` via `px2deg` would bake M12's
+  bias into the very metric that model tests.
 - **M18. Fixation-level and visit-level LWS/target-return classification can disagree** for fixations inside the
   same visit. Flagged 2026-08-12, not yet measured or fixed. `build_event_classification_funnel` computes
   `is_lws`/`is_target_return` independently per `event_type`; both apply the same
@@ -72,9 +64,6 @@ Settled 2026-08-05. These are the intended semantics; C2-C4 and H6 below impleme
   obviously a bug): (1) treat visit-level as canonical and broadcast to member fixations, (2) keep both independent
   but add a diagnostic count of disagreeing fixations, (3) never join `is_lws`/`is_target_return` across grains.
   See `CLAUDE.md`'s stage-3 section for the current caveat.
-- **L6's `k` choice.** `spatial_gam.R`'s `te(x, y, k = c(8, 8))` (`k` is per marginal basis, so ~64 basis
-  functions) is otherwise fixed and hygienic (see changelog), but whether 8 is the right value is a modelling
-  choice deferred alongside M10/M11.
 
 ## Changelog (all FIXED / WITHDRAWN / DISSOLVED findings)
 
@@ -112,6 +101,12 @@ Settled 2026-08-05. These are the intended semantics; C2-C4 and H6 below impleme
 | M16 | Outlier detection used `peyes`'s default screen geometry instead of the project's monitor (`cnst.TOBII_MONITOR`) | `8201293` |
 | M17 | `del ... start_idx` raised `UnboundLocalError` when the trigger log had no `BLOCK_*` trigger | `863fbf0` |
 | M19 | `_STAGE1_SOURCES` in `pipeline/stage1_parse/cache_key.py` referenced three deleted `data_models/preprocess/` files (recurrence of H3) and `_REPO_ROOT` resolved one directory too shallow, so the stage-1 cache key tracked almost no real code changes | `162ffd6` |
+| M10 | Anti-conservative smooth p-values: every `*_gam.R` model used only `s(subject, bs="re")`, but visits nest within trial within subject. Fixed via `s(trial_uid, bs="re")` in all three scripts (`trial_uid` = subject:trial, built in `helpers.R::load_data()`); confirmed consequential (`spatial_gam.R`'s `te(x,y)` p-value: 0.060 -> 0.113). `trial_uid`'s ~1,300 levels made `gam()`'s REML fitting impractically slow (didn't converge in 5+ min), so all three scripts moved to `bam(..., method="fREML", discrete=TRUE)` - same model, faster engine. Confirmed the same anti-conservative-RE issue is still present, unaddressed (out of scope here), in `hit_rate.ipynb`/`stimulus_features.ipynb` (both `... + (1 \| subject)` only, DV nests within trial); not applicable to `trial_exclusion.ipynb` (already one row per subject x trial) | `d8c918c` |
+| M11 | `spatial_gam.R` compared two REML fits via `anova()`, invalid per `mgcv`'s own warning. The textbook fix (refit both under `method="ML"`) turned out unreachable - `discrete=TRUE` only supports `method="fREML"`/`"NCV"`, so the ML refit silently fell back to non-discretized fitting and did not finish in 5+ hours of CPU time. Fixed differently: dropped the two-model `anova()` comparison, read the by-factor smooth's own edf/p-value directly off a single fREML fit of `interaction_model` instead - a valid, within-fit test for the same question, and far cheaper. Consequential: the invalid `anova()` reported p=0.033 ("significant" interaction); the valid by-smooth p-values are all non-significant (BW p=0.28, COLOR p=0.49, NOISE p=0.44) - the old pipeline would have reported a spatial-by-category interaction that does not hold up | `d8c918c` |
+| L6 | `spatial_gam.R`'s `te(x, y, k=8)` verified adequate via a K=8-vs-K=12 sensitivity check on the post-M10 model: edf and p-value barely move (6.636->6.689, p=0.113->0.114) | `d8c918c` |
+| H10 | The R CSV round-trip's export step (`funnel_results.csv`, "exported by hand from a notebook" per `CLAUDE.md`) had no code cell in any of the three GAM notebooks - `spatial_effects.ipynb` even had an empty "Export Data" markdown header with nothing under it - so the documented pipeline was not reproducible from the notebooks' saved source. Fixed via a shared `ensure_funnel_csv_for_r()` helper, called from all three notebooks | `07b5c56` |
+| M20 | `gam_overlay.py::plot_gam_spatial_predictions` never read `spatial_gam.R`'s `is_supported` column (computed specifically to flag extrapolated/low-data grid cells), so extrapolated regions were plotted identically to real estimates | `0d5dddd` |
+| M21 | `time_in_trial.ipynb`'s per-subject subplot grid used floor instead of ceiling division for `num_rows`, crashing whenever subject count isn't a multiple of `NUM_COLS` (current data: 28 subjects) | `07b5c56` |
 | L1 | No tests: now 14 files, 185 tests, all green | n/a |
 | L2 | No linter/formatter/type-checker config: withdrawn, this review's own findings (wrong column name, falsy-zero guards, key collisions) are not the class of bug a linter catches | `b092c10` (reverts the ruff config added and reconsidered in `773ebe8`) |
 | L3 | Resource-handling and small correctness nits (missing context manager, missing `__hash__`, unused variable, dead code, always-off `tqdm` bars) | `773ebe8`, `35bc6e6` |
@@ -130,6 +125,8 @@ trace to intentional fixes or the corrected TOBII dimensions (527 x 296 mm). Two
 during that run: `_map_ident_time` crashed on off-target fixations (NaN target), and `build_identifications` missed
 82 trials that had targets but zero actions (no miss rows emitted).
 
-Every Critical and High finding is fixed and covered by tests. What remains open is exactly the "Open items" list
-above: T2 (visit-outlier definition), M10/M11/M12 (GAM specification, deferred by decision), M18 (fixation/visit
-classification disagreement, a research decision), and the `k` choice inside L6's otherwise-fixed R hygiene.
+Every Critical and High finding is fixed and covered by tests, except H10 above (fixed 2026-09-03, no test
+coverage - it's a notebook/R pipeline gap, outside `tests/`'s scope). M10/M11/L6 (GAM specification) were revisited
+and fixed 2026-09-03; see the changelog for what changed and why the originally-planned fixes weren't reachable
+as specified. What remains open is exactly the "Open items" list above: T2 (visit-outlier definition), M12
+(position-dependent `px2deg`), and M18 (fixation/visit classification disagreement, a research decision).
