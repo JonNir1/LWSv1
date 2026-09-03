@@ -202,7 +202,7 @@ def finalize_figure(
     fig.update_xaxes(
         title=dict(text=x_label, font=LABEL_FONT, standoff=10),
         tickmode="array", tickvals=x_tickvals, ticktext=x_ticklabels,
-        tickfont=TICK_FONT,
+        tickfont=TICK_FONT, ticklabelstandoff=0,
         showgrid=False,
     )
     fig.update_yaxes(
