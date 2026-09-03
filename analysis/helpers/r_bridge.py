@@ -4,6 +4,14 @@ Shared helpers for fitting R (mgcv/lme4) models via rpy2, in-process - no subpro
 `setup_rpy2()` works around a real rpy2 bug on this machine's Windows R installation (no Rtools): see its
 docstring. Everything else here is a thin, pandas-in/pandas-out layer over rpy2 so notebooks can fit GAMs
 and GLMMs without hand-writing rpy2 conversion boilerplate at every call site.
+
+IMPORTANT for any `mgcv::bam(..., discrete = TRUE)` call in a sourced .R file: always pass `nthreads = 1`.
+Confirmed by direct reproduction: `discrete=TRUE`'s internal OpenMP-parallel fitting segfaults the whole
+Python process (not a catchable R/Python exception - a hard SIGSEGV) when fitting a second model in the
+same embedded-R-via-rpy2 session, under real memory pressure (a real pipeline DataStore + plotly both
+loaded). `gam()`/`glmer()` (no `discrete=`) are unaffected. `nthreads=1` costs little - the discretization
+algorithm itself (not the threading) is what makes `discrete=TRUE` fast, confirmed still ~80s for the
+time-on-task nested fit with `nthreads=1` vs. ~78-97s multi-threaded earlier this session.
 """
 import os
 import pickle
@@ -84,12 +92,35 @@ def to_r_dataframe(df: pd.DataFrame, name: str = "dat", build_trial_uid: bool = 
         ro.r(f'{name}$trial_uid <- interaction({name}$subject, {name}$trial, drop = TRUE)')
 
 
-def source_r(path: str) -> None:
-    """Source an R file (formula/fit-call only - reads `dat` already in the R global env, assigns fitted
-    model objects back into it) into the R global environment via rpy2."""
+def placeholder_level(factor_expr: str) -> str:
+    """
+    Return the first level of an R factor expression (e.g. "dat$trial_uid") - for building a prediction
+    grid for a nested model's random-effect grouping factor, where `predict()` needs *some* recognized
+    level present even though `exclude=` will zero out that term's actual contribution.
+    """
     setup_rpy2()
     import rpy2.robjects as ro
-    ro.r(f'source("{path}")')
+    return str(ro.r(f"levels({factor_expr})[1]")[0])
+
+
+def source_r(path: str) -> None:
+    """
+    Run an R file (formula/fit-call only - reads `dat` already in the R global env, assigns fitted model
+    objects back into it) into the R global environment via rpy2.
+
+    Deliberately *not* R's own `source()`: confirmed by direct reproduction that `source("path")` (as
+    opposed to evaluating the same file's text directly via `ro.r(text)`) segfaults the whole Python
+    process under real memory pressure (a real pipeline DataStore + plotly both loaded) when fitting two
+    models this way in the same embedded-R-via-rpy2 session - even with `nthreads=1` (see that function's
+    docstring), which is unrelated; two inline `ro.r(...)` fits with `nthreads=1` do not crash, and
+    swapping only `source()` for reading-and-evaluating the file's text does not either. Read the file's
+    text in Python and evaluate it as one `ro.r()` call instead - same file, same content, no `source()`.
+    """
+    setup_rpy2()
+    import rpy2.robjects as ro
+    with open(path, "r", encoding="utf-8") as f:
+        r_code = f.read()
+    ro.r(r_code)
 
 
 def get_r_object(name: str) -> Any:

@@ -3,6 +3,8 @@
 LWSv1.Rproj
 *.csv
 analysis/R/figures/
+analysis/R/_cache/
+analysis/_reports/
 
 # Byte-compiled / optimized files
 __pycache__/

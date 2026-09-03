@@ -1,66 +1,34 @@
 
 #' === LWS PROBABILITY OVER TIME IN TRIAL ===
+#'
+#' Sourced via rpy2 (analysis/helpers/r_bridge.py::source_r), not run via Rscript - no CSV I/O here. The
+#' caller builds `dat` (subject, trial, trial_category, trial_uid, start_time, is_lws) in R via
+#' r_bridge.py::to_r_dataframe() before sourcing this file, and reads `model_flat`/`model_nested` back out
+#' afterward via r_bridge.py::get_r_object().
 
 
 library(mgcv)
-source(file.path("analysis", "R", "helpers.R"))
 
-# set constants
 K <- 10
 
-# load and filter the data
-dat <- load_data(
-  file.path("analysis", "R", "funnel_results.csv"),
-  valid_only = TRUE,
-  on_target_only = TRUE
+# M10 severity audit: model_flat is the "ill-conceived" model CODE_REVIEW.md M10 originally flagged -
+# s(subject, bs="re") only, even though the unit of observation is a visit, and visits nest within trial
+# within subject.
+model_flat <- bam(
+  is_lws ~ trial_category + s(start_time, k = K, bs = "tp") + s(subject, bs = "re"),
+  data = dat,
+  family = binomial(),
+  method = "fREML",
+  discrete = TRUE, nthreads = 1  # discrete=TRUE's OpenMP threading segfaults when this R session is embedded via rpy2 - see r_bridge.py
 )
 
-
-# === Statistical Analysis ===
-# fit GAM with within-trial time as predictor
-# CODE_REVIEW.md M10, fixed: the unit of observation is a visit, and visits nest within trial within subject.
-# s(trial_uid, bs="re") (trial_uid = subject:trial, built in helpers.R::load_data()) absorbs that nesting
-# alongside the subject-level random intercept, so the smooth's p-value is no longer anti-conservative.
-#
-# bam() (not gam()) because trial_uid has ~1,300 levels: gam()'s dense REML fitting is impractically slow at
-# that many random-effect coefficients, while bam(..., discrete=TRUE) is mgcv's own fast-fitting path for
-# exactly this case (many rows and/or many RE levels) - same model, same smooth specs, a faster backend.
-# method="fREML" is bam's (fast) REML.
-model <- bam(
+# CODE_REVIEW.md M10, fixed: s(trial_uid, bs="re") (trial_uid = subject:trial, built by
+# to_r_dataframe()) absorbs the visit-within-trial-within-subject nesting alongside the subject-level
+# random intercept, so the smooth's p-value is no longer anti-conservative.
+model_nested <- bam(
   is_lws ~ trial_category + s(start_time, k = K, bs = "tp") + s(subject, bs = "re") + s(trial_uid, bs = "re"),
   data = dat,
   family = binomial(),
   method = "fREML",
-  discrete = TRUE
+  discrete = TRUE, nthreads = 1  # discrete=TRUE's OpenMP threading segfaults when this R session is embedded via rpy2 - see r_bridge.py
 )
-
-# check model results
-summary(model)
-
-# diagnostics -> analysis/R/figures/, rather than an anonymous Rplots.pdf in the working directory
-# CODE_REVIEW.md L6: k.check() reports whether K is large enough for s(start_time) - printed here (not only
-# plotted) so it's part of the script's captured output.
-print(k.check(model))
-plot_path <- open_plot_device("time_in_trial_gam_diagnostics.pdf")
-gam.check(model)
-plot(model, select = 1)
-dev.off()
-message("diagnostics written to ", plot_path)
-
-
-# === Export Model Estimates ===
-time_range <- range(dat$start_time, na.rm = TRUE)
-grid <- expand.grid(
-  start_time = seq(from=0, to=time_range[2], by=100), # 100ms intervals
-  trial_category = levels(dat$trial_category),
-  subject = levels(dat$subject),
-  trial_uid = levels(dat$trial_uid)[1]  # placeholder level; excluded from the prediction below
-)
-
-# marginalize probabilities over subjects and trial types:
-# final_trend <- aggregate(prob ~ trial, data = grid, FUN = mean)
-# plot(final_trend)
-
-# save predictions to file
-outfile <- file.path("analysis", "R", "time-in-trial_lws_predictions.csv")
-predict_and_export(model, grid, outfile, exclude = "s(trial_uid)")

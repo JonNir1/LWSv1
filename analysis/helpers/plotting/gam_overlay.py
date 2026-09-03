@@ -7,7 +7,7 @@ import config as cnfg
 
 
 def plot_gam_predictions_ribbon(
-        csv_path: str,
+        predictions: pd.DataFrame,
         x_col: str = "trial",
         prob_col: str = "prob",
         title: str = "GAM-Estimated LWS Dynamics",
@@ -17,11 +17,9 @@ def plot_gam_predictions_ribbon(
         x_tickvals: list[int] | None = None,
 ) -> go.Figure:
     """
-    Read GAM predictions from a CSV, aggregate across subjects,
-    and plot the population mean with a 95% CI ribbon.
+    Aggregate GAM predictions across subjects and plot the population mean with a 95% CI ribbon.
     """
-    df = pd.read_csv(csv_path, index_col=None)
-    subj_agg = df.groupby(["subject", x_col])[prob_col].mean().reset_index()
+    subj_agg = predictions.groupby(["subject", x_col])[prob_col].mean().reset_index()
     pop_stats = (
         subj_agg
         .groupby(x_col)
@@ -152,16 +150,14 @@ def plot_lws_time_dynamics(
 
 
 def plot_gam_spatial_predictions(
-        csv_path: str,
+        df: pd.DataFrame,
         screen_width: int = 1920,
         screen_height: int = 1080,
         title: str = "GAM-Predicted LWS Probability Surface",
 ) -> go.Figure:
     """
-    Read spatial GAM predictions and visualize as heatmap subplots
-    (overall + per trial_category).
+    Visualize spatial GAM predictions as heatmap subplots (overall + per trial_category).
     """
-    df = pd.read_csv(csv_path, index_col=None)
     x_coords = sorted(df["x"].unique())
     y_coords = sorted(df["y"].unique())
 
@@ -228,15 +224,14 @@ def plot_gam_spatial_predictions(
 
 
 def plot_gam_eccentricity_predictions(
-        csv_path: str,
+        df: pd.DataFrame,
         title: str = "GAM-Estimated LWS Probability by Eccentricity and Angle",
 ) -> go.Figure:
     """
-    Read the polar/eccentricity GAM predictions (r-sweep and theta-sweep rows, distinguished by the
-    `sweep` column - see spatial_gam.R) and plot each as a population mean + 95% CI ribbon, in the same
-    style as `plot_gam_predictions_ribbon`.
+    Visualize the polar/eccentricity GAM predictions (r-sweep and theta-sweep rows, distinguished by the
+    `sweep` column) as a population mean + 95% CI ribbon each, in the same style as
+    `plot_gam_predictions_ribbon`.
     """
-    df = pd.read_csv(csv_path, index_col=None)
     fig = make_subplots(rows=1, cols=2, subplot_titles=["P[LWS] vs. Eccentricity (r)", "P[LWS] vs. Angle (θ)"])
 
     def _add_ribbon(col: int, x_col: str, x_title: str):
