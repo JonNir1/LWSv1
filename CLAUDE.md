@@ -74,6 +74,12 @@ The mirror construct is a **target-return**: an on-target event *after* identifi
 - No `__init__.py` files or packaging metadata: **all code runs with the repo root as CWD / sys.path root**
   (`import config as cnfg`, `from analysis.helpers... import ...`). No linter config, no build step.
 - Tests: `pytest tests/ -q` from repo root (`pyproject.toml` sets `pythonpath = ["."]` and `testpaths = ["tests"]`).
+- **R/Python bridge**: notebooks that fit R models (`mgcv`, `lme4`) call `analysis/helpers/r_bridge.py::setup_rpy2()`
+  before any `rpy2`/`pymer4` import. It works around a real `rpy2` bug on this machine: no Rtools means
+  `R CMD config --ldflags` exits 0 with empty output instead of failing loudly, which crashes `rpy2`'s own
+  "Rtools not installed" fallback with an unrelated `IndexError`. **TODO: install Rtools45** - once it's on
+  this machine, `R CMD config` will succeed for real and `setup_rpy2()`'s `IndexError`-to-`CalledProcessError`
+  patch becomes a no-op; at that point it's safe to simplify/retire, though leaving it is harmless.
 
 ## Commands
 
