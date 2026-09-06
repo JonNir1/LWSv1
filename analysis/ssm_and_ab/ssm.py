@@ -338,7 +338,7 @@ def build_category_pair_table(df: pd.DataFrame, hits: pd.DataFrame, min_cell_n: 
     merged = join_single_prior_hit_category(df, hits)
     table = (
         merged.groupby(["hit_category", "miss_category"], observed=True)
-        .agg(n_visits=("is_lws", "size"), lws_rate=("is_lws", "mean"))
+        .agg(n_visits=("is_lws", "size"), n_lws=("is_lws", "sum"), lws_rate=("is_lws", "mean"))
         .reset_index()
     )
     table["sufficient_n"] = table["n_visits"] >= min_cell_n
