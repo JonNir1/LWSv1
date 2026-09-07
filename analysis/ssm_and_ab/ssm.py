@@ -226,8 +226,13 @@ def _compute_fixations_since_last_hit(
 
 def build_hits_table(data: DataStore) -> pd.DataFrame:
     """
-    One row per hit identification, with `target_category` attached. Shared so "what counts as a hit" (and
-    which columns are dropped) can't drift between notebooks.
+    One row per hit identification, with `target_category` and `sub_path` attached. Shared so "what counts
+    as a hit" (and which columns are dropped) can't drift between notebooks.
+
+    `sub_path` is the stimulus image file (`SearchArray._SearchArrayImage.sub_path`) - the actual
+    visual/semantic identity of a target. A target can appear at up to two array positions (icons) in the
+    same trial sharing the identical `sub_path`; `target` (the icon id) only identifies *position*, not
+    that shared identity. See `add_ssm_predictors`'s `same_exemplar_as_last_hit`.
     """
     targets = data.targets
     hits = (
@@ -237,7 +242,8 @@ def build_hits_table(data: DataStore) -> pd.DataFrame:
             "identification_category", "left_x", "left_y", "left_pupil", "right_x", "right_y", "right_pupil",
         ], errors="ignore")
         .merge(
-            targets[["subject", "trial", "target", "category"]], on=["subject", "trial", "target"], how="left",
+            targets[["subject", "trial", "target", "category", "sub_path"]],
+            on=["subject", "trial", "target"], how="left",
         )
         .rename(columns={"category": "target_category"})
         .sort_values(["subject", "trial", "time"])
@@ -265,6 +271,9 @@ def load_ssm_funnel(**load_kwargs) -> tuple[DataStore, pd.DataFrame, pd.DataFram
     funnel_results = funnel_results.merge(
         data.metadata[["subject", "trial", "num_targets"]], on=["subject", "trial"], how="left",
     )
+    funnel_results = funnel_results.merge(
+        data.targets[["subject", "trial", "target", "sub_path"]], on=["subject", "trial", "target"], how="left",
+    )
 
     hits = build_hits_table(data)
     funnel_results = enrich_funnel_with_history(funnel_results, hits, data.fixations)
@@ -276,16 +285,21 @@ def load_ssm_funnel(**load_kwargs) -> tuple[DataStore, pd.DataFrame, pd.DataFram
 def add_ssm_predictors(df: pd.DataFrame, hits: pd.DataFrame) -> pd.DataFrame:
     """
     Adds `any_prior_hit` (Q1: was *any* other target already identified in this trial before this visit
-    started) and `same_icon_as_last_hit` (Q5: is this visit's target the same icon as the most recently
-    identified target).
+    started), `same_icon_as_last_hit` (does this visit's target occupy the exact same array position -
+    `target`/icon id - as the most recently identified one; if so, this visit necessarily *is* that same
+    target, i.e. `VisitType.TARGET_RETURN`, structurally never LWS), and `same_exemplar_as_last_hit` (Q5:
+    is this visit's target the same underlying image - `sub_path` - as the most recently identified target,
+    while sitting at a *different* array position; a target's exact image can appear at up to two positions
+    in a trial, and this is the genuinely interesting "same visual target, missed at its other location"
+    case - conflating it with `same_icon_as_last_hit` was an earlier bug, see the plan doc / git history).
     """
     result = df.copy()
     result["any_prior_hit"] = result["num_targets_found_before"] > 0
 
     # see enrich_funnel_with_history's comment: merge_asof needs the "on" column sorted globally, not
     # group-then-on, even with `by` given.
-    hits_for_asof = hits[["subject", "trial", "time", "target"]].rename(
-        columns={"time": "_last_hit_time", "target": "_last_hit_target"}
+    hits_for_asof = hits[["subject", "trial", "time", "target", "sub_path"]].rename(
+        columns={"time": "_last_hit_time", "target": "_last_hit_target", "sub_path": "_last_hit_sub_path"}
     ).sort_values("_last_hit_time")
     merged = pd.merge_asof(
         result.sort_values("start_time"),
@@ -300,8 +314,13 @@ def add_ssm_predictors(df: pd.DataFrame, hits: pd.DataFrame) -> pd.DataFrame:
         merged["target"] == merged["_last_hit_target"],
         False,
     )
+    merged["same_exemplar_as_last_hit"] = np.where(
+        merged["_last_hit_time"].notna() & ~merged["same_icon_as_last_hit"],
+        merged["sub_path"].astype(str) == merged["_last_hit_sub_path"].astype(str),
+        False,
+    )
     return (
-        merged.drop(columns=["_last_hit_time", "_last_hit_target"])
+        merged.drop(columns=["_last_hit_time", "_last_hit_target", "_last_hit_sub_path"])
         .sort_values(["subject", "trial", "eye", "start_time"])
         .reset_index(drop=True)
     )
