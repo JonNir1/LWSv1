@@ -10,7 +10,7 @@ import arviz as az
 import kaleido
 
 import config as cnfg
-from _publications_._modeling import AnalysisContext, ContrastGroupType
+from _publications_._contrasts import AnalysisContext, ContrastGroupType
 
 LABEL_FONT = {**cnfg.AXIS_LABEL_FONT, **dict(size=40)}
 TICK_FONT = {**cnfg.AXIS_TICK_FONT, **dict(size=36)}
@@ -33,22 +33,41 @@ def _kaleido_browser_path() -> Optional[str]:
     return None
 
 
-def save_figure(fig: go.Figure, name: str, width_cm: float, height_cm: float, output_dir: str, dpi: int = 300):
-    PLOTLY_DEFAULT_DPI = 96
-    CM_PER_INCH = 2.54
-    width_in = width_cm / CM_PER_INCH
-    width_px = int(width_in * PLOTLY_DEFAULT_DPI)
-    height_in = height_cm / CM_PER_INCH
-    height_px = int(height_in * PLOTLY_DEFAULT_DPI)
+PLOTLY_DEFAULT_DPI = 96
+CM_PER_INCH = 2.54
+
+
+def cm_to_px(width_cm: float, height_cm: float, dpi: int = 300) -> Tuple[int, int]:
+    width_px = int(width_cm / CM_PER_INCH * PLOTLY_DEFAULT_DPI)
+    height_px = int(height_cm / CM_PER_INCH * PLOTLY_DEFAULT_DPI)
+    return width_px, height_px
+
+
+def save_figure(
+        fig: go.Figure, name: str, width_cm: float, height_cm: float, output_dir: str, dpi: int = 300,
+        strip_axis_titles: bool = True, margin: Optional[dict] = None,
+):
+    """
+    Exports `fig` to a PNG sized for a poster panel. `strip_axis_titles` removes the x-axis title and
+    widens the y-axis title standoff, matching how the VSS/Mind-IL bar charts get their captions from
+    the poster template rather than the figure itself; pass False for figures that need their own titles.
+    `margin` is only applied when given - pass it explicitly to reproduce a previous look, since a figure
+    may already carry its own margin from finalize_figure() or its own update_layout() call.
+    """
+    width_px, height_px = cm_to_px(width_cm, height_cm, dpi)
 
     fig_copy = copy.deepcopy(fig)
-    fig_copy.update_xaxes(title=None)
-    fig_copy.update_yaxes(title=dict(standoff=40))
-    fig_copy.update_layout(
+    if strip_axis_titles:
+        fig_copy.update_xaxes(title=None)
+        fig_copy.update_yaxes(title=dict(standoff=40))
+    layout_updates = dict(
         width=width_px, height=height_px,
         title=None, paper_bgcolor="rgba(0, 0, 0, 0)", plot_bgcolor="rgba(0, 0, 0, 0)",
-        margin=dict(t=0, b=0, l=40, r=5),
     )
+    if margin is not None:
+        layout_updates["margin"] = margin
+    fig_copy.update_layout(**layout_updates)
+
     browser_path = _kaleido_browser_path()
     kaleido.write_fig_sync(
         fig_copy,
@@ -181,7 +200,10 @@ def add_empirical_scatter_trace(
     return scatter_height
 
 
-def add_statistical_annotations(fig: go.Figure, configs: List[Tuple[str, float, float]], y_pos):
+def add_statistical_annotations(
+        fig: go.Figure, configs: List[Tuple[str, float, float]], y_pos, tick_font: dict = None,
+):
+    tick_font = tick_font if tick_font is not None else TICK_FONT
     for ann_cnfg in configs:
         fig.add_shape(
             type="line", x0=ann_cnfg[1], x1=ann_cnfg[2], y0=y_pos, y1=y_pos,
@@ -190,24 +212,27 @@ def add_statistical_annotations(fig: go.Figure, configs: List[Tuple[str, float, 
         fig.add_annotation(
             x=(ann_cnfg[2] + ann_cnfg[1]) / 2, xanchor="center",
             y=y_pos, yanchor="bottom",
-            text=ann_cnfg[0], font=TICK_FONT,
+            text=ann_cnfg[0], font=tick_font,
             showarrow=False,
         )
 
 
 def finalize_figure(
         fig: go.Figure, title: str, x_label: str, x_tickvals: List[float], x_ticklabels: List[str],
+        label_font: dict = None, tick_font: dict = None,
 ):
+    label_font = label_font if label_font is not None else LABEL_FONT
+    tick_font = tick_font if tick_font is not None else TICK_FONT
     assert len(x_ticklabels) == len(x_tickvals)
     fig.update_xaxes(
-        title=dict(text=x_label, font=LABEL_FONT, standoff=10),
+        title=dict(text=x_label, font=label_font, standoff=10),
         tickmode="array", tickvals=x_tickvals, ticktext=x_ticklabels,
-        tickfont=TICK_FONT, ticklabelstandoff=0,
+        tickfont=tick_font, ticklabelstandoff=0,
         showgrid=False,
     )
     fig.update_yaxes(
-        title=dict(text="P[recog. error | target visit]", font=LABEL_FONT, standoff=10),
-        tickfont=TICK_FONT,
+        title=dict(text="P[recog. error | target visit]", font=label_font, standoff=10),
+        tickfont=tick_font,
         showgrid=True, gridcolor=cnfg.GRID_LINE_COLOR, gridwidth=cnfg.GRID_LINE_WIDTH,
         zeroline=True, zerolinecolor="black", zerolinewidth=2,
     )
