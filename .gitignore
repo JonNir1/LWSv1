@@ -5,7 +5,6 @@ LWSv1.Rproj
 analysis/R/figures/
 analysis/R/_cache/
 analysis/_reports/
-analysis/build_m10_report.py
 
 # Byte-compiled / optimized files
 __pycache__/

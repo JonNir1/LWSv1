@@ -101,14 +101,21 @@ Run tests:
 pytest tests/ -q
 ```
 
-Fit a GAM (from repo root; the scripts use `file.path(\"analysis\", \"R\", ...)` relative paths):
+Most `analysis/R/*_gam.R` / `*_glmm.R` scripts (`time_on_task_gam.R`, `time_in_trial_gam.R`,
+`spatial_cartesian_gam.R`, `spatial_polar_gam.R`, `spatial_eccentricity_glmm.R`) are not run standalone -
+their notebook calls `setup_rpy2()`, hands the funnel data over in-memory via
+`r_bridge.py::to_r_dataframe()`, then `source_r()`s the script, which expects `dat` to already exist in the
+R global environment. Re-run the notebook to refit; there's no CSV to inspect.
+
+The `fvf_*_gam.R` scripts are the exception and still work the traditional way (from repo root; they use
+`file.path(\"analysis\", \"R\", ...)` relative paths):
 
 ```bash
-Rscript analysis/R/time_on_task_gam.R
+Rscript analysis/R/fvf_over_trials_gam.R
 ```
 
-The R scripts read `analysis/R/funnel_results.csv` (gitignored, exported by hand from a notebook after building a
-funnel) and write `*_predictions.csv` back, which notebooks then read to overlay model estimates on plotly figures.
+They read a CSV exported by hand from their companion notebook (e.g. `fvf_radius_by_trial.csv`) and write a
+`*_predictions.csv` back, which the notebook then reads to overlay model estimates on plotly figures.
 
 ## Architecture
 
