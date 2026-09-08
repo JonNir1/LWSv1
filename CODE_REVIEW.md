@@ -49,9 +49,10 @@ Settled 2026-08-05. These are the intended semantics; C2-C4 and H6 below impleme
   at screen centre), but the true px->deg mapping depends on eccentricity. Measured against 1,582 targets: median
   overestimate 3.0%, p90 6.9%, worst 9.7%, 0% exceed 10%. Small for on-target classification (radius shrinks
   67.8px -> ~62px, still small against ~107px icon spacing) but the bias is a smooth centre->periphery gradient,
-  exactly the shape `spatial_effects` models, so it is a candidate confound rather than noise. Fix (optional):
-  compute the true subtended angle from both screen positions, or add target eccentricity as a covariate in the
-  spatial model. Note: the new eccentricity model added 2026-09-03 (`spatial_gam.R`, `r`/`theta`) deliberately
+  exactly the shape the spatial analyses (`spatial_cartesian.ipynb`, `spatial_polar.ipynb`) model, so it is a
+  candidate confound rather than noise. Fix (optional): compute the true subtended angle from both screen
+  positions, or add target eccentricity as a covariate in the spatial model. Note: the eccentricity model added
+  2026-09-03 (`spatial_polar_gam.R`, `r`/`theta`) deliberately
   keeps `r` in raw pixels rather than DVA for exactly this reason - converting `r` via `px2deg` would bake M12's
   bias into the very metric that model tests.
 - **M18. Fixation-level and visit-level LWS/target-return classification can disagree** for fixations inside the
