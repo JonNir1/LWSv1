@@ -42,6 +42,17 @@ def output_dir() -> str:
 
 
 @pytest.fixture(scope="session")
+def r_session() -> None:
+    """Initializes rpy2/R via setup_rpy2(), or skips if R/rpy2 is not usable in this environment."""
+    from analysis.helpers.r_bridge import setup_rpy2
+
+    try:
+        setup_rpy2()
+    except Exception as exc:
+        pytest.skip(f"rpy2/R not available: {exc}")
+
+
+@pytest.fixture(scope="session")
 def stimuli_dir() -> str:
     """Path to the stimulus `.mat` files, or skip if they are not on this machine."""
     path = os.path.join(cnfg.SEARCH_ARRAY_PATH, f"generated_stim{cnfg.STIMULI_VERSION}")
