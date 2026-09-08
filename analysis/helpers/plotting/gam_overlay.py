@@ -174,8 +174,9 @@ def plot_gam_spatial_predictions(
     )
 
     def _get_z_matrix(data: pd.DataFrame) -> np.ndarray:
-        # spatial_gam.R flags grid cells with too few nearby observations as extrapolation (is_supported=False);
-        # mask them to NaN so they render blank instead of as if they were real estimates.
+        # spatial_support.py::compute_grid_support() flags grid cells with too few nearby observations as
+        # extrapolation (is_supported=False); mask them to NaN so they render blank instead of as if they
+        # were real estimates.
         subj_agg = data.groupby(["subject", "x", "y"])[["prob", "is_supported"]].agg(
             {"prob": "mean", "is_supported": "all"}
         ).reset_index()

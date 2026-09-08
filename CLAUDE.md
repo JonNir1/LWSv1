@@ -75,11 +75,9 @@ The mirror construct is a **target-return**: an on-target event *after* identifi
   (`import config as cnfg`, `from analysis.helpers... import ...`). No linter config, no build step.
 - Tests: `pytest tests/ -q` from repo root (`pyproject.toml` sets `pythonpath = ["."]` and `testpaths = ["tests"]`).
 - **R/Python bridge**: notebooks that fit R models (`mgcv`, `lme4`) call `analysis/helpers/r_bridge.py::setup_rpy2()`
-  before any `rpy2`/`pymer4` import. It works around a real `rpy2` bug on this machine: no Rtools means
-  `R CMD config --ldflags` exits 0 with empty output instead of failing loudly, which crashes `rpy2`'s own
-  "Rtools not installed" fallback with an unrelated `IndexError`. **TODO: install Rtools45** - once it's on
-  this machine, `R CMD config` will succeed for real and `setup_rpy2()`'s `IndexError`-to-`CalledProcessError`
-  patch becomes a no-op; at that point it's safe to simplify/retire, though leaving it is harmless.
+  before any `rpy2`/`pymer4` import. Rtools45 is installed on this machine, so `rpy2` uses its normal init
+  path; `setup_rpy2()` still prepends R's DLL directory to `PATH` (needed for Windows' `LoadLibrary` to find
+  R's compiled package DLLs) and points `.libPaths()` at this machine's package library.
 
 ## Commands
 
@@ -101,14 +99,11 @@ Run tests:
 pytest tests/ -q
 ```
 
-Fit a GAM (from repo root; the scripts use `file.path(\"analysis\", \"R\", ...)` relative paths):
-
-```bash
-Rscript analysis/R/time_on_task_gam.R
-```
-
-The R scripts read `analysis/R/funnel_results.csv` (gitignored, exported by hand from a notebook after building a
-funnel) and write `*_predictions.csv` back, which notebooks then read to overlay model estimates on plotly figures.
+Every `analysis/R/*_gam.R` / `*_glmm.R` script is sourced via rpy2, not run standalone: its notebook calls
+`setup_rpy2()`, hands data over in-memory via `r_bridge.py::to_r_dataframe()`, then `source_r()`s the
+script, which expects `dat` to already exist in the R global environment. Re-run the notebook to refit;
+there's no CSV to inspect, and no `Rscript ...` command to run by hand - that CSV+`Rscript` pattern was
+retired repo-wide (the `fvf_*_gam.R` scripts were the last holdouts).
 
 ## Architecture
 
@@ -245,8 +240,11 @@ corrections), A', and F1 per subject-trial.
 
 `analysis/helpers/visualizations/funnel/size_and_proportion.py` computes step sizes for funnel visualization.
 
-Analysis lives in notebooks at `analysis/*.ipynb` (`hit_rate`, `time_on_task`, `time_in_trial`, `spatial_effects`,
-`stimulus_features`, `trial_exclusion`, `gaze_behavior`, `ssm_and_ab`), each of which builds a funnel and plots it.
+Analysis lives in notebooks at `analysis/*.ipynb` (`hit_rate`, `time_on_task`, `time_in_trial`,
+`spatial_cartesian`, `spatial_polar`, `stimulus_features`, `trial_exclusion`, `gaze_behavior`), each of
+which builds a funnel and plots it. `analysis/ssm_and_ab/` is a package, not a single notebook:
+`01_ssm_effect.ipynb`, `02_temporal_dynamics.ipynb`, `03_target_identity.ipynb` (each fits via `r_bridge.py`
+like the rest), plus a shared `ssm.py` data-prep module.
 `analysis/fvf/` holds the functional-visual-field work: `fvf.py` (four FVF estimators; the comparison and which
 one to use live in `compare_fvf_types.ipynb`, not the module docstring), `threshold_sweep.ipynb` (FVF vs.
 `ON_TARGET_THRESHOLD_DVA`), `array_coverage.ipynb` (% of a trial's icons within a subject's FVF),

@@ -1,9 +1,9 @@
 """
 Shared helpers for fitting R (mgcv/lme4) models via rpy2, in-process - no subprocess/CSV round-trip.
 
-`setup_rpy2()` works around a real rpy2 bug on this machine's Windows R installation (no Rtools): see its
-docstring. Everything else here is a thin, pandas-in/pandas-out layer over rpy2 so notebooks can fit GAMs
-and GLMMs without hand-writing rpy2 conversion boilerplate at every call site.
+`setup_rpy2()` prepends R's DLL directory to PATH before rpy2/pymer4 is imported - see its docstring.
+Everything else here is a thin, pandas-in/pandas-out layer over rpy2 so notebooks can fit GAMs and GLMMs
+without hand-writing rpy2 conversion boilerplate at every call site.
 
 IMPORTANT for any `mgcv::bam(..., discrete = TRUE)` call in a sourced .R file: always pass `nthreads = 1`.
 Confirmed by direct reproduction: `discrete=TRUE`'s internal OpenMP-parallel fitting segfaults the whole
@@ -32,19 +32,16 @@ def setup_rpy2(
     anywhere in the process (rpy2 does its DLL/config setup at import time) - call this first, at the top
     of the notebook/script, before any other rpy2-touching import.
 
-    Works around a real rpy2 bug on Windows installations without Rtools (TODO CLAUDE.md: installing
-    Rtools45 would let this fallback be retired in favor of rpy2's normal init path): rpy2 initializes by
-    calling `R CMD config --ldflags` to find directories to register via `os.add_dll_directory()`, so
-    Windows can later `LoadLibrary` R's own compiled package DLLs (e.g. stats.dll, needed by nlme, needed
-    by mgcv/lme4). `R CMD config` internally needs `make` (via config.sh) - absent here - so config.sh
-    fails silently but exits 0 with empty stdout rather than a non-zero code. rpy2's own code anticipates
-    "R CMD config unavailable" and has a graceful fallback for exactly that (which correctly locates the R
-    DLL directories itself) - but the fallback only triggers on subprocess.CalledProcessError (non-zero
-    exit). Exit 0 + empty output instead crashes one line earlier as an unrelated-looking
-    `IndexError: list index out of range`, so the intended fallback is never reached. Two fixes, both
-    needed: (1) prepend R_HOME/bin/x64 to PATH so the DLL loader has a chance even before rpy2's own
-    directory-registration runs, (2) monkeypatch the IndexError into the CalledProcessError rpy2 already
-    knows how to handle, so its own fallback actually fires.
+    Prepends R_HOME/bin/x64 to PATH before rpy2 initializes, so Windows' `LoadLibrary` can find R's own
+    compiled package DLLs (e.g. stats.dll, needed by nlme, needed by mgcv/lme4) once rpy2 starts registering
+    directories via `os.add_dll_directory()`. Also points `.libPaths()` at this machine's actual package
+    library (`r_libs_user`), not the system one.
+
+    (Historical note: before Rtools45 was installed on this machine, `R CMD config --ldflags` - which rpy2
+    calls during its own init - exited 0 with empty stdout instead of a real error, crashing rpy2's own
+    "Rtools not installed" fallback with an unrelated `IndexError` before it could trigger. A monkeypatch
+    converting that `IndexError` into the `subprocess.CalledProcessError` rpy2's fallback expects used to
+    live here; confirmed dead code and removed now that `R CMD config` succeeds for real.)
     """
     global _RPY2_READY
     if _RPY2_READY:
@@ -52,18 +49,6 @@ def setup_rpy2(
 
     os.environ["PATH"] = os.path.join(r_home, "bin", "x64") + os.pathsep + os.environ.get("PATH", "")
     os.environ["R_LIBS_USER"] = r_libs_user
-
-    import subprocess
-    import rpy2.situation
-    _orig_get_r_cmd_config = rpy2.situation._get_r_cmd_config
-
-    def _patched_get_r_cmd_config(r_home_arg, about, allow_empty=False):
-        try:
-            return _orig_get_r_cmd_config(r_home_arg, about, allow_empty=allow_empty)
-        except IndexError:
-            raise subprocess.CalledProcessError(1, "R CMD config")
-
-    rpy2.situation._get_r_cmd_config = _patched_get_r_cmd_config
 
     import rpy2.robjects as ro
     ro.r(f'.libPaths(c("{r_libs_user}", .libPaths()))')

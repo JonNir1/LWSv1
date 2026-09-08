@@ -19,9 +19,9 @@ TODO:
 - power analysis for LWS counts + repeated counts
 - check Carmel's data: how many reps required to successfully decode a SEEN target. multiply this number by the number of LWS visits to get the number of LWS visits required to get valid decoding in LWS instances.
 - ([V]) effects on LWS probability: trial type, target category, target rotation, time in trial / fatigue, target
-  location / eccentricity, Attentional Blink / SSM. See `spatial_effects.ipynb`, `stimulus_features.ipynb`,
-  `time_on_task.ipynb`, `ssm_and_ab.ipynb` (P0-P9, SF1-7, TOT1 per the now-deleted
-  `RESULTS_COMPARISON_2026-04_vs_2026-08.md`, commit `92fb11e4`).
+  location / eccentricity, Attentional Blink / SSM. See `spatial_cartesian.ipynb`, `spatial_polar.ipynb`,
+  `stimulus_features.ipynb`, `time_on_task.ipynb`, `analysis/ssm_and_ab/` (P0-P9, SF1-7, TOT1 per the
+  now-deleted `RESULTS_COMPARISON_2026-04_vs_2026-08.md`, commit `92fb11e4`).
 
 **Trial Type / Target Category:**
 - ([V]) differences in hit-rate/d': `hit_rate.ipynb` (HR1-HR3 per the now-deleted
@@ -33,7 +33,7 @@ TODO:
 **LWS vs Repeated Visits:** (within subject)
 - visit duration / fixation count
 - visit spread (dispersion)
-- pupil size in LWS/identification/repeated visits (partially touched in `ssm_and_ab.ipynb`)
+- pupil size in LWS/identification/repeated visits (partially touched in `analysis/ssm_and_ab/`)
 - saccade into a LWS/TR/identification visit
 - *(`gaze_behavior.ipynb` exists as a title-only stub for this section, not yet implemented)*
 
