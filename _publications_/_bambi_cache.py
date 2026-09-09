@@ -2,15 +2,21 @@
 data shape or formula. Two symmetric pairs: load_or_fit (data + formula -> model, idata) and
 load_or_predict (model, idata + predictors -> preds), so a caller that needs to fit several
 candidate models before choosing one to predict from (e.g. model selection via az.compare())
-isn't forced through a single fit-then-predict step."""
+isn't forced through a single fit-then-predict step.
+
+load_or_fit never persists the fitted Model object itself, only idata: bambi's Model.predict()
+only needs the formula/data to (re)build its design-matrix machinery, not the fitted PyMC
+backend, so a cache hit rebuilds a fresh, unfit Model from the caller-supplied model_data and
+pairs it with the cached idata. This also sidesteps a real failure mode of pickling a fitted
+Model from inside a Jupyter kernel: ipykernel monkeypatches the `input` builtin, and something
+in bambi/PyMC's object graph holds a stale reference to it, which cloudpickle refuses to
+pickle ("it's not the same object as builtins.input")."""
 import contextlib
 import logging
 import os
 import time
 import warnings
 from typing import Optional, Tuple
-
-import cloudpickle
 
 import pandas as pd
 import bambi as bmb
@@ -37,8 +43,8 @@ def _quiet_fit(show_warnings: bool):
                 logger.setLevel(level)
 
 
-def _model_paths(name: str, dir_path: str) -> Tuple[str, str]:
-    return os.path.join(dir_path, f"{name}_model.pkl"), os.path.join(dir_path, f"{name}_idata.nc")
+def _idata_path(name: str, dir_path: str) -> str:
+    return os.path.join(dir_path, f"{name}_idata.nc")
 
 
 def _fit_model(
@@ -66,12 +72,10 @@ def _fit_model(
 
     if dir_path is not None:
         os.makedirs(dir_path, exist_ok=True)
-        model_path, idata_path = _model_paths(name, dir_path)
-        with open(model_path, "wb") as f:
-            cloudpickle.dump(model, f)
+        idata_path = _idata_path(name, dir_path)
         az.to_netcdf(idata, idata_path)
         if verbose:
-            print(f"Model saved to {model_path}, {idata_path}")
+            print(f"Idata saved to {idata_path}")
 
     return model, idata
 
@@ -88,14 +92,13 @@ def load_or_fit(
         show_warnings: bool = False,
 ) -> Tuple[bmb.Model, az.InferenceData]:
     if dir_path is not None and not force_fit:
-        model_path, idata_path = _model_paths(name, dir_path)
-        if os.path.isfile(model_path) and os.path.isfile(idata_path):
-            with open(model_path, "rb") as f:
-                model = cloudpickle.load(f)
+        idata_path = _idata_path(name, dir_path)
+        if os.path.isfile(idata_path):
+            model = bmb.Model(formula, model_data, family="bernoulli")
             with az.rc_context({"data.load": "eager"}):
                 idata = az.from_netcdf(idata_path)
             if verbose:
-                print(f"Loaded cached model from {model_path}, {idata_path}")
+                print(f"Loaded cached idata from {idata_path}")
             return model, idata
 
     return _fit_model(
