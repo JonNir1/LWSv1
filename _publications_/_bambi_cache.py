@@ -1,80 +1,132 @@
 """Generic fit-or-load-from-cache pipeline for a Bambi model, independent of any specific
-data shape or formula. Callers supply how to turn a DataStore into a model-ready DataFrame
-via `prepare_data`; this module only knows about fitting, predicting, and caching to disk."""
+data shape or formula. Two symmetric pairs: load_or_fit (data + formula -> model, idata) and
+load_or_predict (model, idata + predictors -> preds), so a caller that needs to fit several
+candidate models before choosing one to predict from (e.g. model selection via az.compare())
+isn't forced through a single fit-then-predict step.
+
+load_or_fit never persists the fitted Model object itself, only idata: bambi's Model.predict()
+only needs the formula/data to (re)build its design-matrix machinery, not the fitted PyMC
+backend, so a cache hit rebuilds a fresh, unfit Model from the caller-supplied model_data and
+pairs it with the cached idata. This also sidesteps a real failure mode of pickling a fitted
+Model from inside a Jupyter kernel: ipykernel monkeypatches the `input` builtin, and something
+in bambi/PyMC's object graph holds a stale reference to it, which cloudpickle refuses to
+pickle ("it's not the same object as builtins.input")."""
+import contextlib
+import logging
+import os
 import time
-from typing import Any, Callable, Tuple
+import warnings
+from typing import Optional, Tuple
 
 import pandas as pd
 import bambi as bmb
 import arviz as az
 
-import config as cnfg
-from analysis.helpers.read_data import load_data
+_QUIET_LOGGER_NAMES = ["pymc", "bambi"]
 
 
-def load_cached_data(
-        model_data_path: str, idata_path: str, preds_path: str
-) -> Tuple[pd.DataFrame, az.InferenceData, az.InferenceData]:
-    model_data = pd.read_pickle(model_data_path)
-    idata = az.from_netcdf(idata_path)
-    preds = az.from_netcdf(preds_path)
-    return model_data, idata, preds
+@contextlib.contextmanager
+def _quiet_fit(show_warnings: bool):
+    if show_warnings:
+        yield
+        return
+    loggers = [logging.getLogger(name) for name in _QUIET_LOGGER_NAMES]
+    previous_levels = [logger.level for logger in loggers]
+    for logger in loggers:
+        logger.setLevel(logging.ERROR)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            yield
+        finally:
+            for logger, level in zip(loggers, previous_levels):
+                logger.setLevel(level)
 
 
-def execute_pipeline(
-        prepare_data: Callable[[Any], pd.DataFrame],
-        model_data_path: str, idata_path: str, preds_path: str,
+def _idata_path(name: str, dir_path: str) -> str:
+    return os.path.join(dir_path, f"{name}_idata.nc")
+
+
+def _fit_model(
+        model_data: pd.DataFrame,
         formula: str,
-        make_predictors: Callable[[pd.DataFrame], pd.DataFrame],
+        name: str,
+        dir_path: Optional[str],
         seed: int = 42,
-) -> Tuple[pd.DataFrame, az.InferenceData, az.InferenceData]:
-    print("====\tRunning Inference Pipeline\t====")
+        idata_kwargs: Optional[dict] = None,
+        verbose: bool = False,
+        show_warnings: bool = False,
+) -> Tuple[bmb.Model, az.InferenceData]:
+    if verbose:
+        print(f"Fitting model with formula {formula}")
     start = time.time()
-
-    print("Preparing data for a new model...")
-    data = load_data(cnfg.OUTPUT_PATH)
-    model_data = prepare_data(data)
-    model_data.to_pickle(model_data_path)
-    print(f"MODEL_DATA saved to {model_data_path}")
-
-    print(f"Creating a model with formula:\n\t{formula}")
-    model = bmb.Model(formula, model_data, family="bernoulli")
-
-    print("Fitting the model to get new idata...")
-    fit_start = time.time()
-    idata = model.fit(
-        draws=2000, tune=1000, chains=4, cores=2, target_accept=0.95, progressbar=False, random_seed=seed,
-    )
-    fit_elapsed = time.time() - fit_start
-    print(f"Model fitting completed in {int(fit_elapsed // 3600)}:{int((fit_elapsed % 3600) // 60)}:{fit_elapsed % 60:.2f} (hh:mm:ss)")
-    az.to_netcdf(idata, idata_path)
-    print(f"IDATA saved to {idata_path}")
-
-    print("Generating predictions from the fitted model...")
-    predictors = make_predictors(model_data)
-    preds = model.predict(idata, data=predictors, inplace=False, kind="response")
-    az.to_netcdf(preds, preds_path)
-    print(f"PREDS saved to {preds_path}")
-
-    elapsed = time.time() - start
-    print(f"====\tInference Pipeline Completed in {int(elapsed // 3600)}:{int((elapsed % 3600) // 60)}:{elapsed % 60:.2f} (hh:mm:ss)\t====")
-    return model_data, idata, preds
-
-
-def load_or_fit_model(
-        prepare_data: Callable[[Any], pd.DataFrame],
-        model_data_path: str, idata_path: str, preds_path: str,
-        formula: str,
-        make_predictors: Callable[[pd.DataFrame], pd.DataFrame],
-        seed: int = 42,
-) -> Tuple[pd.DataFrame, az.InferenceData, az.InferenceData]:
-    try:
-        model_data, idata, preds = load_cached_data(model_data_path, idata_path, preds_path)
-        print("Data loaded successfully from disk.")
-    except FileNotFoundError:
-        print("Data files not found. Executing the full pipeline to generate them...")
-        model_data, idata, preds = execute_pipeline(
-            prepare_data, model_data_path, idata_path, preds_path,
-            formula=formula, make_predictors=make_predictors, seed=seed,
+    with _quiet_fit(show_warnings):
+        model = bmb.Model(formula, model_data, family="bernoulli")
+        idata = model.fit(
+            draws=2000, tune=1000, chains=4, cores=2, target_accept=0.95,
+            progressbar=False, random_seed=seed, idata_kwargs=idata_kwargs or {},
         )
-    return model_data, idata, preds
+    elapsed = time.time() - start
+    if verbose:
+        print(f"Model fitted in {int(elapsed // 60)}:{elapsed % 60:05.2f} mm:ss")
+
+    if dir_path is not None:
+        os.makedirs(dir_path, exist_ok=True)
+        idata_path = _idata_path(name, dir_path)
+        az.to_netcdf(idata, idata_path)
+        if verbose:
+            print(f"Idata saved to {idata_path}")
+
+    return model, idata
+
+
+def load_or_fit(
+        model_data: pd.DataFrame,
+        formula: str,
+        name: str,
+        dir_path: Optional[str],
+        seed: int = 42,
+        idata_kwargs: Optional[dict] = None,
+        force_fit: bool = False,
+        verbose: bool = False,
+        show_warnings: bool = False,
+) -> Tuple[bmb.Model, az.InferenceData]:
+    if dir_path is not None and not force_fit:
+        idata_path = _idata_path(name, dir_path)
+        if os.path.isfile(idata_path):
+            model = bmb.Model(formula, model_data, family="bernoulli")
+            with az.rc_context({"data.load": "eager"}):
+                idata = az.from_netcdf(idata_path)
+            if verbose:
+                print(f"Loaded cached idata from {idata_path}")
+            return model, idata
+
+    return _fit_model(
+        model_data, formula, name, dir_path,
+        seed=seed, idata_kwargs=idata_kwargs, verbose=verbose, show_warnings=show_warnings,
+    )
+
+
+def load_or_predict(
+        model: bmb.Model,
+        idata: az.InferenceData,
+        predictors: pd.DataFrame,
+        name: str,
+        dir_path: Optional[str],
+        force_predict: bool = False,
+        verbose: bool = False,
+) -> az.InferenceData:
+    preds_path = os.path.join(dir_path, f"{name}_preds.nc") if dir_path is not None else None
+
+    if preds_path is not None and not force_predict and os.path.isfile(preds_path):
+        if verbose:
+            print(f"Loaded cached predictions from {preds_path}")
+        with az.rc_context({"data.load": "eager"}):
+            return az.from_netcdf(preds_path)
+
+    preds = model.predict(idata, data=predictors, inplace=False, kind="response")
+    if preds_path is not None:
+        az.to_netcdf(preds, preds_path)
+        if verbose:
+            print(f"Predictions saved to {preds_path}")
+    return preds
